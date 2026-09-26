@@ -312,3 +312,34 @@ async def test_sse_resync_when_gap_too_large(db):
     gen = event_stream(db, 10_000_000, never_disconnected, poll_s=0.02)
     assert (await _take(gen, 1))[0]["event"] == "resync"
     await gen.aclose()
+
+
+# ── one odd value never blanks the dashboard ─────────────────────────────────────────────────────────
+def test_snapshot_survives_non_finite_numbers(authed, db):
+    from hq.db.conn import tx
+
+    with tx(db):
+        db.execute("INSERT INTO opportunities(id, canonical_key, is_simulated, company_name, title, stage, pay_ratio, "
+                   "pay_monthly_inr_mid, first_seen_at, updated_at) VALUES ('o-inf', 'k-inf', 0, 'Odd Co', 'ML Intern', "
+                   "'found', 9e999, -9e999, '2026-09-26T00:00:00Z', '2026-09-26T00:00:00Z')")
+    r = authed.get("/api/snapshot")
+    assert r.status_code == 200, r.text
+    opp = next(o for o in r.json()["opportunities"] if o["id"] == "o-inf")
+    assert opp["pay"]["ratio"] is None and opp["pay"]["monthly_inr_mid"] is None
+
+
+def test_unexpected_errors_say_why(hq_env, db, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from hq.api.app import create_app
+    from hq.db import serializers
+
+    def boom(_conn):
+        raise RuntimeError("disk said no")
+
+    monkeypatch.setattr(serializers, "snapshot", boom)
+    with TestClient(create_app(), base_url="http://localhost", client=("127.0.0.1", 50000),
+                    raise_server_exceptions=False) as c:
+        assert c.post("/api/auth/setup", json={"passcode": "correct-horse-42"}, headers=MUTATE).status_code == 200
+        r = c.get("/api/snapshot")
+    assert r.status_code == 500 and r.json()["error"] == "server error: RuntimeError: disk said no"

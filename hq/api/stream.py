@@ -3,7 +3,6 @@ ephemeral `agent.live` messages (≤ ~4/s per agent), replays after Last-Event-I
 from __future__ import annotations
 
 import asyncio
-import json
 import sqlite3
 import time
 from typing import Any, AsyncIterator, Awaitable, Callable
@@ -11,7 +10,7 @@ from typing import Any, AsyncIterator, Awaitable, Callable
 from fastapi import APIRouter, Depends, Request
 from sse_starlette.sse import EventSourceResponse
 
-from hq.api import auth
+from hq.api import auth, jsonsafe
 from hq.db import repo, serializers
 from hq.db.conn import connect
 
@@ -24,7 +23,7 @@ router = APIRouter(prefix="/api", dependencies=[Depends(auth.require_session)])
 
 
 def _dumps(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    return jsonsafe.dumps(value)
 
 
 async def event_stream(conn: sqlite3.Connection, after: int | None,

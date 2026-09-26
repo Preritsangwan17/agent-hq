@@ -1,16 +1,20 @@
 """FastAPI app factory. Run with `python -m hq.api` (uvicorn, 127.0.0.1:HQ_PORT or 0.0.0.0 when HQ_LAN=1)."""
 from __future__ import annotations
 
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from hq import __version__, settings
+from hq.api.jsonsafe import SafeJSONResponse as JSONResponse
 from hq.api import auth, routes, routes_insights, routes_gmail, routes_inbox, routes_models, routes_pipeline, routes_settings, spa, stream
 from hq.db.conn import connect, tx
 from hq.db.migrate import migrate
 from hq.db.seed import seed_all
+
+log = logging.getLogger("hq.api")
 
 
 def create_app() -> FastAPI:
@@ -25,7 +29,8 @@ def create_app() -> FastAPI:
     finally:
         conn.close()
 
-    app = FastAPI(title="Agent HQ", version=__version__, docs_url=None, redoc_url=None, openapi_url=None)
+    app = FastAPI(title="Agent HQ", version=__version__, docs_url=None, redoc_url=None, openapi_url=None,
+                  default_response_class=JSONResponse)
     app.state.login_limiter = auth.RateLimiter(limit=5, window_s=60)
     app.add_middleware(auth.SecurityMiddleware)
 
@@ -44,6 +49,13 @@ def create_app() -> FastAPI:
     @app.exception_handler(StarletteHTTPException)
     async def http_error(_: Request, exc: StarletteHTTPException) -> JSONResponse:
         return JSONResponse({"error": str(exc.detail)}, status_code=exc.status_code)
+
+    @app.exception_handler(Exception)
+    async def unexpected_error(request: Request, exc: Exception) -> JSONResponse:
+        # full traceback in data/logs/api.log; the page shows the one-line reason instead of a bare 500
+        log.exception("unhandled error on %s %s", request.method, request.url.path)
+        return JSONResponse({"error": f"server error: {type(exc).__name__}: {str(exc)[:200]}",
+                             "detail": "details in data/logs/api.log"}, status_code=500)
 
     app.include_router(routes.public)
     app.include_router(routes.router)
