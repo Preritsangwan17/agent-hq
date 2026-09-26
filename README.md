@@ -22,7 +22,11 @@ Not built: the daily Strategist report and the Analytics charts (the pages exist
 
 ## Install and start (once)
 
-Easiest: paste this one line into Terminal (installs everything, downloads HQ into `~/agent-hq`, starts it and
+Easiest of all: download https://github.com/Preritsangwan17/agent-hq/archive/refs/heads/main.zip, open the
+`agent-hq-main` folder in Finder and double-click **Start Agent HQ.command** (the first time: right-click → Open →
+Open, because macOS asks about downloaded files). **Stop Agent HQ.command** stops it.
+
+Or: paste this one line into Terminal (installs everything, downloads HQ into `~/agent-hq`, starts it and
 opens Safari):
 
 ```sh
