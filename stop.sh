@@ -38,7 +38,7 @@ reap_children() {
     cmd=""
     [ -n "$pid" ] && cmd="$(ps -p "$pid" -o command= 2>/dev/null || true)"
     if [[ "$cmd" == *"-m hq.$name"* ]]; then
-      echo "stopping leftover $name pid $pid…"
+      echo "stopping leftover $name pid ${pid}…"
       kill -TERM "$pid" 2>/dev/null || true
       wait_gone "$pid" 10 || { echo "$name pid $pid ignored SIGTERM; killing it" >&2; kill -KILL "$pid" 2>/dev/null || true; }
       reaped=1
@@ -59,7 +59,7 @@ if [ -z "$PID" ] || ! alive "$PID"; then
   reap_children
   exit 0
 fi
-echo "stopping supervisor pid $PID…"
+echo "stopping supervisor pid ${PID}…"
 kill -TERM "$PID"
 if wait_gone "$PID" 25; then
   reap_children
