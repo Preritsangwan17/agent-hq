@@ -322,7 +322,8 @@ def stats(conn: sqlite3.Connection, settings: dict[str, Any] | None = None) -> d
     # top-level runs only (router escalation rows are children) and never Claude's tokens
     local = conn.execute(
         "SELECT COALESCE(SUM(COALESCE(prompt_tokens,0)+COALESCE(completion_tokens,0)),0) AS t FROM agent_runs "
-        "WHERE started_at >= ? AND parent_run_id IS NULL AND COALESCE(model_id,'') NOT LIKE 'claude:%'",
+        "WHERE started_at >= ? AND parent_run_id IS NULL AND COALESCE(model_id,'') NOT LIKE 'claude:%' "
+        "AND COALESCE(model_id,'') NOT LIKE 'xai:%'",
         (since,)).fetchone()
 
     def mids(stages: tuple[str, ...]) -> list[float]:

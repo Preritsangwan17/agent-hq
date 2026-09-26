@@ -9,7 +9,9 @@ import os
 import re
 import sqlite3
 
-SECRET_KEYS = ("HQ_PASSCODE_HASH", "HQ_SESSION_SECRET", "HQ_GMAIL_CLIENT_SECRET", "HQ_GMAIL_REFRESH_TOKEN")
+SECRET_KEYS = ("HQ_PASSCODE_HASH", "HQ_SESSION_SECRET", "HQ_GMAIL_CLIENT_SECRET", "HQ_GMAIL_REFRESH_TOKEN",
+               "HQ_XAI_API_KEY")
+API_KEY = re.compile(r"\b(?:xai|sk-ant|sk)-[A-Za-z0-9_-]{20,}")
 PRIVATE_FIELDS = ("phone", "dob", "address")
 PHONE = re.compile(r"(?<!\w)(\+?\d{1,3}[\s-]?)?(\(?\d{2,5}\)?[\s-]?)\d{3,5}[\s-]?\d{4,5}(?!\w)")
 CARD = re.compile(r"(?<!\d)(?:\d[ -]?){13,19}(?!\d)")
@@ -38,6 +40,7 @@ def redact(text: str, conn: sqlite3.Connection | None = None) -> str:
             out = out.replace(val, f"[{key}]")
     for val in _private_values(conn):
         out = out.replace(str(val), "[redacted]")
+    out = API_KEY.sub("[redacted-key]", out)
     out = CARD.sub(lambda m: "[redacted-number]" if len(re.sub(r"\D", "", m.group(0))) >= 13 else m.group(0), out)
     out = AADHAAR.sub("[redacted-id]", out)
     out = PAN.sub("[redacted-id]", out)

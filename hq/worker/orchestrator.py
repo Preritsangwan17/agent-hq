@@ -105,13 +105,13 @@ class Worker:
         self._last_claude_check = 0.0
 
     def _build_services(self) -> Services:
-        from hq.llm.claude import ClaudeRunner
+        from hq.llm.cloud import CloudRunner
         from hq.llm.router import Router
         from hq.models.manager import ModelManager
 
         manager = ModelManager(self.conn)
-        claude = ClaudeRunner(self.conn)
-        return Services(router=Router(self.conn, manager, claude), claude=claude, manager=manager)
+        cloud = CloudRunner(self.conn)
+        return Services(router=Router(self.conn, manager, cloud), claude=cloud, manager=manager)
 
     # ── lifecycle ───────────────────────────────────────────────────────────────────────────────────
     def startup(self) -> None:
@@ -239,7 +239,8 @@ class Worker:
         with tx(self.conn):
             set_settings(self.conn, {"claude_state": {**after, "checked_at": now_iso()}}, by="worker")
             if before.get("available") != after.get("available") and before.get("checked"):
-                repo.emit(self.conn, "claude.status", f"Claude {'available' if after['available'] else 'unavailable'}"
+                who = "xAI" if after.get("provider") == "xai" else "Claude"
+                repo.emit(self.conn, "claude.status", f"{who} {'available' if after['available'] else 'unavailable'}"
                           + (f": {after['reason']}" if after.get("reason") else ""),
                           level="info" if after["available"] else "warn", data=after)
 

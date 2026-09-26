@@ -24,7 +24,7 @@ router = APIRouter(prefix="/api", dependencies=[Depends(auth.require_session)])
 
 # Names only — values never leave the server.
 SECRET_ENV_KEYS = ("HQ_PASSCODE_HASH", "HQ_SESSION_SECRET", "HQ_GMAIL_CLIENT_ID", "HQ_GMAIL_CLIENT_SECRET",
-                   "HQ_GMAIL_REFRESH_TOKEN")
+                   "HQ_GMAIL_REFRESH_TOKEN", "HQ_XAI_API_KEY")
 
 
 class FieldPatch(BaseModel):

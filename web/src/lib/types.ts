@@ -835,4 +835,9 @@ export interface BudgetState {
   claude_available: boolean | null;
   last_error: string | null;
   resets_at: ISODate;
+  /** active cloud provider (`cloud_llm` auto → xai when HQ_XAI_API_KEY is set) */
+  provider?: 'claude' | 'xai';
+  cloud_model?: string | null;
+  cloud_reason?: string | null;
+  xai?: { available: boolean; reason: string | null; key_present: boolean; models: string[]; checked: boolean } | null;
 }

@@ -1,6 +1,10 @@
-/** Budget: Claude $/day and call cap with a live gauge (spend today vs the budget being edited). */
+/** Budget: cloud $/day and call cap with a live gauge (spend today vs the budget being edited), the cloud provider
+ * (Claude CLI or xAI) and which models it uses. */
 import { useQuery } from '@tanstack/react-query';
-import { BadgeCheck, CalendarClock, Cpu, DollarSign, Hash, HandHelping, Moon, Sparkles, Wand2, type LucideIcon } from 'lucide-react';
+import { BadgeCheck, CalendarClock, Cloud, Cpu, DollarSign, Hash, HandHelping, KeyRound, Moon, Sparkles, Wand2, type LucideIcon } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Badge } from '@/components/Badge';
+import { TextInput } from '@/pages/Agents/formKit';
 import type { ReactNode } from 'react';
 import { GlassPanel } from '@/components/GlassPanel';
 import { ProgressBar } from '@/components/ProgressBar';
@@ -31,14 +35,19 @@ export function BudgetTab() {
   return (
     <div className="space-y-5">
       <GlassPanel padding="lg" glow={CLAUDE} accentTop>
-        <SectionHeader kicker="Today · resets at midnight IST" title="Claude spend" icon={Sparkles} color={CLAUDE} />
+        <SectionHeader
+          kicker="Today · resets at midnight IST"
+          title={live?.provider === 'xai' ? 'Cloud spend · xAI' : 'Cloud spend · Claude'}
+          icon={Sparkles}
+          color={CLAUDE}
+        />
         <div className="mt-5 grid items-center gap-6 md:grid-cols-[auto_minmax(0,1fr)]">
           <RingGauge frac={frac} color={hot ? colors.warn : CLAUDE} spent={spent} budget={budget} />
           <div className="grid min-w-0 gap-4 sm:grid-cols-2">
             <Metric icon={DollarSign} label="Spent / budget" value={`${formatUSD(spent)} / ${formatUSD(budget)}`} sub={`${Math.round(frac * 100)}% of today's budget`} color={CLAUDE} />
             <Metric
               icon={Hash}
-              label="Claude calls"
+              label="Cloud calls"
               value={`${calls} / ${cap}`}
               sub={<ProgressBar value={callFrac} color={callFrac >= 0.85 ? colors.warn : CLAUDE} height={4} className="mt-1.5" />}
               color={CLAUDE}
@@ -124,6 +133,8 @@ export function BudgetTab() {
           }
         />
       </Section>
+
+      <ProviderSection live={live} />
 
       <Section kicker="Models" title="Which Claude, and when" icon={Wand2} color={CLAUDE}>
         <SettingRow
@@ -272,5 +283,86 @@ function RingGauge({ frac, color, spent, budget }: { frac: number; color: string
         <div className="mt-0.5 text-xs text-muted">of {formatUSD(budget)} today</div>
       </div>
     </div>
+  );
+}
+
+function ProviderSection({ live }: { live: Awaited<ReturnType<typeof api.budget>> | undefined }) {
+  const s = useSettings();
+  const { save } = useSaver();
+  const xai = live?.xai;
+  const models = xai?.models ?? [];
+  const status = !xai?.key_present
+    ? { text: 'no key in .env', color: '#5B6577' }
+    : xai.available
+      ? { text: 'connected', color: '#34D399' }
+      : { text: xai.reason ?? (xai.checked ? 'unavailable' : 'not checked yet'), color: colors.warn };
+  return (
+    <Section kicker="Provider" title="Cloud model" icon={Cloud} color={CLAUDE}>
+      <SettingRow
+        title="Use"
+        description="Escalations, polish, sign-off and the Strategist go to this provider (same budget and caps). Auto picks xAI when HQ_XAI_API_KEY is in .env, otherwise the Claude CLI. Sign-off can fall back to the other provider when the first wrote part of the text."
+        control={
+          <Segmented
+            aria-label="Cloud provider"
+            value={String(s.cloud_llm ?? 'auto')}
+            onChange={(v) => save({ cloud_llm: v })}
+            color={CLAUDE}
+            options={[
+              { value: 'auto', label: 'Auto' },
+              { value: 'claude', label: 'Claude CLI' },
+              { value: 'xai', label: 'xAI' },
+            ]}
+          />
+        }
+      />
+      <SettingRow
+        icon={KeyRound}
+        color={status.color}
+        title="xAI API key"
+        description="Put it in .env on this Mac as HQ_XAI_API_KEY=… and restart HQ. The UI never shows it; prompts are redacted before they leave, and only api.x.ai is allowed."
+        control={<Badge color={status.color}>{status.text}</Badge>}
+      />
+      <ModelField label="xAI model" settingKey="xai_model" fallback="grok-4-fast" models={models}
+        description="Escalations and polish. If the exact name isn't listed by xAI, the closest listed model is used." />
+      <ModelField label="xAI sign-off model" settingKey="xai_signoff_model" fallback="grok-4" models={models}
+        description="Should differ from the model above, so a polished letter can still be checked independently." />
+    </Section>
+  );
+}
+
+function ModelField({ label, settingKey, fallback, models, description }: {
+  label: string; settingKey: 'xai_model' | 'xai_signoff_model'; fallback: string; models: string[]; description: string;
+}) {
+  const s = useSettings();
+  const { save } = useSaver();
+  const current = String(s[settingKey] ?? fallback);
+  const [draft, setDraft] = useState(current);
+  useEffect(() => setDraft(current), [current]);
+  const listId = `${settingKey}-models`;
+  return (
+    <SettingRow
+      title={label}
+      htmlFor={settingKey}
+      description={description}
+      control={
+        <>
+          <TextInput
+            id={settingKey}
+            mono
+            list={listId}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value.trim())}
+            onBlur={() => draft && draft !== current && save({ [settingKey]: draft })}
+            onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+            className="w-48"
+          />
+          <datalist id={listId}>
+            {models.map((m) => (
+              <option key={m} value={m} />
+            ))}
+          </datalist>
+        </>
+      }
+    />
   );
 }

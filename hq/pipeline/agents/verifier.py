@@ -107,7 +107,7 @@ def start_date(opp: dict[str, Any]) -> date | None:
 
 
 def model_accuracy(ctx: RunContext, model_id: str) -> float:
-    if model_id.startswith("claude:"):
+    if model_id.startswith(("claude:", "xai:")):
         return 0.9
     rows = ctx.query("SELECT accuracy FROM benchmarks WHERE model_id=? AND task='eligibility' ORDER BY created_at DESC "
                      "LIMIT 1", (model_id,))

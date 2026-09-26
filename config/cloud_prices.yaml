@@ -1,0 +1,7 @@
+# Cloud model prices in USD per million tokens, used to estimate and record spend against the daily budget.
+# HQ prefers the cost the API itself reports (xAI returns usage.cost_in_usd_ticks, 1 tick = 1e-10 USD) and falls
+# back to this table. Defaults are deliberately on the high side; check https://docs.x.ai/docs/models and edit.
+xai:
+  default: {input: 3.0, output: 15.0}
+  grok-4-fast: {input: 0.2, output: 0.5}
+  grok-3-mini: {input: 0.3, output: 0.5}

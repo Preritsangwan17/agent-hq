@@ -136,5 +136,7 @@ def budget_state(conn: sqlite3.Connection, settings: dict[str, Any] | None = Non
                             "ORDER BY created_at DESC LIMIT 1").fetchone()
     return {**u, "budget_usd": float(s.get("claude_daily_budget_usd", 5.0)),
             "call_cap": int(s.get("claude_daily_call_cap", 40)), "deferred_tasks": deferred,
-            "claude_available": (claude or {}).get("available"), "last_error": last_err[0] if last_err else None,
+            "claude_available": (claude or {}).get("available"), "provider": (claude or {}).get("provider", "claude"),
+            "cloud_model": (claude or {}).get("model"), "cloud_reason": (claude or {}).get("reason"),
+            "xai": ((claude or {}).get("providers") or {}).get("xai"), "last_error": last_err[0] if last_err else None,
             "resets_at": to_iso(next_midnight_ist())}

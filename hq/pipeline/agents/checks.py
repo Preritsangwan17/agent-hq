@@ -10,9 +10,11 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from hq.adapters.base import RunContext, RunResult
+from hq.adapters.base import Deferred, RunContext, RunResult
+from hq.llm import cloud
 from hq.llm.prompts import load_prompt, load_schema
 from hq.llm.router import EscalationExhausted
+from hq.util.timeutil import iso_in
 from hq.models import roles as roles_mod
 from hq.pipeline.agents.common import confirmed, label, load_opp, loads, need_effect, sim_or_none
 from hq.pipeline.agents.writer import job_quotes, latest_doc
@@ -22,7 +24,6 @@ from hq.pipeline.gates.quality import check_quality
 from hq.profile.facts import load_facts
 
 MAX_LOOPS = 3
-OTHER_CLAUDE = {"opus": "sonnet", "sonnet": "opus", "haiku": "sonnet"}
 RUBRIC_SCHEMA = {"type": "object", "required": ["score"], "properties": {
     "score": {"type": "integer", "minimum": 1, "maximum": 5}, "reasons": {"type": "string"}}}
 RUBRIC_PROMPT = ("You rate how specific a job application letter is to ONE employer and role, from 1 (generic, could "
@@ -60,7 +61,8 @@ def _carry(task: dict[str, Any], doc: dict[str, Any]) -> dict[str, Any]:
 
 
 async def _polish_allowed(ctx: RunContext) -> bool:
-    return ctx.services.claude is not None and await ctx.services.claude.available()
+    runner = ctx.services.claude
+    return runner is not None and await cloud.is_available(runner, cloud.main_model(ctx.settings))
 
 
 async def _fail(task: dict[str, Any], ctx: RunContext, opp: dict[str, Any], doc: dict[str, Any], layer: str,
@@ -199,11 +201,10 @@ async def signoff(task: dict[str, Any], ctx: RunContext, opp: dict[str, Any], do
         return _pass(task, doc, "fact.signoff", effects, f"{label(opp)}: sign-off not required (setting off)",
                      extra={"skipped": "require_claude_signoff is off"})
     lineage = set(loads(doc.get("lineage_models_json"), []))
-    model = s.get("claude_signoff_model", "opus")
-    if f"claude:{model}" in lineage:
-        model = OTHER_CLAUDE.get(model, "sonnet")
-    if f"claude:{model}" in lineage:
-        model = "haiku" if "claude:haiku" not in lineage else model
+    model = await cloud.signoff_model(ctx.services.claude, s, lineage) if ctx.services.claude else None
+    if model is None:  # every reachable cloud model wrote part of this text (or none is reachable): wait
+        raise Deferred("queued", iso_in(3600), "no independent cloud model is available for sign-off")
+    mid = cloud.tag(model)
     sents = _sentences(ctx, doc["id"])
     lines, prev = [], "(start)"
     for i, x in enumerate(sents):
@@ -217,14 +218,16 @@ async def signoff(task: dict[str, Any], ctx: RunContext, opp: dict[str, Any], do
         r = got.get(i, {})
         verdict = r.get("verdict", "na")
         effects.append({"op": "fact_check", "values": {
-            "document_id": doc["id"], "sentence_id": x["id"], "layer": "signoff", "checker_model": f"claude:{model}",
+            "document_id": doc["id"], "sentence_id": x["id"], "layer": "signoff", "checker_model": mid,
             "verdict": verdict, "unsupported_span": r.get("unsupported_span"), "explanation": r.get("explanation")}})
         if verdict in ("unsupported", "partial"):
-            feedback.append(f"Sentence {i + 1} (“{x['text'][:100]}”): Claude sign-off says {verdict}"
+            feedback.append(f"Sentence {i + 1} (“{x['text'][:100]}”): {cloud.label(model)} sign-off says {verdict}"
                             + (f" — “{r.get('unsupported_span')}”" if r.get("unsupported_span") else ""))
     if feedback:
         return await _fail(task, ctx, opp, doc, "fact.signoff", feedback, effects,
-                           f"{label(opp)}: Claude sign-off rejected {len(feedback)} sentence(s)", model_id=f"claude:{model}")
+                           f"{label(opp)}: {cloud.label(model)} sign-off rejected {len(feedback)} sentence(s)",
+                           model_id=mid)
     effects.append({"op": "document.update", "id": doc["id"], "values": {"status": "passed"}})
-    return _pass(task, doc, "fact.signoff", effects, f"{label(opp)} v{doc['version']}: signed off by Claude {model}",
-                 model_id=f"claude:{model}", cost=res.cost_usd)
+    return _pass(task, doc, "fact.signoff", effects,
+                 f"{label(opp)} v{doc['version']}: signed off by {cloud.label(model)} {model.split(':')[-1]}",
+                 model_id=mid, cost=res.cost_usd)

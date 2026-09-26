@@ -11,6 +11,7 @@ import re
 from typing import Any
 
 from hq.adapters.base import Deferred, RunContext, RunResult
+from hq.llm import cloud
 from hq.llm.prompts import load_schema
 from hq.llm.router import EscalationExhausted
 from hq.pipeline.agents.common import label, load_opp, loads, sim_or_none
@@ -158,14 +159,14 @@ async def polish(task: dict[str, Any], ctx: RunContext, opp: dict[str, Any]) -> 
                            task=task_line + "CURRENT DRAFT (JSON):\n" + json.dumps({"sentences": current}),
                            feedback=fb if isinstance(fb, list) else ([fb] if fb else None), sheet=load_facts())
     system, user = msgs[0]["content"], msgs[1]["content"]
-    model = ctx.settings.get("claude_model", "sonnet")
+    model = cloud.main_model(ctx.settings)
     res = await ctx.claude("polish.final", user, load_schema("draft"), system_prompt=system, model=model)
     sentences = clean_sentences(res.output, quotes)
     if not sentences:
         return RunResult(output={"ok": False}, summary="polish returned nothing", cost_usd=res.cost_usd)
     text = assemble(sentences, prev["kind"])
     doc_id = new_id()
-    author = f"claude:{model}"
+    author = cloud.tag(model)
     effects = [{"op": "document.create", "values": {
         "id": doc_id, "application_id": prev["application_id"], "opportunity_id": opp["id"], "kind": prev["kind"],
         "version": prev["version"] + 1, "parent_id": prev["id"], "content_text": text,
@@ -176,7 +177,7 @@ async def polish(task: dict[str, Any], ctx: RunContext, opp: dict[str, Any]) -> 
         effects.append({"op": "application.update", "id": prev["application_id"], "values": {"letter_doc_id": doc_id}})
     return RunResult(output={"ok": True, "version": prev["version"] + 1, "loop": int(payload.get("loop") or 1),
                              "polished": True, "doc_id": doc_id},
-                     effects=effects, summary=f"Claude polished {label(opp)} (v{prev['version'] + 1})",
+                     effects=effects, summary=f"{cloud.label(model)} polished {label(opp)} (v{prev['version'] + 1})",
                      model_id=author, cost_usd=res.cost_usd, prompt_tokens=res.input_tokens,
                      completion_tokens=res.output_tokens)
 

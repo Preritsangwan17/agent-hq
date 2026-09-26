@@ -127,6 +127,7 @@ class ClaudeRunner:
         self._available: bool | None = None
         self.reason: str | None = None
         self.logged_in = False
+        self.nag = True     # raise the "log in" Needs item (off while another cloud provider is in use)
 
     def _bin(self) -> str | None:
         return self.binary or claude_binary()
@@ -154,7 +155,7 @@ class ClaudeRunner:
 
     def _set_unavailable(self, reason: str) -> bool:
         self._available, self.logged_in, self.reason = False, False, reason
-        if self.conn is not None:
+        if self.conn is not None and self.nag:
             ensure_login_need(self.conn, reason)
         return False
 

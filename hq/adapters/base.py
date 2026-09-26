@@ -41,7 +41,7 @@ class Deferred(Exception):
 class Services:
     """Worker-owned LLM plumbing handed to adapters through the RunContext."""
     router: Any = None      # hq.llm.router.Router
-    claude: Any = None      # hq.llm.claude.ClaudeRunner
+    claude: Any = None      # hq.llm.cloud.CloudRunner (Claude CLI + xAI)
     manager: Any = None     # hq.models.manager.ModelManager
     sim: Any = None         # hq.adapters.sim.SimAdapter (simulated opportunities)
     fetcher: Any = None     # hq.pipeline.discover.fetch.Fetcher (polite GETs)
@@ -163,21 +163,24 @@ class RunContext:
 
     async def claude(self, task_type: str, prompt: str, schema: dict[str, Any], *, system_prompt: str,
                      model: str | None = None) -> Any:
-        """One budgeted Claude call. Over budget → Deferred(deferred_budget); unavailable → Deferred for 10 min."""
+        """One budgeted cloud call (Claude CLI or xAI, by the model id; default = the `cloud_llm` provider).
+        Over budget → Deferred(deferred_budget); unavailable → Deferred for 10 min."""
+        from hq.llm import cloud
         from hq.llm.claude import ClaudeError, ClaudeRateLimited, ClaudeUnavailable
         from hq.util.timeutil import iso_in
         from hq.worker import budget
 
-        runner = self.services.claude
-        if runner is None or not await runner.available():
-            raise Deferred("queued", iso_in(600), f"Claude unavailable ({getattr(runner, 'reason', 'no runner')})")
         s = self.settings
+        m = model or cloud.main_model(s)
+        runner = self.services.claude
+        if runner is None or not await cloud.is_available(runner, m):
+            raise Deferred("queued", iso_in(600),
+                           f"{cloud.label(m)} unavailable ({getattr(runner, 'reason', 'no runner')})")
         r = budget.reserve(self.conn, task_type, s, run_id=self.run_id)
         if r is None:
             raise Deferred("deferred_budget", budget.to_iso(budget.next_midnight_ist()),
-                           "Claude daily budget or call cap reached")
-        m = model or s.get("claude_model", "sonnet")
-        self.progress(None, f"Asking Claude ({m})…", model_id=f"claude:{m}")
+                           "Cloud daily budget or call cap reached")
+        self.progress(None, f"Asking {cloud.label(m)} ({m.split(':')[-1]})…", model_id=cloud.tag(m))
         try:
             res = await runner.run(prompt, schema=schema, system_prompt=system_prompt, model=m,
                                    max_budget_usd=float(s.get("claude_per_call_cap_usd", 0.5)))
@@ -195,7 +198,7 @@ class RunContext:
             raise
         budget.commit(self.conn, r, cost_usd=res.cost_usd, model=m, input_tokens=res.input_tokens,
                       output_tokens=res.output_tokens, cache_read_tokens=res.cache_read_tokens)
-        self.model_id = f"claude:{m}"
+        self.model_id = cloud.tag(m)
         self.cost_usd += res.cost_usd or 0.0
         return res
 

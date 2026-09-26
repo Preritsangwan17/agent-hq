@@ -36,6 +36,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "usability_mode": True,
     "claude_model": "sonnet",
     "claude_signoff_model": "opus",
+    "cloud_llm": "auto",
+    "xai_model": "grok-4-fast",
+    "xai_signoff_model": "grok-4",
     "claude_per_call_cap_usd": 0.5,
     "require_claude_signoff": True,
     "benchmark_on_new_model": True,
@@ -68,6 +71,14 @@ def _choice(*options: str) -> Callable[[Any], str]:
             raise SettingError(f"must be one of {', '.join(options)}")
         return v
     return check
+
+
+def _model_name(v: Any) -> str:
+    import re
+
+    if not isinstance(v, str) or not re.fullmatch(r"[a-z0-9][a-z0-9._-]{1,63}", v):
+        raise SettingError("expected a model id like grok-4")
+    return v
 
 
 def _hhmm(v: Any) -> str:
@@ -113,6 +124,9 @@ EDITABLE: dict[str, Callable[[Any], Any]] = {
     "usability_mode": _bool,
     "claude_model": _choice("haiku", "sonnet", "opus"),
     "claude_signoff_model": _choice("haiku", "sonnet", "opus"),
+    "cloud_llm": _choice("auto", "claude", "xai"),
+    "xai_model": _model_name,
+    "xai_signoff_model": _model_name,
     "claude_per_call_cap_usd": _num(0.01, 5.0),
     "require_claude_signoff": _bool,
     "benchmark_on_new_model": _bool,
