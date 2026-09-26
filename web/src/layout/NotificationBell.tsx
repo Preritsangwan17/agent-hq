@@ -45,6 +45,7 @@ export function NotificationBell({ compact }: { compact?: boolean }) {
 
   const openItem = async (n: NotificationRow) => {
     setOpen(false);
+    if (n.url && !n.url.startsWith('/')) window.open(n.url, '_blank', 'noopener');  // inside the click (Safari)
     if (!n.acknowledged_at) {
       try {
         const r = await api.ackNotification(n.id);
@@ -53,10 +54,7 @@ export function NotificationBell({ compact }: { compact?: boolean }) {
         /* the list refreshes next time */
       }
     }
-    if (n.url) {
-      if (n.url.startsWith('/')) navigate(n.url);
-      else window.open(n.url, '_blank', 'noopener');
-    }
+    if (n.url?.startsWith('/')) navigate(n.url);
   };
 
   const ackAll = async () => {

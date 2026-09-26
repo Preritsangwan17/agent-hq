@@ -8,7 +8,7 @@ import { Bell, CircleCheck, ExternalLink, Link2, Mail, MailWarning, RefreshCw, R
 import { useEffect, useState } from 'react';
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
-import { ApiError, api } from '@/lib/api';
+import { ApiError, api, openInNewTab } from '@/lib/api';
 
 import { formatRelative } from '@/lib/format';
 import { useSettings } from '@/lib/store';
@@ -58,10 +58,7 @@ export function GmailTab() {
     if (g?.oauth.status === 'done') void api.recheckGmail();
   }, [g?.oauth.status]);
 
-  const connect = () => run('connect', async () => {
-    const r = await api.connectGmail('readonly');
-    window.open(r.auth_url, '_blank', 'noopener');
-  });
+  const connect = () => run('connect', () => openInNewTab(async () => (await api.connectGmail('readonly')).auth_url));
 
   const healthy = !!g?.state.healthy;
   return (

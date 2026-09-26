@@ -124,7 +124,7 @@ export function LetterPanel({ opp }: { opp: OppDetail }) {
                           onClick={toggle}
                           onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), toggle())}
                           className={cn(
-                            'cursor-pointer rounded px-0.5 [box-decoration-break:clone] transition-colors',
+                            'cursor-pointer rounded px-0.5 [box-decoration-break:clone] [-webkit-box-decoration-break:clone] transition-colors',
                             isOpen ? 'bg-white/[.08]' : 'hover:bg-white/[.05]',
                           )}
                           style={color ? { textDecoration: `underline ${color}66`, textUnderlineOffset: 4, textDecorationThickness: 2 } : undefined}

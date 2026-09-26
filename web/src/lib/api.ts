@@ -257,3 +257,20 @@ export const api = {
 };
 
 export type Api = typeof api;
+
+/** Safari blocks window.open() after an await; open the tab inside the click, then point it at the URL. */
+export async function openInNewTab(getUrl: () => Promise<string>): Promise<void> {
+  const w = window.open('', '_blank');
+  try {
+    const url = await getUrl();
+    if (w) {
+      w.opener = null;
+      w.location.href = url;
+    } else {
+      window.location.assign(url);
+    }
+  } catch (e) {
+    w?.close();
+    throw e;
+  }
+}

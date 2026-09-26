@@ -9,7 +9,7 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
-import { ApiError, api } from '@/lib/api';
+import { ApiError, api, openInNewTab } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatDateTimeIST } from '@/lib/format';
 import type { GoLiveItem, GoLiveState } from '@/lib/types';
@@ -48,11 +48,7 @@ export function GoLiveSection() {
     }
   };
 
-  const grantSend = () =>
-    run('send', async () => {
-      const r = await api.connectGmail('send');
-      window.open(r.auth_url, '_blank', 'noopener');
-    });
+  const grantSend = () => run('send', () => openInNewTab(async () => (await api.connectGmail('send')).auth_url));
 
   if (!st) return null;
   const live = st.mode === 'live';
