@@ -203,7 +203,7 @@ def opps_with_open_needs(conn: sqlite3.Connection) -> set[str]:
 def insert_need(conn: sqlite3.Connection, values: dict[str, Any]) -> str:
     need_id = values.get("id") or new_id()
     allowed = {"opportunity_id", "application_id", "kind", "title", "instructions_md", "answers_json", "files_json",
-               "direct_url", "priority", "due_at", "est_minutes", "status"}
+               "direct_url", "priority", "due_at", "est_minutes", "status", "payload_json"}
     vals = _clean_values({k: v for k, v in values.items() if k != "id"}, allowed)
     vals.update(id=need_id, created_at=now_iso())
     conn.execute(f"INSERT INTO needs_prerit({','.join(vals)}) VALUES ({','.join('?' * len(vals))})",

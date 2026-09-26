@@ -24,7 +24,7 @@ from hq.agents.schema import RESERVED_SIDE_EFFECTS, SIDE_EFFECT_OWNERS, AgentCon
 from hq.db import repo, serializers
 from hq.db.conn import connect, dumps, tx
 from hq.db.migrate import migrate
-from hq.db.seed import get_settings, seed_settings, set_settings
+from hq.db.seed import get_settings, seed_all, set_settings
 from hq.pipeline.state import next_tasks, priority_for
 from hq.util.ids import new_id
 from hq.util.timeutil import IST, now_iso, parse_iso, to_iso, today_ist, utcnow
@@ -62,7 +62,7 @@ class Worker:
         self.conn = conn or connect()
         migrate(self.conn)
         with tx(self.conn):
-            seed_settings(self.conn)
+            seed_all(self.conn)
         self.registry = Registry(agents_dir or paths.AGENTS_DIR, self.conn)
         self.adapters = adapters or build_adapters(**(sim_kwargs or {}))
         self.loop_interval = loop_interval
@@ -190,6 +190,8 @@ class Worker:
                         self.cancelled_tasks.add(run.task["id"])
             elif kind in ("rescan_agents", "agent_changed"):
                 self._rescan = True
+            elif kind == "probation_release":
+                result = self._release_probation(payload.get("task_id"), bool(payload.get("approved")))
             elif kind not in ("pause_all", "resume_all", "freeze_outbound", "settings_changed"):
                 result = {"ok": False, "ignored": kind}
             with tx(self.conn):
@@ -377,38 +379,75 @@ class Worker:
             "counters_date=?, last_error=COALESCE(?, last_error), updated_at=? WHERE id=?",
             (today, tasks, today, errors, today, tokens, today, last_error, now_iso(), agent_id))
 
+    def _on_probation(self, cfg: AgentConfig) -> bool:
+        if cfg.builtin:
+            return False
+        row = self.conn.execute("SELECT probation_runs_left FROM agents WHERE id=?", (cfg.id,)).fetchone()
+        return bool(row and row["probation_runs_left"] > 0)
+
+    def _hold_for_review(self, run: Run, result: RunResult, t0: float) -> None:
+        """A new agent's output waits in Needs Prerit (kind approve) instead of touching the pipeline."""
+        task, cfg = run.task, run.agent
+        cap = task["capability"]
+        held = {"probation_hold": True, "output": result.output, "effects": result.effects,
+                "opp_results": [[o, r] for o, r in result.opp_results], "summary": result.summary}
+        with tx(self.conn):
+            queue.complete(self.conn, task["id"], held)
+            left = self.conn.execute("UPDATE agents SET probation_runs_left=probation_runs_left-1 WHERE id=? "
+                                     "RETURNING probation_runs_left", (cfg.id,)).fetchone()["probation_runs_left"]
+            preview = dumps(result.output)[:1500]
+            need_id = repo.insert_need(self.conn, {
+                "opportunity_id": task.get("opportunity_id"), "kind": "approve",
+                "title": f"Review {cfg.name}'s output ({cap})",
+                "instructions_md": (f"**{cfg.name}** is a new agent on probation ({left} more reviews after this). "
+                                    f"Nothing it produced has been used yet.\n\n"
+                                    f"Summary: {result.summary or cap}\n\n```json\n{preview}\n```\n\n"
+                                    "Mark **done** to accept it into the pipeline, or **dismiss** to discard it."),
+                "priority": 45, "est_minutes": 1,
+                "payload_json": dumps({"probation_task_id": task["id"], "agent_id": cfg.id, "capability": cap}),
+            })
+            need = serializers.need_json(repo.get_need_row(self.conn, need_id))
+            repo.emit(self.conn, "needs.created", need["title"], agent_id=cfg.id,
+                      opportunity_id=task.get("opportunity_id"), task_id=task["id"], data={"need": need})
+            self._finish_run(run, "succeeded", t0, result=result)
+            tokens = (result.prompt_tokens or 0) + (result.completion_tokens or 0)
+            self._bump_counters(cfg.id, tasks=1, tokens=tokens)
+            repo.emit(self.conn, "task.succeeded", f"{cfg.name} ✓ {result.summary or cap} (held for review)",
+                      agent_id=cfg.id, opportunity_id=task.get("opportunity_id"), task_id=task["id"],
+                      data={"task_id": task["id"], "capability": cap, "agent_id": cfg.id, "held": True})
+        self.error_until.pop(cfg.id, None)
+
+    def _release_probation(self, task_id: str, approved: bool) -> dict[str, Any]:
+        task = queue.get_task(self.conn, task_id)
+        held = (task or {}).get("result_json") or {}
+        if not task or not held.get("probation_hold"):
+            return {"ok": False, "error": "no held result"}
+        agent_id = task["lease_owner"]
+        cfg = self.registry.configs.get(agent_id)
+        if not approved or cfg is None:
+            with tx(self.conn):
+                queue.complete(self.conn, task_id, {**held, "probation_hold": False, "discarded": True})
+                repo.emit(self.conn, "log", f"Discarded held output of {agent_id} ({task['capability']})",
+                          agent_id=agent_id, task_id=task_id, opportunity_id=task.get("opportunity_id"))
+            return {"ok": True, "discarded": True}
+        result = RunResult(output=held.get("output") or {}, effects=held.get("effects") or [],
+                           opp_results=[(o, r) for o, r in held.get("opp_results") or []], summary=held.get("summary"))
+        with tx(self.conn):
+            queue.complete(self.conn, task_id, {**held, "probation_hold": False, "approved": True})
+            self._apply_result(task, cfg, result, run_id=None)
+            repo.emit(self.conn, "log", f"Prerit approved {cfg.name}'s output ({task['capability']})",
+                      agent_id=cfg.id, task_id=task_id, opportunity_id=task.get("opportunity_id"))
+        return {"ok": True, "approved": True}
+
     def _on_succeeded(self, run: Run, result: RunResult, t0: float) -> None:
         task, cfg = run.task, run.agent
         cap = task["capability"]
+        if self._on_probation(cfg):
+            self._hold_for_review(run, result, t0)
+            return
         with tx(self.conn):
             queue.complete(self.conn, task["id"], result.output)
-            outcome = apply_effects(self.conn, result.effects, agent_id=cfg.id, task_id=task["id"],
-                                    run_id=run.run_id, opportunity_id=task.get("opportunity_id"))
-            stage_changes: dict[str, tuple[str, str]] = {}
-            if not result.output.get("noop"):
-                targets = result.opp_results or (
-                    [(task["opportunity_id"], result.output)] if task.get("opportunity_id") else [])
-                for opp_id, res in targets:
-                    self._transition(task, cfg, opp_id, res, stage_changes)
-            for opp_id in outcome.created_opps:
-                opp = serializers.opp_summary_by_id(self.conn, opp_id)
-                if opp:
-                    repo.emit(self.conn, "opp.created", f"New: {opp['company_name']} — {opp['title']} "
-                              f"({opp['city']}, {opp['country_iso2']})", agent_id=cfg.id, opportunity_id=opp_id,
-                              task_id=task["id"], data={"opp": opp})
-            for opp_id, (old, new) in stage_changes.items():
-                opp = serializers.opp_summary_by_id(self.conn, opp_id)
-                if opp:
-                    reason = f" ({opp['stage_reason']})" if opp.get("stage_reason") and new == "filtered" else ""
-                    repo.emit(self.conn, "opp.stage", f"{opp['company_name']} — {opp['title']}: {old} → {new}{reason}",
-                              level="alert" if new in ("interview", "offer") else "info", agent_id=cfg.id,
-                              opportunity_id=opp_id, task_id=task["id"], data={"opp": opp, "from": old, "to": new})
-            for opp_id in outcome.touched_opps - set(stage_changes) - set(outcome.created_opps):
-                opp = serializers.opp_summary_by_id(self.conn, opp_id)
-                if opp:
-                    repo.emit(self.conn, "opp.updated", f"Updated {opp['company_name']} — {opp['title']}",
-                              level="debug", agent_id=cfg.id, opportunity_id=opp_id, task_id=task["id"],
-                              data={"opp": opp})
+            self._apply_result(task, cfg, result, run_id=run.run_id)
             self._finish_run(run, "succeeded", t0, result=result)
             tokens = (result.prompt_tokens or 0) + (result.completion_tokens or 0)
             self._bump_counters(cfg.id, tasks=1, tokens=tokens)
@@ -418,6 +457,36 @@ class Worker:
                             "attempt": task["attempts"] + 1, "model_id": result.model_id, "tok_s": result.tok_s,
                             "tokens": tokens or None, "cost_usd": result.cost_usd})
         self.error_until.pop(cfg.id, None)
+
+    def _apply_result(self, task: dict[str, Any], cfg: AgentConfig, result: RunResult, *, run_id: str | None) -> None:
+        """Effects + pipeline transitions + opp events for a successful result. Caller owns the transaction."""
+        outcome = apply_effects(self.conn, result.effects, agent_id=cfg.id, task_id=task["id"],
+                                run_id=run_id, opportunity_id=task.get("opportunity_id"))
+        stage_changes: dict[str, tuple[str, str]] = {}
+        if not result.output.get("noop"):
+            targets = result.opp_results or (
+                [(task["opportunity_id"], result.output)] if task.get("opportunity_id") else [])
+            for opp_id, res in targets:
+                self._transition(task, cfg, opp_id, res, stage_changes)
+        for opp_id in outcome.created_opps:
+            opp = serializers.opp_summary_by_id(self.conn, opp_id)
+            if opp:
+                repo.emit(self.conn, "opp.created", f"New: {opp['company_name']} — {opp['title']} "
+                          f"({opp['city']}, {opp['country_iso2']})", agent_id=cfg.id, opportunity_id=opp_id,
+                          task_id=task["id"], data={"opp": opp})
+        for opp_id, (old, new) in stage_changes.items():
+            opp = serializers.opp_summary_by_id(self.conn, opp_id)
+            if opp:
+                reason = f" ({opp['stage_reason']})" if opp.get("stage_reason") and new == "filtered" else ""
+                repo.emit(self.conn, "opp.stage", f"{opp['company_name']} — {opp['title']}: {old} → {new}{reason}",
+                          level="alert" if new in ("interview", "offer") else "info", agent_id=cfg.id,
+                          opportunity_id=opp_id, task_id=task["id"], data={"opp": opp, "from": old, "to": new})
+        for opp_id in outcome.touched_opps - set(stage_changes) - set(outcome.created_opps):
+            opp = serializers.opp_summary_by_id(self.conn, opp_id)
+            if opp:
+                repo.emit(self.conn, "opp.updated", f"Updated {opp['company_name']} — {opp['title']}",
+                          level="debug", agent_id=cfg.id, opportunity_id=opp_id, task_id=task["id"],
+                          data={"opp": opp})
 
     def _transition(self, task: dict[str, Any], cfg: AgentConfig, opp_id: str, res: dict[str, Any],
                     stage_changes: dict[str, tuple[str, str]]) -> None:

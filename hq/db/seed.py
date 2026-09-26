@@ -133,6 +133,14 @@ def seed_settings(conn: sqlite3.Connection) -> list[str]:
     return added
 
 
+def seed_all(conn: sqlite3.Connection) -> dict[str, int]:
+    """Every idempotent seed step (settings, profile facts and fields, answer bank, sources). Caller owns the tx."""
+    from hq.profile.facts import seed_facts
+    from hq.profile.fields import seed_fields
+
+    return {"settings": len(seed_settings(conn)), "facts": seed_facts(conn), "fields": seed_fields(conn)}
+
+
 def get_settings(conn: sqlite3.Connection) -> dict[str, Any]:
     out = dict(DEFAULT_SETTINGS)
     for row in conn.execute("SELECT key, value_json FROM settings"):
@@ -169,8 +177,8 @@ def main() -> None:
     conn = connect()
     applied = migrate(conn)
     with tx(conn):
-        added = seed_settings(conn)
-    print(f"db={paths.DB_PATH} migrations_applied={applied} settings_seeded={len(added)}")
+        added = seed_all(conn)
+    print(f"db={paths.DB_PATH} migrations_applied={applied} seeded={added}")
 
 
 if __name__ == "__main__":

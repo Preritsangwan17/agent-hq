@@ -13,7 +13,7 @@ from hq.sim.pool import ROLES_BY_KEY, compute_pay
 
 AGENT_KEYS = {"id", "name", "avatar", "color", "role", "adapter", "model", "capabilities", "cost_tier", "concurrency",
               "schedule", "enabled", "paused", "status", "builtin", "side_effects", "tasks_today", "errors_today",
-              "tokens_today", "restarts", "last_error", "live", "description"}
+              "tokens_today", "restarts", "last_error", "live", "description", "probation_runs_left"}
 LIVE_KEYS = {"agent_id", "now_line", "progress", "current_task_id", "opportunity_id", "model_id", "tok_s",
              "heartbeat_at", "updated_at"}
 EVENT_KEYS = {"id", "ts", "type", "level", "agent_id", "opportunity_id", "task_id", "message", "data"}

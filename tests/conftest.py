@@ -51,12 +51,12 @@ def hq_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
 def db(hq_env: SimpleNamespace):
     from hq.db.conn import connect, tx
     from hq.db.migrate import migrate
-    from hq.db.seed import seed_settings
+    from hq.db.seed import seed_all
 
     conn = connect()
     migrate(conn)
     with tx(conn):
-        seed_settings(conn)
+        seed_all(conn)
     yield conn
     conn.close()
 

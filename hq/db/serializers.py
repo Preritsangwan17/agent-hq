@@ -117,6 +117,7 @@ def need_json(n: dict[str, Any]) -> dict[str, Any]:
         "direct_url": n.get("direct_url"), "priority": n.get("priority"), "due_at": n.get("due_at"),
         "est_minutes": n.get("est_minutes"), "status": n["status"], "snoozed_until": n.get("snoozed_until"),
         "created_at": n["created_at"], "resolved_at": n.get("resolved_at"),
+        "payload": _loads(n.get("payload_json"), {}),
     }
 
 
@@ -207,7 +208,7 @@ def agent_json(row: dict[str, Any], live: dict[str, Any] | None, *, alive: bool 
         "tasks_today": row["tasks_today"] if fresh else 0,
         "errors_today": row["errors_today"] if fresh else 0,
         "tokens_today": row["tokens_today"] if fresh else 0,
-        "restarts": row["restarts"],
+        "restarts": row["restarts"], "probation_runs_left": row.get("probation_runs_left", 0),
         "last_error": row.get("last_error"),
         "live": live_json(live),
         "description": cfg.get("description", ""),

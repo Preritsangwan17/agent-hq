@@ -232,9 +232,66 @@ def create_agent(body: dict[str, Any], request: Request, conn: sqlite3.Connectio
     path = write_agent_file(agents_dir, cfg)
     sync_file(conn, path)
     with tx(conn):
+        conn.execute("UPDATE agents SET probation_runs_left=? WHERE id=?", (PROBATION_RUNS, cfg.id))
         repo.audit(conn, "prerit", "agent.create", cfg.id, after=cfg.to_yaml_dict(), remote_addr=_addr(request))
         repo.add_command(conn, "agent_changed", {"agent_id": cfg.id})
     return serializers.agent_json_by_id(conn, cfg.id)
+
+
+LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1"}
+PROBATION_RUNS = 5  # a wizard-created agent's first outputs wait for Prerit's approval
+
+
+def _probe_endpoint(url: str) -> dict[str, Any]:
+    """GET a local model/HTTP agent endpoint (loopback only — the wizard never contacts third parties)."""
+    import httpx
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or (parsed.hostname or "") not in LOOPBACK_HOSTS:
+        return {"ok": False, "url": url, "error": "only http(s)://localhost or 127.0.0.1 endpoints can be probed"}
+    try:
+        r = httpx.get(url, timeout=2.0)
+    except httpx.HTTPError as exc:
+        return {"ok": False, "url": url, "error": f"{type(exc).__name__}: {exc}"[:200]}
+    detail: Any = None
+    try:
+        body = r.json()
+        if isinstance(body, dict) and isinstance(body.get("data"), list):
+            detail = {"models": [m.get("id") for m in body["data"] if isinstance(m, dict)][:20]}
+    except ValueError:
+        pass
+    return {"ok": r.status_code < 400, "url": url, "status": r.status_code, "detail": detail}
+
+
+@router.post("/agents/validate")
+def validate_agent(body: dict[str, Any], request: Request, conn: sqlite3.Connection = Conn) -> dict[str, Any]:
+    """Dry run of POST /api/agents for the wizard's last step: validation errors, the YAML that would be written,
+    an id clash check and, for endpoint adapters, a loopback-only reachability probe. Writes nothing."""
+    import yaml
+
+    reserved = [c for c in body.get("capabilities") or [] if c in RESERVED_SIDE_EFFECTS]
+    errors: list[dict[str, str]] = []
+    if reserved:
+        errors.append({"field": "capabilities",
+                       "message": f"side-effect capabilities are reserved for built-in agents: {', '.join(reserved)}"})
+    try:
+        cfg = AgentConfig.model_validate({**body, "builtin": False})
+    except ValidationError as exc:
+        errors += [{"field": ".".join(str(p) for p in e["loc"]), "message": e["msg"]} for e in exc.errors()]
+        return {"ok": False, "errors": errors, "yaml": None, "probe": None}
+    if (repo.agent_row(conn, cfg.id) or (paths.AGENTS_DIR / f"{cfg.id}.yaml").exists()
+            or (paths.AGENTS_DIR / f"{cfg.id}.yaml.disabled").exists()):
+        errors.append({"field": "id", "message": f"an agent with id '{cfg.id}' already exists"})
+    if cfg.adapter == "script" and not auth.is_loopback(request):
+        errors.append({"field": "adapter", "message": "script agents can only be created from this Mac"})
+    probe = None
+    endpoint = cfg.adapter_config.get("base_url") or cfg.adapter_config.get("endpoint")
+    if cfg.adapter in ("openai_compatible", "http") and isinstance(endpoint, str) and endpoint:
+        url = endpoint.rstrip("/") + ("/models" if cfg.adapter == "openai_compatible" else "/health")
+        probe = _probe_endpoint(url)
+    text = yaml.safe_dump(cfg.to_yaml_dict(), sort_keys=False, allow_unicode=True)
+    return {"ok": not errors, "errors": errors, "yaml": text, "probe": probe}
 
 
 @router.patch("/agents/{agent_id}")
@@ -406,6 +463,11 @@ def _need_followups(conn: sqlite3.Connection, need: dict[str, Any], status: str)
     """What Prerit's answer means for the pipeline. `submit_form` done = he submitted the pack himself;
     `approve` done = explicit approval for the Applicant to proceed (autonomy approve_first)."""
     done: list[str] = []
+    payload = serializers._loads(need.get("payload_json"), {})
+    if payload.get("probation_task_id") and status in ("done", "dismissed"):
+        repo.add_command(conn, "probation_release", {"task_id": payload["probation_task_id"],
+                                                      "approved": status == "done"})
+        return [f"probation:{'approved' if status == 'done' else 'discarded'}"]
     opp_id, app_id = need.get("opportunity_id"), need.get("application_id")
     opp = repo.get_opportunity_row(conn, opp_id) if opp_id else None
     if status != "done" or opp is None or opp["stage_override"]:

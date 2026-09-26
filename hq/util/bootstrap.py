@@ -12,7 +12,7 @@ def main() -> int:
     from hq.api.auth import ensure_session_secret
     from hq.db.conn import connect, tx
     from hq.db.migrate import migrate
-    from hq.db.seed import seed_settings
+    from hq.db.seed import seed_all
 
     settings.load_env()
     settings.ensure_dirs()
@@ -21,12 +21,12 @@ def main() -> int:
     try:
         applied = migrate(conn)
         with tx(conn):
-            seeded = seed_settings(conn)
+            seeded = seed_all(conn)["settings"]
         registry = Registry(settings.AGENTS_DIR, conn)
         changes = registry.scan()
     finally:
         conn.close()
-    print(summary(applied, len(seeded), len(registry.configs)))
+    print(summary(applied, seeded, len(registry.configs)))
     errors = [agent for agent, kind in changes if kind == "error"]
     if errors:
         print(f"! invalid agent file(s): {', '.join(f'{e}.yaml' for e in errors)} — the last good config is kept; "

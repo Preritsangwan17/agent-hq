@@ -58,6 +58,8 @@ export interface Agent {
   last_error: string | null;
   live: AgentLive | null;
   description: string;
+  /** outputs still needing Prerit's approval (wizard-created agents start at 5) */
+  probation_runs_left?: number;
 }
 
 /** Body of POST /api/agents (AgentConfig without side-effect caps). */
@@ -398,6 +400,8 @@ export interface Need {
   est_minutes: number | null;
   status: NeedStatus;
   created_at: ISODate;
+  /** structured extras (probation task id, decision options …) */
+  payload?: Record<string, unknown>;
 }
 
 // ── stats / settings / snapshot ───────────────────────────────────────
@@ -507,4 +511,92 @@ export interface OppQuery {
   q?: string;
   sim?: 0 | 1;
   limit?: number;
+}
+
+// ── profile / security (Settings) ─────────────────────────────────────
+export type SharePolicy = 'forms' | 'on_request' | 'never';
+
+export interface AvailabilityWindow {
+  from: string;
+  to: string;
+  hours_per_week: number;
+  mode: 'remote' | 'onsite' | 'any';
+}
+
+export interface ProfileField {
+  key: string;
+  label: string;
+  value: string | AvailabilityWindow[] | null;
+  share_policy: SharePolicy;
+  confirmed: boolean;
+  required_for_live: boolean;
+  updated_at: ISODate | null;
+  kind: 'text' | 'number' | 'choice' | 'windows' | 'date';
+  hint: string;
+  choices: string[];
+}
+
+export interface ProfileFact {
+  id: string;
+  category: string;
+  project: string | null;
+  text: string;
+  phrasings: string[];
+  evidence_url: string | null;
+  evidence: string | null;
+  source: string;
+  status: 'verified' | 'pending' | 'retired';
+  note: string | null;
+}
+
+export interface Profile {
+  facts: ProfileFact[];
+  fields: ProfileField[];
+  required_missing: string[];
+}
+
+export interface SecurityInfo {
+  lan: boolean;
+  allowed_hosts: string[];
+  loopback: boolean;
+  https: boolean;
+  session_days: number;
+  secrets_present: string[];
+  force_dry_run: boolean;
+}
+
+export interface AuditEntry {
+  id: string;
+  ts: ISODate;
+  actor: string;
+  action: string;
+  target: string | null;
+  before: unknown;
+  after: unknown;
+  remote_addr: string | null;
+}
+
+// ── strategist ────────────────────────────────────────────────────────
+export interface StrategyAction {
+  type: string;
+  params?: Record<string, unknown>;
+  rationale?: string;
+  risk?: 'low' | 'medium' | 'high' | (string & {});
+  status?: string;
+}
+
+export interface StrategyReport {
+  date: string;
+  report_md: string | null;
+  proposed_actions: StrategyAction[];
+  applied_actions: StrategyAction[];
+  created_at: ISODate;
+}
+
+/** POST /api/agents/validate — dry run for the Add Agent wizard. */
+export interface AgentValidation {
+  ok: boolean;
+  errors: { field: string; message: string }[];
+  yaml: string | null;
+  probe: { ok: boolean; url: string; status?: number; error?: string; detail?: { models?: string[] } | null } | null;
 }

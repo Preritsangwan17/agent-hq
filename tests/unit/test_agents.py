@@ -139,3 +139,21 @@ async def test_hot_reload_adds_agent_within_three_seconds(hq_env, db):
     await asyncio.wait_for(watcher, timeout=5)
     assert elapsed < 3.0
     assert db.execute("SELECT type FROM events WHERE type='agent.added' AND agent_id='newbie'").fetchone()
+
+
+def test_validate_agent_dry_run(authed, hq_env):
+    from tests.conftest import MUTATE
+
+    body = {"id": "summ", "name": "Summ", "adapter": "sim", "capabilities": ["summarize"]}
+    r = authed.post("/api/agents/validate", json=body, headers=MUTATE)
+    assert r.status_code == 200 and r.json()["ok"] is True
+    assert "id: summ" in r.json()["yaml"]
+    assert not (hq_env.agents / "summ.yaml").exists()  # nothing written
+
+    bad = {**body, "capabilities": ["apply.email_send"]}
+    r = authed.post("/api/agents/validate", json=bad, headers=MUTATE).json()
+    assert r["ok"] is False and any("reserved" in e["message"] for e in r["errors"])
+
+    remote = {**body, "adapter": "openai_compatible", "adapter_config": {"base_url": "https://api.example.com/v1"}}
+    r = authed.post("/api/agents/validate", json=remote, headers=MUTATE).json()
+    assert r["probe"]["ok"] is False and "localhost" in r["probe"]["error"]

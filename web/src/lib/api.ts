@@ -10,8 +10,10 @@ import type {
   Agent,
   AgentConfig,
   AgentPatch,
+  AgentValidation,
   AgentsMeta,
   ApiErrorBody,
+  AuditEntry,
   AuthStatus,
   EventsQuery,
   HQEvent,
@@ -21,6 +23,11 @@ import type {
   OppDetail,
   OppQuery,
   OppSummary,
+  Profile,
+  ProfileFact,
+  ProfileField,
+  SecurityInfo,
+  StrategyReport,
   Settings,
   Snapshot,
   Stage,
@@ -152,6 +159,7 @@ export const api = {
   agents: () => http.get<{ agents: Agent[] }>('/api/agents'),
   agentsMeta: () => http.get<AgentsMeta>('/api/agents/meta'),
   createAgent: (cfg: AgentConfig) => http.post<Agent>('/api/agents', cfg),
+  validateAgent: (cfg: AgentConfig) => http.post<AgentValidation>('/api/agents/validate', cfg),
   patchAgent: (id: string, patch: AgentPatch) => http.patch<Agent>(`/api/agents/${enc(id)}`, patch),
   deleteAgent: (id: string) => http.del<{ ok: boolean }>(`/api/agents/${enc(id)}`),
 
@@ -168,6 +176,16 @@ export const api = {
     http.patch<Need>(`/api/needs/${enc(id)}`, body),
 
   stats: () => http.get<Stats>('/api/stats'),
+
+  profile: () => http.get<Profile>('/api/profile'),
+  patchProfileField: (key: string, value: unknown, share_policy?: string) =>
+    http.patch<ProfileField>(`/api/profile/fields/${enc(key)}`, { value, share_policy }),
+  patchFact: (id: string, status: ProfileFact['status']) => http.patch<ProfileFact>(`/api/profile/facts/${enc(id)}`, { status }),
+  security: () => http.get<SecurityInfo>('/api/security'),
+  audit: (q: { limit?: number; action?: string } = {}) => http.get<{ items: AuditEntry[] }>('/api/audit', { ...q }),
+  strategyLatest: () => http.get<{ report: StrategyReport | null; next_run_at: string }>('/api/strategy/latest'),
+  changePasscode: (current: string, next: string) =>
+    http.post<{ ok: boolean }>('/api/auth/change-passcode', { current, new: next }),
   simReset: () => http.post<{ ok?: boolean; purged?: number }>('/api/sim/reset'),
 
   auth: {

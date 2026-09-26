@@ -7,13 +7,18 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUN_DIR="${HQ_RUN_DIR:-$ROOT/data/run}"
 PIDFILE="$RUN_DIR/supervisor.pid"
 
+alive() {  # alive <pid>: running and not a zombie (an exited child whose parent has not reaped it yet)
+  kill -0 "$1" 2>/dev/null || return 1
+  [[ "$(ps -o stat= -p "$1" 2>/dev/null | tr -d ' ')" != Z* ]]
+}
+
 wait_gone() {  # wait_gone <pid> <seconds>
   local i
   for i in $(seq 1 $(($2 * 4))); do
-    kill -0 "$1" 2>/dev/null || return 0
+    alive "$1" || return 0
     sleep 0.25
   done
-  ! kill -0 "$1" 2>/dev/null
+  ! alive "$1"
 }
 
 reaped=0
@@ -41,7 +46,7 @@ if [ ! -f "$PIDFILE" ]; then
   exit 0
 fi
 PID="$(tr -dc '0-9' <"$PIDFILE")"
-if [ -z "$PID" ] || ! kill -0 "$PID" 2>/dev/null; then
+if [ -z "$PID" ] || ! alive "$PID"; then
   echo "removing stale pidfile (supervisor pid ${PID:-?} is gone)"
   rm -f "$PIDFILE"
   reap_children

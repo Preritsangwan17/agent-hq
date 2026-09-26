@@ -37,7 +37,7 @@ function inWindow(q: QuietHours, m: number): boolean {
 export function SchedulesTab() {
   const s = useSettings();
   const { save } = useSaver();
-  const q: QuietHours = { enabled: false, start: '23:00', end: '07:00', ...(s.quiet_hours ?? {}) };
+  const q: QuietHours = { enabled: false, start: '23:00', end: '07:00', ...(s.quiet_hours as Partial<QuietHours> | undefined) };
   const now = useNow(30_000);
   const nowMin = Math.floor((now / 60000 + IST_OFFSET_MIN) % 1440);
   const quietNow = q.enabled && inWindow(q, nowMin);

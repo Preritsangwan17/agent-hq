@@ -1,0 +1,19 @@
+/* Activity terminal: new rows fade/slide in (transform + opacity only). */
+@keyframes hq-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.hq-row-in {
+  animation: hq-row-in 0.28s ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hq-row-in {
+    animation: none;
+  }
+}
