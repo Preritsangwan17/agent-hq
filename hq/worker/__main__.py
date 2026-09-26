@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import fcntl
 import logging
+import os
 import signal
 import sys
 
@@ -27,7 +28,8 @@ def main() -> int:
         return 1
 
     async def run() -> None:
-        worker = Worker()
+        # model upkeep: discovery, model servers, Claude availability (HQ_MODEL_UPKEEP=0 turns it off)
+        worker = Worker(model_upkeep=os.environ.get("HQ_MODEL_UPKEEP", "1") != "0")
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, worker.stop)

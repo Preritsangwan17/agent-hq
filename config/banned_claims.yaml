@@ -1,0 +1,70 @@
+# Deterministic fact-gate lexicon (hq/pipeline/gates/fact_deterministic.py). Patterns are case-insensitive Python
+# regexes matched against one clause at a time. Clauses that are negated ("I haven't deployed…") or aspirational
+# ("eager to learn…", "interested in…") are skipped for every rule marked `claims_only`.
+# Source of truth for what is true: config/facts.yaml. Nothing Prerit built was deployed, is in production, is
+# full-stack, scalable or real-time; there are no accuracy numbers, no users and no internship.
+
+rules:
+  BANNED_CLAIM:
+    claims_only: true
+    message: "Not true of Prerit's work (see facts.yaml)"
+    patterns:
+      - '\bdeploy(s|ed|ing|ment|ments)?\b'
+      - '\bship(ped|ping)\b.*\b(model|app|pipeline|system|product)s?\b'
+      - '\bproduction(-like| grade|-grade| ready|-ready| environment| system| code)?\b'
+      - '\bfull[- ]stack\b'
+      - '\bscalab(le|ility)\b'
+      - '\breal[- ]time\b'
+      - '\b(hosted|live (app|website|demo))\b'
+      - '\b(accuracy|precision|recall|f1[- ]score|auc)\b'
+      - '\b(my|previous|prior|past) internships?\b'
+      - '\binternship experience\b'
+      - '\bindustry experience\b'
+      - '\b(user base|active users|real users)\b'
+      - '\blifecycle of (an? )?ml model\b'
+  UNVERIFIABLE_SELF_CLAIM:
+    claims_only: true
+    message: "Self-assessment with no evidence"
+    patterns:
+      - '\b(strong|solid|firm|deep) (foundation|base|grounding|understanding|background)\b'
+      - '\b(expert|expertise|proficient|proficiency|extensive|mastery|adept|seasoned|well-versed)\b'
+      - '\bcomfortable (reading|debugging|navigating) (unfamiliar|large|complex)\b'
+      - '\bexplaining why (a|the) solution\b'
+      - '\btranslat(e|ing) technical concepts\b'
+      - '\buser-friendly tools?\b'
+      - '\b(technical depth|end-to-end ownership)\b'
+      - '\bspent the most time\b'
+      - '\b(passionate|passion) (about|for) (building|solving)\b'
+      - '\bproven (track record|ability)\b'
+  INVENTED_RESULT:
+    claims_only: true
+    message: "No measured result exists for either project (F-NO-METRICS)"
+    patterns:
+      - '\bimprov(e|ed|es|ing) (the )?(model |overall )?(performance|accuracy|results|predictions)\b'
+      - '\b(boost|increase|raise)(d|s|ing)? (the )?(model )?(performance|accuracy)\b'
+      - '\b(reduc|cut)(e|ed|ing) (churn|costs?|errors?)\b'
+      - '\b\d+(\.\d+)?\s?% (accuracy|improvement|better|faster|increase|reduction)\b'
+  PLURAL_OVERGEN:
+    claims_only: true
+    message: "Over-generalises from one project"
+    patterns:
+      - '\bend-to-end (ml |machine learning |data )?(pipelines|systems|projects|solutions|workflows)\b'
+      - '\b(two|several|many|multiple|numerous|various) end-to-end\b'
+      - '\b(several|many|multiple|numerous|various|a number of|a range of) (\w+ ){0,2}(projects|systems|pipelines|models|applications)\b'
+      - '\bmy projects (involve|include|use|all)\b'
+      - '\bbinn(ed|ing) (the )?numerical features\b'
+  FACT_WORDING:
+    claims_only: false
+    message: "The book filter keeps users with MORE THAN 200 ratings — say 'more than 200' or 'over 200'"
+    patterns:
+      - '\b200\s?\+'
+      - '\b(at least|minimum of|200 or more|a minimum of) 200\b'
+      - '\bat least 200\b'
+      - '\b200 or more\b'
+  ANGLE_LEAK:
+    claims_only: false
+    message: "Location/proximity reasoning is not a verified fact"
+    patterns:
+      - '\b(close|near|close by|nearby|next) to (my|the) (university|college|campus|home|hometown)\b'
+      - '\b(short|easy) commute\b'
+      - '\b(i live|i am based|i''m based) (in|near)\b'

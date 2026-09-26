@@ -1,7 +1,7 @@
 # Agent HQ — common tasks. `make up` / `make down` wrap start.sh / stop.sh.
 PY := .venv/bin/python
 
-.PHONY: up down dev test screens fmt
+.PHONY: up down dev test bench bench-full screens fmt
 
 up:
 	./start.sh
@@ -15,6 +15,13 @@ dev:
 
 test:
 	$(PY) -m pytest -q
+
+# Benchmark local models (quick ≈ 3 min/model) and re-assign roles. Stop the worker first (make down).
+bench:
+	$(PY) -m hq.models.benchmark --quick
+
+bench-full:
+	$(PY) -m hq.models.benchmark --full
 
 screens:
 	npm --prefix web run screens --if-present

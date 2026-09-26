@@ -1,0 +1,47 @@
+# Document rules the Writer follows and the quality gate enforces (CONTRACT_C §5).
+signoff: "Best regards,\nPrerit Sangwan"
+contact_line: "sangwanprerit40@gmail.com | LinkedIn: https://www.linkedin.com/in/prerit-sangwan-1b7572304 | GitHub: https://github.com/Preritsangwan17"
+types:
+  cover_letter:
+    min_words: 170
+    max_words: 230
+    paragraphs: [3, 4]
+    salutation: "Dear {recipient},"
+    default_recipient: "Hiring Team"
+    signoff: true
+    repo_link_max: 1
+  cold_email:
+    max_words: 170
+    subject: true
+    salutation: "Dear {recipient},"
+    default_recipient: "Professor"
+    signoff: true
+    repo_link_max: 1
+  research_statement:
+    min_words: 150
+    max_words: 250
+    salutation: null
+    signoff: false
+    repo_link_max: 1
+  profile_summary:
+    max_words: 90
+    salutation: null
+    signoff: false
+    repo_link_max: 1
+  form_answer:
+    max_words: 150
+    salutation: null
+    signoff: false
+    repo_link_max: 1
+  followup:
+    max_words: 90
+    salutation: "Dear {recipient},"
+    default_recipient: "Hiring Team"
+    signoff: true
+    repo_link_max: 0
+  paragraph:
+    min_words: 60
+    max_words: 120
+    salutation: null
+    signoff: false
+    repo_link_max: 1

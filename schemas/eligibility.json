@@ -1,0 +1,22 @@
+{
+  "type": "object",
+  "required": ["verdict", "requirements", "confidence"],
+  "properties": {
+    "verdict": {"enum": ["eligible", "eligible_gaps", "ineligible", "needs_info"]},
+    "requirements": {
+      "type": "array",
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "required": ["quote"],
+        "properties": {
+          "type": {"type": "string"},
+          "quote": {"type": "string"},
+          "meets": {"enum": ["yes", "no", "unknown"]}
+        }
+      }
+    },
+    "skill_gaps": {"type": "array", "items": {"type": "string"}},
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+  }
+}

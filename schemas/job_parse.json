@@ -1,0 +1,44 @@
+{
+  "type": "object",
+  "required": ["parse_ok", "company", "title", "kind", "location", "requirements", "apply"],
+  "properties": {
+    "parse_ok": {"type": "boolean"},
+    "company": {"type": ["string", "null"]},
+    "title": {"type": ["string", "null"]},
+    "kind": {"type": ["string", "null"]},
+    "location": {
+      "type": "object",
+      "properties": {
+        "city": {"type": ["string", "null"]},
+        "country_iso2": {"type": ["string", "null"]},
+        "work_mode": {"type": ["string", "null"]}
+      }
+    },
+    "pay_raw": {"type": ["string", "null"]},
+    "deadline_raw": {"type": ["string", "null"]},
+    "start_raw": {"type": ["string", "null"]},
+    "duration_raw": {"type": ["string", "null"]},
+    "hours_raw": {"type": ["string", "null"]},
+    "requirements": {
+      "type": "array",
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "required": ["quote"],
+        "properties": {"type": {"type": "string"}, "quote": {"type": "string"}}
+      }
+    },
+    "apply": {
+      "type": "object",
+      "properties": {
+        "channel": {"type": ["string", "null"]},
+        "email": {"type": ["string", "null"]},
+        "url": {"type": ["string", "null"]}
+      }
+    },
+    "benefits": {
+      "type": "object",
+      "properties": {"housing": {"type": "boolean"}, "meals": {"type": "boolean"}, "travel": {"type": "boolean"}}
+    }
+  }
+}

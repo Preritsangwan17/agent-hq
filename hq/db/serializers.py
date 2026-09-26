@@ -261,11 +261,14 @@ def stats(conn: sqlite3.Connection, settings: dict[str, Any] | None = None) -> d
     offers = by_stage.get("offer", 0)
     since = ist_midnight_utc_iso()
     claude = conn.execute(
-        "SELECT COALESCE(SUM(cost_usd),0) AS cost, COUNT(*) AS n FROM agent_runs "
-        "WHERE started_at >= ? AND cost_usd IS NOT NULL AND status='succeeded'", (since,)).fetchone()
+        "SELECT COALESCE(SUM(CASE WHEN subtype NOT IN ('reserved','released') THEN cost_usd_est END),0) AS cost, "
+        "COUNT(CASE WHEN subtype!='released' THEN 1 END) AS n FROM claude_usage WHERE date_local=?",
+        (today_ist().isoformat(),)).fetchone()
+    # top-level runs only (router escalation rows are children) and never Claude's tokens
     local = conn.execute(
         "SELECT COALESCE(SUM(COALESCE(prompt_tokens,0)+COALESCE(completion_tokens,0)),0) AS t FROM agent_runs "
-        "WHERE started_at >= ? AND cost_usd IS NULL", (since,)).fetchone()
+        "WHERE started_at >= ? AND parent_run_id IS NULL AND COALESCE(model_id,'') NOT LIKE 'claude:%'",
+        (since,)).fetchone()
 
     def mids(stages: tuple[str, ...]) -> list[float]:
         rows = conn.execute(

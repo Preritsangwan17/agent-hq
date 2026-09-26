@@ -31,6 +31,14 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "email_daily_cap": 10,
     "quiet_hours": {"enabled": False, "start": "23:00", "end": "07:00"},
     "unknown_pay_policy": "decision",
+    # phase (b): models, Claude, budget
+    "model_pool_budget_gb": 30,
+    "usability_mode": True,
+    "claude_model": "sonnet",
+    "claude_signoff_model": "opus",
+    "claude_per_call_cap_usd": 0.5,
+    "require_claude_signoff": True,
+    "benchmark_on_new_model": True,
 }
 
 
@@ -101,6 +109,13 @@ EDITABLE: dict[str, Callable[[Any], Any]] = {
     "email_daily_cap": _num(0, 100, integer=True),
     "quiet_hours": _quiet_hours,
     "unknown_pay_policy": _choice("decision", "accept", "reject"),
+    "model_pool_budget_gb": _num(2, 40),
+    "usability_mode": _bool,
+    "claude_model": _choice("haiku", "sonnet", "opus"),
+    "claude_signoff_model": _choice("haiku", "sonnet", "opus"),
+    "claude_per_call_cap_usd": _num(0.01, 5.0),
+    "require_claude_signoff": _bool,
+    "benchmark_on_new_model": _bool,
 }
 
 
