@@ -106,7 +106,7 @@ def models(conn: sqlite3.Connection = Conn) -> dict[str, Any]:
         "memory": memory_state(conn, s),
         "benchmark": s.get("benchmark_state") or {"running": False},
         "claude": claude,
-        "local_enabled": s.get("llm_local_enabled", True) is not False,
+        "local_enabled": True,
     }
 
 

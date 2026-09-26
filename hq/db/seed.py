@@ -42,6 +42,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "codex_model": "default",        # ChatGPT via the Codex CLI; "default" = Codex's own default model
     "codex_signoff_model": "default",
     # on/off switch per model source (Settings › Budget › Models on/off); off = never used, whatever else is set
+    "ai_mode": "auto",
     "llm_local_enabled": True,
     "llm_claude_enabled": True,
     "llm_xai_enabled": True,
@@ -65,6 +66,19 @@ def _bool(v: Any) -> bool:
     if isinstance(v, bool):
         return v
     raise SettingError("expected true/false")
+
+
+def _required_local(v: Any) -> bool:
+    if _bool(v) is not True:
+        raise SettingError("Local AI is always ON and cannot be disabled")
+    return True
+
+
+def _ai_mode(v: Any) -> str:
+    from hq.llm.modes import MODES
+    if not isinstance(v, str) or v not in MODES:
+        raise SettingError("unknown AI mode")
+    return v
 
 
 def _num(lo: float, hi: float, integer: bool = False) -> Callable[[Any], float]:
@@ -137,7 +151,8 @@ EDITABLE: dict[str, Callable[[Any], Any]] = {
     "claude_model": _choice("haiku", "sonnet", "opus"),
     "claude_signoff_model": _choice("haiku", "sonnet", "opus"),
     "cloud_llm": _choice("auto", "claude", "xai", "codex"),
-    "llm_local_enabled": _bool,
+    "ai_mode": _ai_mode,
+    "llm_local_enabled": _required_local,
     "llm_claude_enabled": _bool,
     "llm_xai_enabled": _bool,
     "llm_codex_enabled": _bool,
@@ -167,6 +182,12 @@ def validate_patch(patch: dict[str, Any]) -> dict[str, Any]:
             cleaned[key] = EDITABLE[key](value)
         except SettingError as exc:
             raise SettingError(f"{key}: {exc}") from None
+    if "ai_mode" in cleaned:
+        from hq.llm.modes import MODES, CLOUD
+        mode = cleaned["ai_mode"]
+        if mode != "auto" and any(f"llm_{p}_enabled" in cleaned and
+                cleaned[f"llm_{p}_enabled"] != (p in MODES[mode]["providers"]) for p in CLOUD):
+            raise SettingError("provider switches conflict with the selected AI mode")
     return cleaned
 
 
@@ -202,6 +223,7 @@ def get_settings(conn: sqlite3.Connection) -> dict[str, Any]:
             out[row["key"]] = json.loads(row["value_json"])
         except (json.JSONDecodeError, TypeError):
             continue
+    out["llm_local_enabled"] = True
     return out
 
 
@@ -214,6 +236,8 @@ def get_setting(conn: sqlite3.Connection, key: str, default: Any = None) -> Any:
 
 def set_settings(conn: sqlite3.Connection, values: dict[str, Any], by: str = "system") -> None:
     """Upsert several keys. Caller decides on the transaction."""
+    from hq.llm.modes import normalize_patch
+    values = normalize_patch(values, get_settings(conn))
     now = now_iso()
     for key, value in values.items():
         conn.execute(

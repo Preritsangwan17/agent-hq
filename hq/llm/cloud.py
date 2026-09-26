@@ -16,6 +16,7 @@ import sqlite3
 import time
 from typing import Any
 
+from hq.llm import modes, policy
 from hq.llm.claude import ClaudeRateLimited, ClaudeResult, ClaudeRunner, ClaudeUnavailable
 from hq.llm.codex import CodexRunner
 from hq.llm.xai import XaiRunner, api_key
@@ -33,20 +34,16 @@ ALL_OFF = "every cloud model is switched off (Settings › Budget › Models on/
 
 
 def enabled(s: dict[str, Any], source: str) -> bool:
-    return s.get(SWITCH[source], True) is not False
+    return modes.enabled(s, source)
 
 
 def local_enabled(s: dict[str, Any]) -> bool:
     return enabled(s, "local")
 
 
-def order(s: dict[str, Any]) -> list[str]:
-    """Switched-on cloud providers, the preferred one first."""
-    base = ["xai", "claude", "codex"] if api_key() else ["claude", "codex", "xai"]
-    pref = s.get("cloud_llm", "auto")
-    if pref in PROVIDERS:
-        base = [pref] + [p for p in base if p != pref]
-    return [p for p in base if enabled(s, p)]
+def order(s: dict[str, Any], task_type: str = "") -> list[str]:
+    """Enabled providers ranked by task capability, with metered API last for routine work."""
+    return policy.cloud_order(s, task_type)
 
 
 def provider(s: dict[str, Any]) -> str | None:
@@ -202,7 +199,7 @@ class CloudRunner:
         reason = None if usable else (main.get("reason") if main else ALL_OFF)
         return {**main, "available": bool(usable), "reason": reason, "provider": active, "using": usable[0] if usable
                 else None, "model": main_model(settings), "providers": provs,
-                "local_enabled": local_enabled(settings)}
+                "local_enabled": True, "ai_mode": modes.current(settings)}
 
 
 async def is_available(runner: Any, model: str) -> bool:
@@ -211,11 +208,11 @@ async def is_available(runner: Any, model: str) -> bool:
     return await (fn(model) if fn else runner.available())
 
 
-async def pick(runner: Any, s: dict[str, Any], exclude: set[str] | frozenset[str] = frozenset()) -> str | None:
+async def pick(runner: Any, s: dict[str, Any], exclude: set[str] | frozenset[str] = frozenset(), *, task_type: str = "") -> str | None:
     """The first switched-on provider's model (preferred first) that is reachable now and not in `exclude`."""
     if runner is None:
         return None
-    for p in order(s):
+    for p in order(s, task_type):
         m = model_for(s, p)
         if tag(m) not in exclude and await is_available(runner, m):
             return m

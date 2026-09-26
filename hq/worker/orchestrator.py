@@ -354,8 +354,6 @@ class Worker:
     def start_benchmark(self, model_ids: list[str] | None, quick: bool = True) -> bool:
         if self.benchmarking and not self.benchmarking.done():
             return False
-        if get_settings(self.conn).get("llm_local_enabled", True) is False:
-            return False   # local models are switched off: loading them for a benchmark would defeat the switch
         from hq.models.benchmark.suite import run_suite
 
         async def go() -> None:
@@ -417,7 +415,7 @@ class Worker:
             elif kind == "settings_changed":
                 keys = set(payload.get("keys") or [])
                 if keys & {"cloud_llm", "llm_claude_enabled", "llm_xai_enabled", "llm_codex_enabled",
-                           "llm_local_enabled"}:
+                           "llm_local_enabled", "ai_mode"}:
                     self._last_claude_check = 0.0   # show the new provider status now, not in 10 minutes
                 if "llm_local_enabled" in keys and self.services.manager is not None:
                     self.services.manager._last_health = 0.0   # the next upkeep tick unloads / may load again

@@ -218,8 +218,8 @@ class ModelManager:
                 self._touch(sv)
 
     def local_off(self, s: dict[str, Any] | None = None) -> bool:
-        """Settings › Budget › Models on/off: with local models off nothing is loaded and running servers stop."""
-        return (s or self.settings()).get("llm_local_enabled", True) is False
+        """Compatibility hook: Local AI can no longer be switched off."""
+        return False  # Local AI is required in every mode, including legacy databases.
 
     async def ensure(self, model_id: str) -> Endpoint:
         if self.local_off():

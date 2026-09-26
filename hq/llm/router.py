@@ -1,14 +1,5 @@
-"""Model router with the escalation ladder (CONTRACT_B §2, PLAN "Orchestrator › Failures").
-
-`await router.route(role, messages, schema, …)` tries, in order:
-  level 0 — the highest-ranked model assigned to the role (not excluded, not in the document lineage),
-  level 1 — the next-ranked DIFFERENT local model (a different family when one exists),
-  level 2 — the cloud (Claude CLI, xAI or ChatGPT: the first switched-on provider that is reachable), when allowed
-            and within today's budget,
-and raises EscalationExhausted otherwise. With local models switched off (`llm_local_enabled`) levels 0–1 are
-skipped; steps that don't allow the cloud then fall back to their rule-based paths, so local work never quietly
-turns into cloud spend. A level fails on invalid JSON after one repair turn, or when the output
-carries a `confidence` below the threshold. Every attempt is an `agent_runs` row linked by `escalated_from_run_id`.
+"""Local-first routing with quality checks, task-aware external fallbacks and per-attempt provenance.
+Local AI is required. Cloud pins choose an escalation target without skipping local work.
 """
 from __future__ import annotations
 
@@ -23,7 +14,7 @@ from hq.db import repo
 from hq.db.conn import dumps, tx
 from hq.db.seed import get_settings
 from hq.llm import client as llm_client
-from hq.llm import cloud
+from hq.llm import cloud, modes, policy
 from hq.llm.claude import ClaudeBadOutput, ClaudeBudgetExceeded, ClaudeError, ClaudeRateLimited, ClaudeRunner, \
     ClaudeUnavailable
 from hq.llm.json_utils import parse_and_validate, repair_message
@@ -109,15 +100,18 @@ class Router:
         attempts: list[dict[str, Any]] = []
         prev_run: str | None = None
         level = 0
-        local_on = cloud.local_enabled(s)
+        task_type = task_type or role
         if pinned_model and cloud.is_cloud(pinned_model):
-            ladder, claude_model = [], pinned_model.removeprefix("claude:")
-        elif not local_on:
-            ladder = []
+            claude_model = pinned_model.removeprefix("claude:")
+            ladder = self._ladder(role, exclude)
         else:
-            ladder = [pinned_model] if pinned_model else self._ladder(role, exclude)
+            ladder = ([pinned_model] if pinned_model not in exclude else []) if pinned_model else self._ladder(role, exclude)
         for model_id in ladder:
             run_id = new_id()
+            s = get_settings(self.conn)
+            sufficient, reason = policy.local_quality(self.conn, role, model_id)
+            route_meta = {"ai_mode": modes.current(s), "task_type": task_type,
+                          "reason": ("Local fallback. " if level else "Local AI first. ") + reason}
             try:
                 res = await self._local(model_id, messages, schema, max_tokens, temperature, on_progress)
             except WaitingMemory as exc:
@@ -126,7 +120,7 @@ class Router:
                 attempts.append({"level": level, "model_id": model_id, "error": str(exc)})
                 break
             except (ModelBroken, llm_client.LLMError) as exc:
-                self._record(run_id, agent_id, task_id, parent_run_id, prev_run, model_id, None, "failed", str(exc))
+                self._record(run_id, agent_id, task_id, parent_run_id, prev_run, model_id, None, "failed", str(exc), **route_meta)
                 attempts.append({"level": level, "model_id": model_id, "error": str(exc)[:300]})
                 prev_run, level = run_id, level + 1
                 continue
@@ -135,9 +129,11 @@ class Router:
                 conf = output.get("confidence")
                 if isinstance(conf, (int, float)) and conf < threshold:
                     errors = [f"confidence {conf:.2f} below {threshold:.2f}"]
+            if not errors and sufficient is False:
+                errors = ["Local benchmark quality is below the required floor"]
             status = "succeeded" if not errors else "failed"
             self._record(run_id, agent_id, task_id, parent_run_id, prev_run, model_id, chat, status,
-                         "; ".join(errors) or None, output)
+                         "; ".join(errors) or None, output, **route_meta)
             attempts.append({"level": level, "model_id": model_id, "error": "; ".join(errors) or None,
                              "tok_s": chat.tok_s if chat else None})
             if not errors:
@@ -147,7 +143,7 @@ class Router:
             prev_run, level = run_id, level + 1
         level = max(level, 2) if attempts else 2
         if not allow_claude or self.claude is None:
-            why = "local models are switched off" if not local_on else f"no local model for {role} succeeded"
+            why = f"no local model for {role} succeeded"
             raise EscalationExhausted(f"{why} and this step doesn't use the cloud", attempts)
         return await self._claude(role, messages, schema, task_type or f"escalation.{role}", agent_id, task_id,
                                   parent_run_id, prev_run, attempts, s, claude_model, lineage)
@@ -184,56 +180,88 @@ class Router:
                       attempts: list[dict[str, Any]], s: dict[str, Any], claude_model: str | None,
                       lineage: tuple[str, ...] | list[str]) -> LLMResult:
         assert self.claude is not None
-        if claude_model:   # pinned by the agent config
-            model = claude_model
-            if cloud.tag(model) in set(lineage):
-                raise EscalationExhausted(f"{cloud.tag(model)} already authored this document", attempts)
-            if not await cloud.is_available(self.claude, model):
-                raise EscalationExhausted(f"{cloud.label(model)} unavailable ({self.claude.reason})", attempts)
-        else:
-            picked = await cloud.pick(self.claude, s, exclude={cloud.tag(m) for m in lineage if m})
-            if picked is None:
-                raise EscalationExhausted(cloud.why_none(self.claude, s), attempts)
-            model = picked
-        mid, who = cloud.tag(model), cloud.label(model)
-        reservation = budget_mod.reserve(self.conn, task_type, s)
-        if reservation is None:
-            raise Deferred("deferred_budget", budget_mod.to_iso(budget_mod.next_midnight_ist()),
-                           "Cloud daily budget or call cap reached")
+        excluded = {cloud.tag(m) for m in lineage if m}
+        tried: set[str] = set()
         system, prompt = _to_prompt(messages)
-        run_id = new_id()
-        t0 = time.monotonic()
-        try:
-            res = await self.claude.run(prompt, schema=schema or {"type": "object"}, system_prompt=system, model=model,
-                                        max_budget_usd=float(s.get("claude_per_call_cap_usd", 0.5)))
-        except ClaudeError as exc:
-            cost = getattr(exc, "cost_usd", None)
-            if cost is not None or isinstance(exc, (ClaudeBadOutput, ClaudeBudgetExceeded)):
-                budget_mod.commit(self.conn, reservation, cost_usd=cost, model=model, subtype=exc.kind)
+        limited = False
+        for _ in cloud.PROVIDERS:
+            # Re-read on each attempt: changing mode applies without a worker restart.
+            s = get_settings(self.conn)
+            if claude_model:
+                model = claude_model
+                if cloud.tag(model) in excluded:
+                    raise EscalationExhausted(f"{cloud.tag(model)} already authored this document", attempts)
+                if (cloud.provider_of(model) in tried or not cloud.enabled(s, cloud.provider_of(model)) or
+                        not await cloud.is_available(self.claude, model)):
+                    break
             else:
+                blocked = excluded | {cloud.tag(cloud.model_for(s, p)) for p in tried}
+                model = await cloud.pick(self.claude, s, exclude=blocked, task_type=task_type)
+                if model is None:
+                    break
+            p = cloud.provider_of(model)
+            tried.add(p)
+            mid = cloud.tag(model)
+            run_id = new_id()
+            reservation = budget_mod.reserve(self.conn, task_type, s, run_id=run_id)
+            if reservation is None:
+                raise Deferred("deferred_budget", budget_mod.to_iso(budget_mod.next_midnight_ist()),
+                               "Cloud daily budget or call cap reached")
+            meta = {"ai_mode": modes.current(s), "task_type": task_type,
+                    "reason": policy.cloud_reason(task_type, p, bool(attempts))}
+            t0 = time.monotonic()
+            try:
+                # CloudRunner checks the current mode again immediately before dispatch.
+                res = await self.claude.run(prompt, schema=schema or {"type": "object"}, system_prompt=system,
+                                            model=model, max_budget_usd=float(s.get("claude_per_call_cap_usd", 0.5)))
+            except ClaudeError as exc:
+                cost = getattr(exc, "cost_usd", None)
+                if cost is not None or isinstance(exc, (ClaudeBadOutput, ClaudeBudgetExceeded)):
+                    budget_mod.commit(self.conn, reservation, cost_usd=cost, model=model, subtype=exc.kind)
+                else:
+                    budget_mod.release(self.conn, reservation)
+                self._record(run_id, agent_id, task_id, parent_run_id, prev_run, mid, None, "failed",
+                             str(exc), cost=cost, duration_ms=(time.monotonic() - t0) * 1000, **meta)
+                attempts.append({"level": 2, "model_id": mid, "error": str(exc)[:300]})
+                self._escalated(task_id, agent_id, mid, 2, [str(exc)])
+                prev_run = run_id
+                limited = limited or isinstance(exc, ClaudeRateLimited)
+                continue
+            except BaseException:
                 budget_mod.release(self.conn, reservation)
-            self._record(run_id, agent_id, task_id, parent_run_id, prev_run, mid, None, "failed",
-                         str(exc), cost=cost, duration_ms=(time.monotonic() - t0) * 1000)
-            attempts.append({"level": 2, "model_id": mid, "error": str(exc)[:300]})
-            if isinstance(exc, ClaudeRateLimited):
-                raise Deferred("queued", iso_in(3600), f"{who} rate-limited: {exc}") from exc
-            if isinstance(exc, ClaudeUnavailable):
-                raise EscalationExhausted(f"{who} unavailable: {exc}", attempts) from exc
-            raise EscalationExhausted(f"{who} failed: {exc}", attempts) from exc
-        budget_mod.commit(self.conn, reservation, cost_usd=res.cost_usd, model=model, input_tokens=res.input_tokens,
-                          output_tokens=res.output_tokens, cache_read_tokens=res.cache_read_tokens)
-        self._record(run_id, agent_id, task_id, parent_run_id, prev_run, mid, None, "succeeded", None,
-                     res.output, cost=res.cost_usd, duration_ms=res.duration_ms, prompt_tokens=res.input_tokens,
-                     completion_tokens=res.output_tokens)
-        attempts.append({"level": 2, "model_id": mid, "error": None, "cost_usd": res.cost_usd})
-        return LLMResult(mid, res.output, json.dumps(res.output), res.input_tokens, res.output_tokens,
-                         None, None, res.cost_usd, 2, run_id, attempts)
+                raise
+            budget_mod.commit(self.conn, reservation, cost_usd=res.cost_usd, model=model,
+                              input_tokens=res.input_tokens, output_tokens=res.output_tokens,
+                              cache_read_tokens=res.cache_read_tokens)
+            # Enforce the same output/confidence gate for external providers too.
+            output, errors = parse_and_validate(json.dumps(res.output), schema)
+            threshold = float(s.get("eligibility_threshold", 0.8)) if schema_has_confidence(schema) else None
+            if not errors and threshold is not None and isinstance(output, dict):
+                confidence = output.get("confidence")
+                if isinstance(confidence, (int, float)) and confidence < threshold:
+                    errors = [f"confidence {confidence:.2f} below {threshold:.2f}"]
+            self._record(run_id, agent_id, task_id, parent_run_id, prev_run, mid, None,
+                         "failed" if errors else "succeeded", "; ".join(errors) or None, res.output,
+                         cost=res.cost_usd, duration_ms=res.duration_ms, prompt_tokens=res.input_tokens,
+                         completion_tokens=res.output_tokens, **meta)
+            attempts.append({"level": 2, "model_id": mid, "error": "; ".join(errors) or None,
+                             "cost_usd": res.cost_usd})
+            if errors:
+                prev_run = run_id
+                continue
+            return LLMResult(mid, output, json.dumps(output), res.input_tokens, res.output_tokens,
+                             None, None, res.cost_usd, 2, run_id, attempts)
+        if limited:
+            raise Deferred("queued", iso_in(3600), "Enabled cloud providers exhausted; usage-limited providers are resting")
+        raise EscalationExhausted(cloud.why_none(self.claude, get_settings(self.conn)) +
+                                  ("; all eligible attempts failed" if tried else ""), attempts)
 
     # ── records ─────────────────────────────────────────────────────────────────────────────────────
     def _record(self, run_id: str, agent_id: str, task_id: str | None, parent_run_id: str | None,
                 escalated_from: str | None, model_id: str, chat: llm_client.ChatResult | None, status: str,
                 error: str | None, output: Any = None, *, cost: float | None = None, duration_ms: float | None = None,
-                prompt_tokens: int | None = None, completion_tokens: int | None = None) -> None:
+                prompt_tokens: int | None = None, completion_tokens: int | None = None, ai_mode: str | None = None, task_type: str | None = None,
+                reason: str | None = None) -> None:
         with tx(self.conn):
             self.conn.execute(
                 "INSERT INTO agent_runs(id, task_id, parent_run_id, escalated_from_run_id, agent_id, adapter, model_id, "
@@ -248,6 +276,9 @@ class Router:
                  int(duration_ms if duration_ms is not None else (chat.duration_ms if chat else 0)), status,
                  (error or None) and error[:2000], now_iso(), now_iso(),
                  dumps(output)[:20000] if output is not None else None))
+            self.conn.execute("UPDATE agent_runs SET ai_mode=?, task_type=?, route_reason=?, execution=? WHERE id=?",
+                              (ai_mode or modes.current(get_settings(self.conn)), task_type, reason,
+                               "cloud" if cloud.is_cloud(model_id) else "local", run_id))
 
     def _escalated(self, task_id: str | None, agent_id: str, model_id: str, level: int, errors: list[str]) -> None:
         with tx(self.conn):

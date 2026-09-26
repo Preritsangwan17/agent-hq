@@ -137,7 +137,8 @@ def cloud_provider(s: dict[str, Any]) -> str | None:
 def _still_on(s: dict[str, Any], claude: dict[str, Any] | None) -> str | None:
     """The provider the worker last found usable, unless it has been switched off since."""
     using = (claude or {}).get("using")
-    return using if using and s.get(f"llm_{using}_enabled", True) is not False else None
+    from hq.llm.modes import enabled
+    return using if using and enabled(s, using) else None
 
 
 def budget_state(conn: sqlite3.Connection, settings: dict[str, Any] | None = None,
