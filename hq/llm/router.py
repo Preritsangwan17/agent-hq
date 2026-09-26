@@ -3,8 +3,11 @@
 `await router.route(role, messages, schema, …)` tries, in order:
   level 0 — the highest-ranked model assigned to the role (not excluded, not in the document lineage),
   level 1 — the next-ranked DIFFERENT local model (a different family when one exists),
-  level 2 — Claude, when allowed, logged in and within today's budget,
-and raises EscalationExhausted otherwise. A level fails on invalid JSON after one repair turn, or when the output
+  level 2 — the cloud (Claude CLI, xAI or ChatGPT: the first switched-on provider that is reachable), when allowed
+            and within today's budget,
+and raises EscalationExhausted otherwise. With local models switched off (`llm_local_enabled`) levels 0–1 are
+skipped; steps that don't allow the cloud then fall back to their rule-based paths, so local work never quietly
+turns into cloud spend. A level fails on invalid JSON after one repair turn, or when the output
 carries a `confidence` below the threshold. Every attempt is an `agent_runs` row linked by `escalated_from_run_id`.
 """
 from __future__ import annotations
@@ -106,9 +109,13 @@ class Router:
         attempts: list[dict[str, Any]] = []
         prev_run: str | None = None
         level = 0
-        ladder = [pinned_model] if pinned_model and not cloud.is_cloud(pinned_model) else self._ladder(role, exclude)
+        local_on = cloud.local_enabled(s)
         if pinned_model and cloud.is_cloud(pinned_model):
             ladder, claude_model = [], pinned_model.removeprefix("claude:")
+        elif not local_on:
+            ladder = []
+        else:
+            ladder = [pinned_model] if pinned_model else self._ladder(role, exclude)
         for model_id in ladder:
             run_id = new_id()
             try:
@@ -140,7 +147,8 @@ class Router:
             prev_run, level = run_id, level + 1
         level = max(level, 2) if attempts else 2
         if not allow_claude or self.claude is None:
-            raise EscalationExhausted(f"no local model for {role} succeeded and Claude is not allowed", attempts)
+            why = "local models are switched off" if not local_on else f"no local model for {role} succeeded"
+            raise EscalationExhausted(f"{why} and this step doesn't use the cloud", attempts)
         return await self._claude(role, messages, schema, task_type or f"escalation.{role}", agent_id, task_id,
                                   parent_run_id, prev_run, attempts, s, claude_model, lineage)
 
@@ -176,12 +184,18 @@ class Router:
                       attempts: list[dict[str, Any]], s: dict[str, Any], claude_model: str | None,
                       lineage: tuple[str, ...] | list[str]) -> LLMResult:
         assert self.claude is not None
-        model = claude_model or cloud.main_model(s)
+        if claude_model:   # pinned by the agent config
+            model = claude_model
+            if cloud.tag(model) in set(lineage):
+                raise EscalationExhausted(f"{cloud.tag(model)} already authored this document", attempts)
+            if not await cloud.is_available(self.claude, model):
+                raise EscalationExhausted(f"{cloud.label(model)} unavailable ({self.claude.reason})", attempts)
+        else:
+            picked = await cloud.pick(self.claude, s, exclude={cloud.tag(m) for m in lineage if m})
+            if picked is None:
+                raise EscalationExhausted(cloud.why_none(self.claude, s), attempts)
+            model = picked
         mid, who = cloud.tag(model), cloud.label(model)
-        if mid in set(lineage):
-            raise EscalationExhausted(f"{mid} already authored this document", attempts)
-        if not await cloud.is_available(self.claude, model):
-            raise EscalationExhausted(f"{who} unavailable ({self.claude.reason})", attempts)
         reservation = budget_mod.reserve(self.conn, task_type, s)
         if reservation is None:
             raise Deferred("deferred_budget", budget_mod.to_iso(budget_mod.next_midnight_ist()),
@@ -227,7 +241,7 @@ class Router:
                 "finished_at, output_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (run_id, task_id, parent_run_id, escalated_from, agent_id,
                  "claude_code" if model_id.startswith("claude:") else "xai" if model_id.startswith("xai:")
-                 else "openai_compatible", model_id,
+                 else "codex" if model_id.startswith("codex:") else "openai_compatible", model_id,
                  prompt_tokens if chat is None else chat.prompt_tokens,
                  completion_tokens if chat is None else chat.completion_tokens, chat.tok_s if chat else None,
                  chat.ttft_ms if chat else None, cost,

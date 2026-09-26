@@ -334,14 +334,19 @@ class Worker:
             self.start_benchmark(new_usable, quick=True)
 
     async def _check_claude(self) -> None:
+        """Login/key status of every switched-on cloud provider (free: no model is called; off = not checked)."""
+        from hq.llm.cloud import LABELS
+
         runner = self.services.claude
+        self.settings = get_settings(self.conn)
         before = runner.state(self.settings)
-        await runner.available(force=True)
+        check_all = getattr(runner, "check_all", None)
+        await (check_all(force=True) if check_all else runner.available(force=True))
         after = runner.state(self.settings)
         with tx(self.conn):
             set_settings(self.conn, {"claude_state": {**after, "checked_at": now_iso()}}, by="worker")
             if before.get("available") != after.get("available") and before.get("checked"):
-                who = "xAI" if after.get("provider") == "xai" else "Claude"
+                who = LABELS.get(after.get("using") or after.get("provider") or "", "Cloud models")
                 repo.emit(self.conn, "claude.status", f"{who} {'available' if after['available'] else 'unavailable'}"
                           + (f": {after['reason']}" if after.get("reason") else ""),
                           level="info" if after["available"] else "warn", data=after)
@@ -349,6 +354,8 @@ class Worker:
     def start_benchmark(self, model_ids: list[str] | None, quick: bool = True) -> bool:
         if self.benchmarking and not self.benchmarking.done():
             return False
+        if get_settings(self.conn).get("llm_local_enabled", True) is False:
+            return False   # local models are switched off: loading them for a benchmark would defeat the switch
         from hq.models.benchmark.suite import run_suite
 
         async def go() -> None:
@@ -392,6 +399,8 @@ class Worker:
             elif kind == "models_benchmark":
                 ids = [payload["model_id"]] if payload.get("model_id") else None
                 result = {"ok": self.start_benchmark(ids, quick=payload.get("suite", "quick") != "full")}
+                if not result["ok"] and get_settings(self.conn).get("llm_local_enabled", True) is False:
+                    result["error"] = "local models are switched off in Settings"
             elif kind == "model_unload":
                 mgr = self.services.manager
                 if mgr is not None:
@@ -405,7 +414,14 @@ class Worker:
             elif kind == "gmail_self_test":
                 asyncio.get_running_loop().create_task(self._gmail_self_test())
                 result = {"ok": True, "started": True}
-            elif kind not in ("pause_all", "resume_all", "freeze_outbound", "settings_changed", "roles_changed"):
+            elif kind == "settings_changed":
+                keys = set(payload.get("keys") or [])
+                if keys & {"cloud_llm", "llm_claude_enabled", "llm_xai_enabled", "llm_codex_enabled",
+                           "llm_local_enabled"}:
+                    self._last_claude_check = 0.0   # show the new provider status now, not in 10 minutes
+                if "llm_local_enabled" in keys and self.services.manager is not None:
+                    self.services.manager._last_health = 0.0   # the next upkeep tick unloads / may load again
+            elif kind not in ("pause_all", "resume_all", "freeze_outbound", "roles_changed"):
                 result = {"ok": False, "ignored": kind}
             with tx(self.conn):
                 repo.consume_command(self.conn, cmd["id"], result)

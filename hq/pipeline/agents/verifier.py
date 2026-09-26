@@ -9,6 +9,7 @@ from datetime import date, datetime, timezone
 from typing import Any
 
 from hq.adapters.base import Deferred, RunContext, RunResult
+from hq.llm import cloud
 from hq.llm.prompts import load_prompt, load_schema
 from hq.llm.router import EscalationExhausted
 from hq.pipeline.agents.common import (
@@ -106,7 +107,7 @@ def start_date(opp: dict[str, Any]) -> date | None:
 
 
 def model_accuracy(ctx: RunContext, model_id: str) -> float:
-    if model_id.startswith(("claude:", "xai:")):
+    if cloud.is_cloud(model_id):
         return 0.9
     rows = ctx.query("SELECT accuracy FROM benchmarks WHERE model_id=? AND task='eligibility' ORDER BY created_at DESC "
                      "LIMIT 1", (model_id,))

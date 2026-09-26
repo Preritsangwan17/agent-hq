@@ -5,3 +5,8 @@ xai:
   default: {input: 3.0, output: 15.0}
   grok-4-fast: {input: 0.2, output: 0.5}
   grok-3-mini: {input: 0.3, output: 0.5}
+# ChatGPT through the Codex CLI. Signed in with a ChatGPT plan the CLI reports tokens, not dollars, so this is a
+# notional spend (like Claude's under subscription auth) that keeps the daily budget meaningful. "default" is used
+# for Codex's own default model and for any name not listed here.
+openai:
+  default: {input: 1.25, output: 10.0}

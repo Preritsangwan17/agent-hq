@@ -159,8 +159,9 @@ async def polish(task: dict[str, Any], ctx: RunContext, opp: dict[str, Any]) -> 
                            task=task_line + "CURRENT DRAFT (JSON):\n" + json.dumps({"sentences": current}),
                            feedback=fb if isinstance(fb, list) else ([fb] if fb else None), sheet=load_facts())
     system, user = msgs[0]["content"], msgs[1]["content"]
-    model = cloud.main_model(ctx.settings)
-    res = await ctx.claude("polish.final", user, load_schema("draft"), system_prompt=system, model=model)
+    res = await ctx.claude("polish.final", user, load_schema("draft"), system_prompt=system,
+                           model=await cloud.pick(ctx.services.claude, ctx.settings))
+    model = res.model
     sentences = clean_sentences(res.output, quotes)
     if not sentences:
         return RunResult(output={"ok": False}, summary="polish returned nothing", cost_usd=res.cost_usd)

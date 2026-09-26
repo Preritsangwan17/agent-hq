@@ -61,7 +61,7 @@ export default function CommandCenter() {
         <GlassPanel glow="#E879F9" padding="md">
           <StatCounter
             value={stats?.claude_cost_today_usd}
-            label="Claude today"
+            label="Cloud today"
             icon={Sparkles}
             accent="#E879F9"
             format={(n) => formatUSD(n)}

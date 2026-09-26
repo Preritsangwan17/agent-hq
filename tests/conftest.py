@@ -21,6 +21,9 @@ for _key, _value in {
     "HQ_RUN_DIR": _SESSION_DIR / "run",
     "HQ_LOG_DIR": _SESSION_DIR / "logs",
     "HQ_OFFLINE": "1",  # tests never reach third-party hosts (fake transports are still allowed)
+    # never the real Claude / Codex CLIs on this Mac (their logins and limits); tests hand in shims
+    "HQ_CLAUDE_BIN": _SESSION_DIR / "no-claude-cli",
+    "HQ_CODEX_BIN": _SESSION_DIR / "no-codex-cli",
 }.items():
     os.environ.setdefault(_key, str(_value))
 

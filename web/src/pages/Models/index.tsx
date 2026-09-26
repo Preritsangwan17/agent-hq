@@ -1,11 +1,10 @@
 /**
- * /models — the local-model leaderboard: memory pool bar, Claude status, role assignments (ranked, with overrides
+ * /models — the local-model leaderboard: memory pool bar, cloud provider status, role assignments (ranked, with overrides
  * and the writer ≠ fact-checker rule), a card per usable model with per-task scores, and the broken/unsupported
  * models with their reasons. Rescan and benchmark (quick/full) run in the worker; progress streams back.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  AlertTriangle,
   BatteryMedium,
   Cpu,
   FlaskConical,
@@ -25,6 +24,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router';
 import { Badge, Button, EmptyState, GlassPanel, ProgressBar, SectionHeader, Tooltip } from '@/components';
 import { ApiError, api } from '@/lib/api';
 import { eventBus } from '@/lib/bus';
@@ -115,13 +115,22 @@ export default function Models() {
         <EmptyState icon={Cpu} title="Couldn't load models" hint={q.error instanceof Error ? q.error.message : undefined} />
       ) : (
         <>
+          {data.local_enabled === false && (
+            <p className="flex items-center gap-2 rounded-xl border border-amber-300/25 bg-amber-300/[.06] px-3 py-2 text-xs text-amber-100/90">
+              <Power className="size-3.5 shrink-0" aria-hidden />
+              <span>
+                Local models are switched off: nothing is loaded and benchmarks don't run. Turn them back on in{' '}
+                <Link to="/settings?tab=budget" className="underline underline-offset-2">Settings › Models &amp; Budget</Link>.
+              </span>
+            </p>
+          )}
           {data.benchmark.running && <BenchBanner b={data.benchmark} />}
           {data.benchmark.error && !data.benchmark.running && (
             <p className="rounded-xl border border-red-400/30 bg-red-400/[.06] px-3 py-2 text-xs text-red-200">Last benchmark failed: {data.benchmark.error}</p>
           )}
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
             <MemoryPanel mem={data.memory} models={data.models} />
-            <ClaudeCard data={data} />
+            <CloudCard data={data} />
           </div>
           <RolesPanel roles={data.roles} models={usable} />
           <section>
@@ -278,46 +287,67 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-// ── Claude ────────────────────────────────────────────────────────────
+// ── cloud ─────────────────────────────────────────────────────────────
 
-function ClaudeCard({ data }: { data: ModelsResponse }) {
+const CLOUD_ROWS = [
+  { id: 'claude', label: 'Claude CLI', fix: 'claude auth login' },
+  { id: 'xai', label: 'xAI · Grok', fix: 'HQ_XAI_API_KEY=… in .env' },
+  { id: 'codex', label: 'ChatGPT · Codex CLI', fix: 'codex login' },
+] as const;
+
+function CloudCard({ data }: { data: ModelsResponse }) {
   const c = data.claude;
   const qc = useQueryClient();
   const recheck = useMutation({ mutationFn: api.recheckClaude, onSuccess: () => setTimeout(() => void qc.invalidateQueries({ queryKey: qk }), 3000) });
   const ok = c.available === true;
   const unknown = c.available == null;
+  const using = c.using ? CLOUD_ROWS.find((r) => r.id === c.using)?.label : null;
   return (
     <GlassPanel padding="lg" glow="#E879F9" glowStrength={0.25}>
       <SectionHeader
         kicker="Escalation & sign-off"
-        title="Claude"
+        title="Cloud models"
         icon={Sparkles}
         color="#E879F9"
-        right={<Badge color={ok ? colors.ok : unknown ? '#8B95A7' : colors.warn}>{ok ? 'available' : unknown ? 'not checked' : 'unavailable'}</Badge>}
+        right={<Badge color={ok ? colors.ok : unknown ? '#8B95A7' : colors.warn}>{ok ? `using ${using ?? 'cloud'}` : unknown ? 'not checked' : 'unavailable'}</Badge>}
       />
-      <div className="mt-3 space-y-3 text-[13px] leading-relaxed text-muted">
-        {ok ? (
-          <p>
-            Logged in. Escalations use <b className="text-ink">{c.model}</b>; final sign-off uses <b className="text-ink">{c.signoff_model}</b>. Every call runs with no tools,
-            no hooks and a per-call budget cap.
-          </p>
-        ) : (
-          <div className="rounded-xl border border-amber-300/25 bg-amber-300/[.06] p-3 text-amber-100/90">
-            <div className="flex items-center gap-2 font-medium text-amber-100">
-              <AlertTriangle className="size-4" aria-hidden /> {unknown ? 'Claude has not been checked yet' : 'Not logged in'}
-            </div>
-            <p className="mt-1">
-              Run <Code>claude auth login</Code> in Terminal on this Mac. Local models keep working; sign-off, polish and the Strategist wait.
-            </p>
-            {c.reason && !c.reason.includes('auth login') && <p className="mt-1 text-xs text-amber-100/70">{c.reason}</p>}
-          </div>
-        )}
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-xs text-faint">{c.checked_at ? `checked ${formatRelative(c.checked_at)}` : 'checked every 10 minutes'}</span>
-          <Button size="sm" icon={RotateCcw} loading={recheck.isPending} onClick={() => recheck.mutate()}>
-            Re-check
-          </Button>
-        </div>
+      <ul className="mt-3 divide-y divide-white/[.06] text-[13px]">
+        {CLOUD_ROWS.map((r) => {
+          const p = c.providers?.[r.id];
+          const off = p?.enabled === false;
+          const st = off
+            ? { text: 'off', color: '#5B6577' }
+            : !p?.checked
+              ? { text: 'not checked', color: '#8B95A7' }
+              : p.resting
+                ? { text: 'resting', color: colors.warn }
+                : p.available
+                  ? { text: 'ready', color: colors.ok }
+                  : { text: 'unavailable', color: colors.warn };
+          return (
+            <li key={r.id} className="flex items-center justify-between gap-3 py-2">
+              <div className="min-w-0">
+                <div className={cn('font-medium', off ? 'text-faint' : 'text-ink')}>{r.label}</div>
+                {!off && p?.checked && !p.available && (
+                  <div className="truncate text-xs text-amber-100/70" title={p.reason ?? undefined}>
+                    {p.resting ? p.reason : <>Fix: <Code>{r.fix}</Code></>}
+                  </div>
+                )}
+              </div>
+              <Badge color={st.color}>{st.text}</Badge>
+            </li>
+          );
+        })}
+      </ul>
+      <p className="mt-2 text-xs text-muted">
+        Switch each one on or off in <Link to="/settings?tab=budget" className="text-cyan-300 underline-offset-2 hover:underline">Settings › Models &amp; Budget</Link>.
+        Every call runs with no tools and a per-call budget cap; checks here never call a model.
+      </p>
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <span className="text-xs text-faint">{c.checked_at ? `checked ${formatRelative(c.checked_at)}` : 'checked every 10 minutes'}</span>
+        <Button size="sm" icon={RotateCcw} loading={recheck.isPending} onClick={() => recheck.mutate()}>
+          Re-check
+        </Button>
       </div>
     </GlassPanel>
   );

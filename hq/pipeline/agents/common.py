@@ -95,4 +95,7 @@ def confirmed(ctx: RunContext) -> dict[str, str]:
 
 
 def has_role_model(ctx: RunContext, role: str) -> bool:
+    """A local model is assigned to the role and local models are switched on (Settings › Budget)."""
+    if ctx.settings.get("llm_local_enabled", True) is False:
+        return False
     return bool(ctx.query("SELECT 1 FROM role_assignments WHERE role=? LIMIT 1", (role,)))

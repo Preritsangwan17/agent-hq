@@ -61,8 +61,7 @@ def _carry(task: dict[str, Any], doc: dict[str, Any]) -> dict[str, Any]:
 
 
 async def _polish_allowed(ctx: RunContext) -> bool:
-    runner = ctx.services.claude
-    return runner is not None and await cloud.is_available(runner, cloud.main_model(ctx.settings))
+    return await cloud.pick(ctx.services.claude, ctx.settings) is not None
 
 
 async def _fail(task: dict[str, Any], ctx: RunContext, opp: dict[str, Any], doc: dict[str, Any], layer: str,
@@ -203,7 +202,9 @@ async def signoff(task: dict[str, Any], ctx: RunContext, opp: dict[str, Any], do
     lineage = set(loads(doc.get("lineage_models_json"), []))
     model = await cloud.signoff_model(ctx.services.claude, s, lineage) if ctx.services.claude else None
     if model is None:  # every reachable cloud model wrote part of this text (or none is reachable): wait
-        raise Deferred("queued", iso_in(3600), "no independent cloud model is available for sign-off")
+        raise Deferred("queued", iso_in(3600), "no independent cloud model is available for sign-off" + (
+            " — every cloud model is switched off; switch one on or turn off Require sign-off (Settings › Budget)"
+            if not cloud.order(s) else ""))
     mid = cloud.tag(model)
     sents = _sentences(ctx, doc["id"])
     lines, prev = [], "(start)"

@@ -911,13 +911,40 @@ export interface BenchState {
   error?: string;
 }
 
+export type CloudProvider = 'claude' | 'xai' | 'codex';
+
+/** One cloud provider's status as the worker last saw it (login / key checks — free, no model is called). */
+export interface ProviderState {
+  available: boolean;
+  reason: string | null;
+  checked: boolean;
+  /** Settings › Models & Budget switch (`llm_<provider>_enabled`) when the worker last checked */
+  enabled?: boolean;
+  /** hit its usage limit; HQ makes no calls to it until the rest is over */
+  resting?: boolean;
+  logged_in?: boolean;
+  installed?: boolean;
+  version?: string | null;
+  key_present?: boolean;
+  models?: string[];
+  model?: string | null;
+  signoff_model?: string | null;
+}
+
 export interface ClaudeState {
+  /** true when any switched-on cloud provider can take a call */
   available: boolean | null;
   logged_in: boolean;
   reason?: string | null;
-  model?: string;
-  signoff_model?: string;
+  model?: string | null;
+  signoff_model?: string | null;
   checked_at?: ISODate;
+  /** preferred switched-on provider (null = every cloud model is off) */
+  provider?: CloudProvider | null;
+  /** first switched-on provider that is reachable now */
+  using?: CloudProvider | null;
+  providers?: Partial<Record<CloudProvider, ProviderState>>;
+  local_enabled?: boolean;
 }
 
 export interface ModelsResponse {
@@ -927,6 +954,8 @@ export interface ModelsResponse {
   memory: MemoryState;
   benchmark: BenchState;
   claude: ClaudeState;
+  /** Settings › Models & Budget › Local models */
+  local_enabled?: boolean;
 }
 
 export interface BudgetState {
@@ -941,9 +970,13 @@ export interface BudgetState {
   claude_available: boolean | null;
   last_error: string | null;
   resets_at: ISODate;
-  /** active cloud provider (`cloud_llm` auto → xai when HQ_XAI_API_KEY is set) */
-  provider?: 'claude' | 'xai';
+  /** preferred switched-on cloud provider (`cloud_llm`; auto → xai when HQ_XAI_API_KEY is set, else claude, then codex) */
+  provider?: CloudProvider | null;
+  /** first switched-on provider that is reachable now */
+  using?: CloudProvider | null;
   cloud_model?: string | null;
   cloud_reason?: string | null;
-  xai?: { available: boolean; reason: string | null; key_present: boolean; models: string[]; checked: boolean } | null;
+  claude?: ProviderState | null;
+  xai?: ProviderState | null;
+  codex?: ProviderState | null;
 }

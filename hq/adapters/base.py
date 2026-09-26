@@ -164,16 +164,19 @@ class RunContext:
 
     async def claude(self, task_type: str, prompt: str, schema: dict[str, Any], *, system_prompt: str,
                      model: str | None = None) -> Any:
-        """One budgeted cloud call (Claude CLI or xAI, by the model id; default = the `cloud_llm` provider).
-        Over budget → Deferred(deferred_budget); unavailable → Deferred for 10 min."""
+        """One budgeted cloud call (Claude CLI, xAI or ChatGPT by the model id; default = the first switched-on
+        provider that is reachable, preferred first). Over budget → Deferred(deferred_budget); unavailable or
+        switched off → Deferred for 10 min."""
         from hq.llm import cloud
         from hq.llm.claude import ClaudeError, ClaudeRateLimited, ClaudeUnavailable
         from hq.util.timeutil import iso_in
         from hq.worker import budget
 
         s = self.settings
-        m = model or cloud.main_model(s)
         runner = self.services.claude
+        m = model or await cloud.pick(runner, s)
+        if m is None:
+            raise Deferred("queued", iso_in(600), cloud.why_none(runner, s))
         if runner is None or not await cloud.is_available(runner, m):
             raise Deferred("queued", iso_in(600),
                            f"{cloud.label(m)} unavailable ({getattr(runner, 'reason', 'no runner')})")
