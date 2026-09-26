@@ -1,0 +1,100 @@
+# Discovery sources (CONTRACT_C §3). Seeded into the `sources` table; edits in Settings › Sources win.
+# Every source records its terms of service. ATS job-board APIs are public read APIs published for exactly this
+# use; programme pages start DISABLED until Prerit has read their terms (robots.txt is always checked too).
+defaults:
+  poll_interval_min: 360
+  api_delay_s: 1
+  html_delay_s: 5
+
+ats:
+  greenhouse:
+    tos_url: https://developers.greenhouse.io/job-board.html
+    tos_note: Public Job Board API (GET boards-api.greenhouse.io/v1/boards/{slug}/jobs), no key needed.
+    slugs: [scaleai, stripe, databricks, togetherai, anthropic, figma, datadog, cloudsek, fivetran, samsara, rubrik,
+            lyft, cresta, elastic, reddit, mongodb, groww, cloudflare, truefoundry, sigmoid, nebius, krafton, karya,
+            gitlab, workato, thoughtworks, snorkelai, labelbox, instacart, inmobi, hackerrank, glance, dropbox]
+  lever:
+    tos_url: https://github.com/lever/postings-api
+    tos_note: Public Postings API (GET api.lever.co/v0/postings/{slug}?mode=json).
+    slugs: [paytm, whiterabbit, meesho, fampay, dozee, aleph, hevodata]
+  ashby:
+    tos_url: https://developers.ashbyhq.com/docs/public-job-posting-api
+    tos_note: Public Job Posting API (GET api.ashbyhq.com/posting-api/job-board/{slug}).
+    slugs: [snowflake, openai, perplexity, harvey, cohere, notion, thoughtworks, sierra, sarvam, mercor,
+            lilt-production, weaviate, modal, elevenlabs, decagon]
+
+# Remote job feeds (CONTRACT_E §3): public APIs/RSS published for reuse with attribution + a link back to the
+# original posting (HQ shows the feed name as the source and links the posting). Polling stays under their limits.
+feeds:
+  remotive:
+    name: Remotive (remote jobs)
+    tos_url: https://github.com/remotive-com/remote-jobs-api
+    tos_note: Public API; link back to the Remotive URL and mention Remotive as the source; max 4 calls/day.
+    poll_interval_min: 360
+  arbeitnow:
+    name: Arbeitnow (visa sponsorship)
+    tos_url: https://www.arbeitnow.com/blog/job-board-api
+    tos_note: Free job board API; only roles with visa sponsorship.
+    poll_interval_min: 360
+  himalayas:
+    name: Himalayas (remote jobs)
+    tos_url: https://himalayas.app/api
+    tos_note: Public jobs API; attribute Himalayas and link to the job page.
+    poll_interval_min: 360
+  jobicy:
+    name: Jobicy (remote internships)
+    tos_url: https://jobicy.com/jobs-rss-feed
+    tos_note: Public API; at most one request per hour; link back to Jobicy.
+    poll_interval_min: 120
+  wwr:
+    name: We Work Remotely (programming RSS)
+    tos_url: https://weworkremotely.com/remote-job-rss-feed
+    tos_note: Public RSS feed; link back to the listing.
+    poll_interval_min: 360
+
+# Local mock ATS for development (`make mock-ats`); the only site the browser adapter fills in v1. Off by default.
+mock_ats:
+  base: http://127.0.0.1:8799
+  slug: mocktech
+
+programs:
+  - id: teep-engineering
+    name: TEEP (Taiwan Experience Education Program) — Engineering
+    url: https://teep.studyintaiwan.org/programs/Engineering
+    parser: teep
+    tos_url: https://teep.studyintaiwan.org/faq
+    poll_interval_min: 1440
+    program: {kind: research_internship, country_iso2: TW, pay_raw: "NT$15,000/month (TEEP minimum)",
+              benefits: {allowance_inr: null}}
+  - id: srfp
+    name: Summer Research Fellowship Programme (IASc–INSA–NASI)
+    url: https://webjapps.ias.ac.in/fellowship2027/index.html
+    parser: generic
+    tos_url: https://www.ias.ac.in/
+    poll_interval_min: 1440
+    program: {company: "Indian Academy of Sciences, INSA and NASI", title: "Summer Research Fellowship Programme 2027",
+              kind: program, country_iso2: IN, city: null, work_mode: onsite}
+  - id: summer-epfl
+    name: Summer@EPFL
+    url: https://summer.epfl.ch/
+    parser: generic
+    tos_url: https://www.epfl.ch/about/overview/regulations-and-guidelines/disclaimer/
+    poll_interval_min: 1440
+    program: {company: "EPFL, School of Computer and Communication Sciences", title: "Summer@EPFL research internship",
+              kind: research_internship, country_iso2: CH, city: Lausanne, work_mode: onsite}
+  - id: utrip
+    name: UTRIP (University of Tokyo Research Internship Program)
+    url: https://www.s.u-tokyo.ac.jp/en/utrip/
+    parser: generic
+    tos_url: https://www.s.u-tokyo.ac.jp/en/terms/
+    poll_interval_min: 1440
+    program: {company: "The University of Tokyo, Graduate School of Science", title: "UTRIP summer research internship",
+              kind: research_internship, country_iso2: JP, city: Tokyo, work_mode: onsite}
+  - id: mlh-fellowship
+    name: MLH Fellowship
+    url: https://fellowship.mlh.com/
+    parser: generic
+    tos_url: https://mlh.io/terms
+    poll_interval_min: 1440
+    program: {company: "MLH Fellowship (Major League Hacking)", title: "MLH Fellow (remote, 12 weeks)", kind: fellowship,
+              country_iso2: US, city: null, work_mode: remote}

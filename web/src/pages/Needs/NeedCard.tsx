@@ -20,6 +20,7 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { SimTag, Tooltip } from '@/components';
+import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatDateTimeIST, formatDuration, formatRelative, toDate } from '@/lib/format';
 import { useNow } from '@/lib/hooks';
@@ -30,7 +31,21 @@ import { CopyButton } from '../Agents/formKit';
 import { ALERT_RED, GOLD, kindMeta } from './kinds';
 import { Markdownish } from './markdown';
 
-export type NeedAction = { status: 'done' | 'dismissed' } | { status: 'snoozed'; hours: number };
+export type NeedAction =
+  | { status: 'done'; choice?: string }
+  | { status: 'dismissed' }
+  | { status: 'snoozed'; hours: number };
+
+interface DecisionOption {
+  value: string;
+  label: string;
+}
+
+function decisionOptions(need: Need): DecisionOption[] {
+  const raw = need.payload?.options;
+  if (need.kind !== 'decision' || !Array.isArray(raw)) return [];
+  return raw.filter((o): o is DecisionOption => !!o && typeof o === 'object' && 'value' in o && 'label' in o);
+}
 
 export interface NeedCardProps {
   need: Need;
@@ -45,6 +60,8 @@ export function NeedCard({ need, onAction, busy }: NeedCardProps) {
   const alert = meta.alert;
   const accent = alert === 'gold' ? GOLD : alert === 'red' ? ALERT_RED : meta.color;
   const snoozed = need.status === 'snoozed';
+  const options = decisionOptions(need);
+  const flagged = need.answers.filter((a) => a.status === 'needs_prerit' || a.status === 'never');
 
   return (
     <article
@@ -149,28 +166,57 @@ export function NeedCard({ need, onAction, busy }: NeedCardProps) {
               )}
             </div>
             <ul className="divide-y divide-white/[.05]">
-              {need.answers.map((a, i) => (
-                <li key={`${a.label}-${i}`} className="flex items-center gap-3 px-3 py-2">
+              {need.answers.map((a, i) => {
+                const flag = a.status === 'needs_prerit' || a.status === 'never';
+                return (
+                <li
+                  key={`${a.label}-${i}`}
+                  className={cn('flex items-center gap-3 px-3 py-2', flag && 'bg-amber-400/[.06]')}
+                >
                   <div className="min-w-0 flex-1">
-                    <div className="text-[11px] text-muted">{a.label}</div>
-                    <div className={cn('mt-0.5 text-[13.5px] break-words', a.copy === false ? 'text-faint italic' : 'text-ink')}>
+                    <div className={cn('text-[11px]', flag ? 'text-amber-300' : 'text-muted')}>
+                      {a.label}
+                      {a.required && <span className="text-faint"> · required</span>}
+                    </div>
+                    <div
+                      className={cn(
+                        'mt-0.5 text-[13.5px] break-words whitespace-pre-line',
+                        flag ? 'text-amber-200/90 italic' : a.copy === false ? 'text-faint italic' : 'text-ink',
+                        a.label === 'Cover letter' && 'line-clamp-4',
+                      )}
+                    >
                       {a.value}
                     </div>
+                    {flag && a.note && <div className="mt-0.5 text-[11.5px] text-amber-200/70">{a.note}</div>}
                   </div>
                   {a.copy && <CopyButton value={a.value} what={a.label} iconOnly />}
                 </li>
-              ))}
+                );
+              })}
             </ul>
+            {flagged.length > 0 && (
+              <div className="flex items-center gap-1.5 border-t border-amber-300/20 bg-amber-400/[.07] px-3 py-1.5 text-[11.5px] text-amber-200">
+                <ShieldAlert className="size-3.5 shrink-0" aria-hidden />
+                {flagged.length} field{flagged.length === 1 ? '' : 's'} left for you — HQ only fills values you confirmed.
+              </div>
+            )}
           </div>
         )}
 
         {need.files.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2">
-            {need.files.map((f) => (
+            {need.files.map((f, i) => (
               <Tooltip key={f.path} content={<span className="font-mono text-[11px]">{f.path}</span>} maxWidth={420}>
                 <span className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.04] pr-1 pl-2.5 text-xs text-ink">
                   <FileText className="size-3.5 shrink-0 text-muted" aria-hidden />
-                  <span className="truncate">{f.name}</span>
+                  <a
+                    href={api.needFileUrl(need.id, i)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="truncate underline-offset-2 hover:underline"
+                  >
+                    {f.name}
+                  </a>
                   <CopyButton value={f.path} what={`path of ${f.name}`} iconOnly className="size-6 !h-6 !w-6 border-transparent bg-transparent" />
                 </span>
               </Tooltip>
@@ -201,6 +247,28 @@ export function NeedCard({ need, onAction, busy }: NeedCardProps) {
               <X className="size-4 sm:size-3.5" aria-hidden /> <span className="hidden sm:inline">Dismiss</span>
             </button>
             <SnoozeMenu disabled={busy} onPick={(hours) => onAction(need, { status: 'snoozed', hours })} />
+            {options.length > 0 ? (
+              options.map((o) => {
+                const drop = o.value === 'drop';
+                return (
+                  <button
+                    key={o.value}
+                    type="button"
+                    disabled={busy}
+                    onClick={() => onAction(need, { status: 'done', choice: o.value })}
+                    className={cn(
+                      'inline-flex h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl border px-3.5 text-[13px] font-semibold whitespace-nowrap transition-[background-color,transform] duration-150 active:scale-[0.98] disabled:opacity-50 sm:flex-none',
+                      drop
+                        ? 'border-rose-300/30 bg-rose-400/10 text-rose-200 hover:bg-rose-400/20'
+                        : 'border-emerald-300/50 bg-emerald-400/90 text-[#03140d] shadow-[0_0_22px_-8px_rgba(52,211,153,0.9)] hover:bg-emerald-300',
+                    )}
+                  >
+                    {drop ? <X className="size-4 shrink-0" aria-hidden /> : <Check className="size-4 shrink-0" aria-hidden />}
+                    {o.label}
+                  </button>
+                );
+              })
+            ) : (
             <button
               type="button"
               disabled={busy}
@@ -209,6 +277,7 @@ export function NeedCard({ need, onAction, busy }: NeedCardProps) {
             >
               <Check className="size-4 shrink-0" aria-hidden /> {meta.done}
             </button>
+            )}
           </div>
         </footer>
       </div>

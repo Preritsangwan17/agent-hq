@@ -3,6 +3,7 @@
  * the same task run, and the raw event JSON (syntax-colored, copyable). Right-side panel on desktop, bottom sheet
  * on phones. Rendered in a portal so page transforms never offset its fixed positioning. Esc closes.
  */
+import { copyText } from '@/pages/Agents/formKit';
 import { AnimatePresence, motion } from 'motion/react';
 import { ArrowUpRight, Check, Copy, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -211,10 +212,7 @@ function CopyButton({ text }: { text: string }) {
     <button
       type="button"
       onClick={() => {
-        void navigator.clipboard?.writeText(text).then(
-          () => setDone(true),
-          () => undefined,
-        );
+        void copyText(text).then((ok) => ok && setDone(true));
       }}
       className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.04] px-2.5 text-xs text-muted transition-colors hover:text-ink"
     >

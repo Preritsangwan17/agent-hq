@@ -4,8 +4,8 @@ avatar: "📄"
 color: "#60A5FA"
 role: resume
 description: Builds a one-page tailored résumé from approved bullets only.
-adapter: sim
-adapter_config: {sim_model: chrome-headless}
+adapter: script
+adapter_config: {module: hq.pipeline.agents.resume, sim_model: chrome-headless}
 model: null
 capabilities: [build.resume]
 cost_tier: local

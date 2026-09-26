@@ -17,7 +17,7 @@ export function ModeBadge({ compact }: { compact?: boolean }) {
   const meta = MODE_META[mode] ?? MODE_META.dry_run;
   return (
     <div className="flex items-center gap-1.5">
-      <Tooltip content={<><b>{meta.label}</b> — {meta.hint}<div className="mt-1 text-muted">Mode is read-only in phase (a).</div></>} side="bottom">
+      <Tooltip content={<><b>{meta.label}</b> — {meta.hint}<div className="mt-1 text-muted">Changed only through the go-live checklist (Settings › Autonomy &amp; Mode).</div></>} side="bottom">
         <Badge color={meta.color} icon={ShieldCheck} size={compact ? 'sm' : 'md'} mono>
           {meta.label}
         </Badge>

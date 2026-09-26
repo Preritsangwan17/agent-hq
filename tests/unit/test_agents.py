@@ -21,23 +21,29 @@ def base(**kw):
 
 def test_starting_team_is_valid_and_matches_contract():
     expected = {
-        "scout": ("#22D3EE", ["discover.ats", "discover.program_page", "parse.job"]),
+        "scout": ("#22D3EE", ["discover.ats", "discover.feed", "discover.program_page", "parse.job"]),
         "verifier": ("#2DD4BF", ["verify.link", "verify.deadline", "verify.eligibility", "verify.pay", "verify.scam",
                                  "score.fit"]),
-        "writer": ("#A78BFA", ["draft.cover_letter"]),
+        "writer": ("#A78BFA", ["draft.cover_letter", "polish.final"]),
         "factchecker": ("#F59E0B", ["factcheck.deterministic", "factcheck.sentence", "check.quality"]),
         "reviewer": ("#FB7185", ["factcheck.signoff"]),
         "resume": ("#60A5FA", ["build.resume"]),
-        "applicant": ("#F472B6", ["apply.email_send", "apply.manual_pack"]),
-        "inbox": ("#A3E635", ["inbox.poll", "inbox.classify"]),
-        "followup": ("#FB923C", ["followup.schedule"]),
+        "applicant": ("#F472B6", ["apply.email_send", "apply.ats_submit", "apply.manual_pack"]),
+        "inbox": ("#A3E635", ["inbox.poll", "inbox.classify", "reply.send"]),
+        "followup": ("#FB923C", ["followup.schedule", "followup.send"]),
         "strategist": ("#E879F9", ["strategy.daily_review"]),
     }
+    phase_c = {"scout", "verifier", "writer", "factchecker", "reviewer", "resume", "applicant", "inbox", "followup"}
     found = {}
     for path in REPO_AGENTS.glob("*.yaml"):
         cfg, _ = parse_agent_file(path)
         found[cfg.id] = (cfg.color, cfg.capabilities)
-        assert cfg.builtin and cfg.adapter == "sim"
+        assert cfg.builtin
+        if cfg.id in phase_c:  # real modules; simulated opportunities are still handed to the simulator
+            assert cfg.adapter == "script" and cfg.adapter_config["module"].startswith("hq.pipeline.agents.")
+            assert cfg.adapter_config.get("sim_model")
+        else:
+            assert cfg.adapter == "sim"
     assert found == expected
 
 
@@ -139,3 +145,21 @@ async def test_hot_reload_adds_agent_within_three_seconds(hq_env, db):
     await asyncio.wait_for(watcher, timeout=5)
     assert elapsed < 3.0
     assert db.execute("SELECT type FROM events WHERE type='agent.added' AND agent_id='newbie'").fetchone()
+
+
+def test_validate_agent_dry_run(authed, hq_env):
+    from tests.conftest import MUTATE
+
+    body = {"id": "summ", "name": "Summ", "adapter": "sim", "capabilities": ["summarize"]}
+    r = authed.post("/api/agents/validate", json=body, headers=MUTATE)
+    assert r.status_code == 200 and r.json()["ok"] is True
+    assert "id: summ" in r.json()["yaml"]
+    assert not (hq_env.agents / "summ.yaml").exists()  # nothing written
+
+    bad = {**body, "capabilities": ["apply.email_send"]}
+    r = authed.post("/api/agents/validate", json=bad, headers=MUTATE).json()
+    assert r["ok"] is False and any("reserved" in e["message"] for e in r["errors"])
+
+    remote = {**body, "adapter": "openai_compatible", "adapter_config": {"base_url": "https://api.example.com/v1"}}
+    r = authed.post("/api/agents/validate", json=remote, headers=MUTATE).json()
+    assert r["probe"]["ok"] is False and "localhost" in r["probe"]["error"]

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import fcntl
 import logging
+import os
 import signal
 import sys
 
@@ -13,10 +14,44 @@ from hq.util import parentwatch
 from hq.worker.orchestrator import Worker
 
 
+REFUSE_EXIT = 78  # EX_CONFIG: the supervisor does not restart a worker that refused for safety
+
+
+def _record_refusal(reason: str | None) -> None:
+    """Show the refusal (or clear it) in the UI. Best effort: the DB may not exist yet."""
+    try:
+        from hq.db import repo
+        from hq.db.conn import connect, tx
+        from hq.db.migrate import migrate
+        from hq.db.seed import get_setting, set_settings
+        from hq.util.timeutil import now_iso
+
+        conn = connect()
+        try:
+            migrate(conn)
+            with tx(conn):
+                if reason:
+                    set_settings(conn, {"worker_refusal": {"reason": reason, "at": now_iso()}}, by="worker")
+                    repo.emit(conn, "log", f"Worker refused to start: {reason}", level="alert")
+                elif get_setting(conn, "worker_refusal"):
+                    set_settings(conn, {"worker_refusal": None}, by="worker")
+        finally:
+            conn.close()
+    except Exception as exc:  # noqa: BLE001
+        logging.warning("could not record the refusal state: %s", exc)
+
+
 def main() -> int:
     settings.load_env()
     settings.ensure_dirs()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    from hq.gmail.auth import startup_refusal
+
+    reason = startup_refusal()
+    _record_refusal(reason)
+    if reason:
+        logging.error("refusing to start: %s", reason)
+        return REFUSE_EXIT
     logging.getLogger("watchfiles").setLevel(logging.WARNING)
     lock_path = settings.RUN_DIR / "worker.lock"
     lock = open(lock_path, "w")
@@ -27,7 +62,8 @@ def main() -> int:
         return 1
 
     async def run() -> None:
-        worker = Worker()
+        # model upkeep: discovery, model servers, Claude availability (HQ_MODEL_UPKEEP=0 turns it off)
+        worker = Worker(model_upkeep=os.environ.get("HQ_MODEL_UPKEEP", "1") != "0")
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, worker.stop)

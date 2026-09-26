@@ -20,12 +20,25 @@ for _key, _value in {
     "HQ_AGENTS_DIR": _SESSION_DIR / "agents",
     "HQ_RUN_DIR": _SESSION_DIR / "run",
     "HQ_LOG_DIR": _SESSION_DIR / "logs",
+    "HQ_OFFLINE": "1",  # tests never reach third-party hosts (fake transports are still allowed)
 }.items():
     os.environ.setdefault(_key, str(_value))
 
 REPO_AGENTS = Path(__file__).resolve().parent.parent / "agents"
 MUTATE = {"X-HQ": "1", "Origin": "http://localhost:5173"}
 PASSCODE = "correct-horse-42"
+
+
+@pytest.fixture(autouse=True)
+def _restore_environ():
+    """Code under test may export values into os.environ (settings.set_env_value); never let them leak."""
+    before = dict(os.environ)
+    yield
+    for key in set(os.environ) - set(before):
+        del os.environ[key]
+    for key, value in before.items():
+        if os.environ.get(key) != value:
+            os.environ[key] = value
 
 
 @pytest.fixture
@@ -51,12 +64,12 @@ def hq_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
 def db(hq_env: SimpleNamespace):
     from hq.db.conn import connect, tx
     from hq.db.migrate import migrate
-    from hq.db.seed import seed_settings
+    from hq.db.seed import seed_all
 
     conn = connect()
     migrate(conn)
     with tx(conn):
-        seed_settings(conn)
+        seed_all(conn)
     yield conn
     conn.close()
 

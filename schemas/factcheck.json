@@ -1,0 +1,19 @@
+{
+  "type": "object",
+  "required": ["results"],
+  "properties": {
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["i", "verdict"],
+        "properties": {
+          "i": {"type": "integer"},
+          "verdict": {"enum": ["supported", "unsupported", "partial", "na"]},
+          "unsupported_span": {"type": ["string", "null"]},
+          "explanation": {"type": ["string", "null"]}
+        }
+      }
+    }
+  }
+}

@@ -4,8 +4,8 @@ avatar: "🧪"
 color: "#F59E0B"
 role: factchecker
 description: Runs deterministic fact rules, an independent per-sentence check and the quality gate.
-adapter: sim
-adapter_config: {sim_model: qwen2.5-7b}
+adapter: script
+adapter_config: {module: hq.pipeline.agents.checks, sim_model: qwen2.5-7b}
 model: null
 capabilities: [factcheck.deterministic, factcheck.sentence, check.quality]
 cost_tier: local

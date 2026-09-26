@@ -363,4 +363,52 @@ def test_next_tasks(stage, cap, result, expected_stage, expected_caps):
 
 def test_redraft_carries_feedback_and_version():
     _, specs = next_tasks("drafted", "factcheck.deterministic", {"ok": False, "version": 1, "feedback": "x"})
-    assert specs[0].payload == {"version": 2, "feedback": "x"}
+    assert specs[0].payload == {"version": 2, "loop": 2, "feedback": "x"}
+
+
+def test_after_three_loops_the_real_pipeline_polishes_once_then_stops():
+    res = {"ok": False, "version": 3, "loop": 3, "feedback": "f", "polish_allowed": True}
+    _, specs = next_tasks("drafted", "factcheck.sentence", res)
+    assert [s.capability for s in specs] == ["polish.final"]
+    _, specs = next_tasks("drafted", "factcheck.sentence", {**res, "polished": True})
+    assert specs == []
+    _, specs = next_tasks("drafted", "factcheck.sentence", {"ok": False, "version": 3})  # the sim: no polish
+    assert specs == []
+    stage, specs = next_tasks("drafted", "check.quality", {"ok": True, "version": 1, "polish": True})
+    assert [s.capability for s in specs] == ["polish.final"]
+    _, specs = next_tasks("drafted", "polish.final", {"ok": True, "version": 2, "loop": 1})
+    assert specs[0].capability == "factcheck.deterministic" and specs[0].payload["polished"] is True
+
+
+# ── probation ────────────────────────────────────────────────────────────────────────────────────────
+class EffectAdapter(FakeAdapter):
+    async def run(self, task: dict[str, Any], ctx: RunContext) -> RunResult:
+        await super().run(task, ctx)
+        return RunResult(output={"ok": True}, summary="made a note",
+                         effects=[{"op": "event", "type": "log", "message": "probation effect applied"}])
+
+
+async def test_probation_holds_output_until_prerit_approves(db, hq_env):
+    from hq.api.routes import _need_followups
+    from hq.db import repo
+
+    write_agent(hq_env.agents, "newbie", capabilities=["summarize"])
+    worker = make_worker(EffectAdapter(seconds=0.01))
+    worker.startup()
+    with tx(db):
+        db.execute("UPDATE agents SET probation_runs_left=2 WHERE id='newbie'")
+        tid = queue.enqueue(db, "summarize", emit_event=False)
+    assert await drive(worker, lambda: queue.get_task(db, tid)["status"] == "succeeded")
+    task = queue.get_task(db, tid)
+    assert task["result_json"]["probation_hold"] is True
+    need = db.execute("SELECT * FROM needs_prerit WHERE kind='approve'").fetchone()
+    assert need and "newbie" in need["title"].lower()
+    assert db.execute("SELECT probation_runs_left FROM agents WHERE id='newbie'").fetchone()[0] == 1
+    assert not db.execute("SELECT 1 FROM events WHERE message='probation effect applied'").fetchone()
+
+    with tx(db):
+        db.execute("UPDATE needs_prerit SET status='done' WHERE id=?", (need["id"],))
+        assert _need_followups(db, repo.get_need_row(db, need["id"]), "done") == ["probation:approved"]
+    await worker.tick()
+    assert queue.get_task(db, tid)["result_json"]["approved"] is True
+    assert db.execute("SELECT 1 FROM events WHERE message='probation effect applied'").fetchone()

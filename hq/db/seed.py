@@ -31,6 +31,22 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "email_daily_cap": 10,
     "quiet_hours": {"enabled": False, "start": "23:00", "end": "07:00"},
     "unknown_pay_policy": "decision",
+    # phase (b): models, Claude, budget
+    "model_pool_budget_gb": 30,
+    "usability_mode": True,
+    "claude_model": "sonnet",
+    "claude_signoff_model": "opus",
+    "cloud_llm": "auto",
+    "xai_model": "grok-4-fast",
+    "xai_signoff_model": "grok-4",
+    "claude_per_call_cap_usd": 0.5,
+    "require_claude_signoff": True,
+    "benchmark_on_new_model": True,
+    # phase (d): Gmail, inbox, notifications, go-live
+    "gmail_poll_minutes": 3,
+    "auto_reply_enabled": False,     # effective only in LIVE and ≥ 14 days after going live (CONTRACT_D §2)
+    "mac_notifications": True,
+    "signoff_policy_ack": False,     # go-live without a cloud sign-off model, acknowledged by Prerit
 }
 
 
@@ -60,6 +76,14 @@ def _choice(*options: str) -> Callable[[Any], str]:
             raise SettingError(f"must be one of {', '.join(options)}")
         return v
     return check
+
+
+def _model_name(v: Any) -> str:
+    import re
+
+    if not isinstance(v, str) or not re.fullmatch(r"[a-z0-9][a-z0-9._-]{1,63}", v):
+        raise SettingError("expected a model id like grok-4")
+    return v
 
 
 def _hhmm(v: Any) -> str:
@@ -101,6 +125,20 @@ EDITABLE: dict[str, Callable[[Any], Any]] = {
     "email_daily_cap": _num(0, 100, integer=True),
     "quiet_hours": _quiet_hours,
     "unknown_pay_policy": _choice("decision", "accept", "reject"),
+    "model_pool_budget_gb": _num(2, 40),
+    "usability_mode": _bool,
+    "claude_model": _choice("haiku", "sonnet", "opus"),
+    "claude_signoff_model": _choice("haiku", "sonnet", "opus"),
+    "cloud_llm": _choice("auto", "claude", "xai"),
+    "gmail_poll_minutes": _num(1, 60, integer=True),
+    "auto_reply_enabled": _bool,
+    "mac_notifications": _bool,
+    "signoff_policy_ack": _bool,
+    "xai_model": _model_name,
+    "xai_signoff_model": _model_name,
+    "claude_per_call_cap_usd": _num(0.01, 5.0),
+    "require_claude_signoff": _bool,
+    "benchmark_on_new_model": _bool,
 }
 
 
@@ -131,6 +169,17 @@ def seed_settings(conn: sqlite3.Connection) -> list[str]:
         if cur.rowcount:
             added.append(key)
     return added
+
+
+def seed_all(conn: sqlite3.Connection) -> dict[str, int]:
+    """Every idempotent seed step (settings, profile facts and fields, answer bank, sources). Caller owns the tx."""
+    from hq.pipeline.apply.answers import seed_answer_bank
+    from hq.pipeline.discover.sources import seed_sources
+    from hq.profile.facts import seed_facts
+    from hq.profile.fields import seed_fields
+
+    return {"settings": len(seed_settings(conn)), "facts": seed_facts(conn), "fields": seed_fields(conn),
+            "answers": seed_answer_bank(conn), "sources": seed_sources(conn)}
 
 
 def get_settings(conn: sqlite3.Connection) -> dict[str, Any]:
@@ -169,8 +218,8 @@ def main() -> None:
     conn = connect()
     applied = migrate(conn)
     with tx(conn):
-        added = seed_settings(conn)
-    print(f"db={paths.DB_PATH} migrations_applied={applied} settings_seeded={len(added)}")
+        added = seed_all(conn)
+    print(f"db={paths.DB_PATH} migrations_applied={applied} seeded={added}")
 
 
 if __name__ == "__main__":

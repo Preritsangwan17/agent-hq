@@ -1,13 +1,19 @@
-/** Budget: Claude $/day and call cap with a live gauge (spend today vs the budget being edited). */
-import { CalendarClock, Cpu, DollarSign, Hash, HandHelping, Moon, Sparkles, type LucideIcon } from 'lucide-react';
+/** Budget: cloud $/day and call cap with a live gauge (spend today vs the budget being edited), the cloud provider
+ * (Claude CLI or xAI) and which models it uses. */
+import { useQuery } from '@tanstack/react-query';
+import { BadgeCheck, CalendarClock, Cloud, Cpu, DollarSign, Hash, HandHelping, KeyRound, Moon, Sparkles, Wand2, type LucideIcon } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Badge } from '@/components/Badge';
+import { TextInput } from '@/pages/Agents/formKit';
 import type { ReactNode } from 'react';
 import { GlassPanel } from '@/components/GlassPanel';
 import { ProgressBar } from '@/components/ProgressBar';
 import { SectionHeader } from '@/components/SectionHeader';
-import { formatCompact, formatUSD } from '@/lib/format';
+import { api } from '@/lib/api';
+import { formatCompact, formatDateTimeIST, formatUSD } from '@/lib/format';
 import { useSettings, useStats } from '@/lib/store';
 import { colors, withAlpha } from '@/theme/tokens';
-import { NumberField, SettingRow, Slider } from '../controls';
+import { NumberField, Segmented, SettingRow, Slider, Toggle } from '../controls';
 import { Callout, Section } from '../parts';
 import { useSaver } from '../saver';
 
@@ -16,11 +22,12 @@ const CLAUDE = '#E879F9';
 export function BudgetTab() {
   const s = useSettings();
   const stats = useStats();
+  const live = useQuery({ queryKey: ['budget'], queryFn: api.budget, refetchInterval: 15_000 }).data;
   const { save } = useSaver();
   const budget = Number(s.claude_daily_budget_usd) || 0;
   const cap = Number(s.claude_daily_call_cap) || 0;
-  const spent = stats?.claude_cost_today_usd ?? 0;
-  const calls = stats?.claude_calls_today ?? 0;
+  const spent = live?.spent_usd ?? stats?.claude_cost_today_usd ?? 0;
+  const calls = live?.calls ?? stats?.claude_calls_today ?? 0;
   const frac = budget > 0 ? Math.min(1, spent / budget) : spent > 0 ? 1 : 0;
   const callFrac = cap > 0 ? Math.min(1, calls / cap) : 0;
   const hot = frac >= 0.85 || callFrac >= 0.85;
@@ -28,14 +35,19 @@ export function BudgetTab() {
   return (
     <div className="space-y-5">
       <GlassPanel padding="lg" glow={CLAUDE} accentTop>
-        <SectionHeader kicker="Today · resets at midnight IST" title="Claude spend" icon={Sparkles} color={CLAUDE} />
+        <SectionHeader
+          kicker="Today · resets at midnight IST"
+          title={live?.provider === 'xai' ? 'Cloud spend · xAI' : 'Cloud spend · Claude'}
+          icon={Sparkles}
+          color={CLAUDE}
+        />
         <div className="mt-5 grid items-center gap-6 md:grid-cols-[auto_minmax(0,1fr)]">
           <RingGauge frac={frac} color={hot ? colors.warn : CLAUDE} spent={spent} budget={budget} />
           <div className="grid min-w-0 gap-4 sm:grid-cols-2">
             <Metric icon={DollarSign} label="Spent / budget" value={`${formatUSD(spent)} / ${formatUSD(budget)}`} sub={`${Math.round(frac * 100)}% of today's budget`} color={CLAUDE} />
             <Metric
               icon={Hash}
-              label="Claude calls"
+              label="Cloud calls"
               value={`${calls} / ${cap}`}
               sub={<ProgressBar value={callFrac} color={callFrac >= 0.85 ? colors.warn : CLAUDE} height={4} className="mt-1.5" />}
               color={CLAUDE}
@@ -47,7 +59,13 @@ export function BudgetTab() {
               sub="On-device models · no spend"
               color="#22D3EE"
             />
-            <Metric icon={CalendarClock} label="When over budget" value="Defer" sub="Claude tasks wait for midnight IST" color={colors.warn} />
+            <Metric
+              icon={CalendarClock}
+              label="Waiting on budget"
+              value={`${live?.deferred_tasks ?? 0} task${live?.deferred_tasks === 1 ? '' : 's'}`}
+              sub={live?.resets_at ? `resets ${formatDateTimeIST(live.resets_at)} IST` : 'Claude tasks wait for midnight IST'}
+              color={colors.warn}
+            />
           </div>
         </div>
       </GlassPanel>
@@ -55,7 +73,7 @@ export function BudgetTab() {
       <Section kicker="Limits" title="Daily Claude budget" icon={DollarSign} color={CLAUDE}>
         <SettingRow
           title="Budget per day"
-          phase="b"
+          phase="live"
           htmlFor="claude-budget"
           description="Notional spend reported by Claude Code per call (subscription auth). Sign-off, polish and the Strategist draw from it."
           control={
@@ -96,7 +114,7 @@ export function BudgetTab() {
           icon={Hash}
           color={CLAUDE}
           title="Calls per day"
-          phase="b"
+          phase="live"
           htmlFor="claude-calls"
           description="A second ceiling in case per-call cost reporting is unavailable."
           control={
@@ -116,6 +134,72 @@ export function BudgetTab() {
         />
       </Section>
 
+      <ProviderSection live={live} />
+
+      <Section kicker="Models" title="Which Claude, and when" icon={Wand2} color={CLAUDE}>
+        <SettingRow
+          title="Escalation & polish model"
+          description="Used when two local models fail a task, for Claude polish of high-fit drafts and the Strategist."
+          control={
+            <Segmented
+              aria-label="Claude model"
+              value={String(s.claude_model ?? 'sonnet')}
+              onChange={(v) => save({ claude_model: v })}
+              color={CLAUDE}
+              options={[
+                { value: 'haiku', label: 'Haiku' },
+                { value: 'sonnet', label: 'Sonnet' },
+                { value: 'opus', label: 'Opus' },
+              ]}
+            />
+          }
+        />
+        <SettingRow
+          icon={BadgeCheck}
+          color={CLAUDE}
+          title="Sign-off model"
+          description="The final independent check on every outbound text. It must differ from any Claude model that wrote or polished the text."
+          control={
+            <Segmented
+              aria-label="Claude sign-off model"
+              value={String(s.claude_signoff_model ?? 'opus')}
+              onChange={(v) => save({ claude_signoff_model: v })}
+              color={CLAUDE}
+              options={[
+                { value: 'haiku', label: 'Haiku' },
+                { value: 'sonnet', label: 'Sonnet' },
+                { value: 'opus', label: 'Opus' },
+              ]}
+            />
+          }
+        />
+        <SettingRow
+          title="Require Claude sign-off"
+          htmlFor="signoff"
+          description="Nothing is submitted without Claude's sign-off. Turning this off leaves the deterministic rules and the local checker."
+          control={<Toggle id="signoff" label="Require Claude sign-off" checked={s.require_claude_signoff !== false} onChange={(v) => save({ require_claude_signoff: v })} color={CLAUDE} size="lg" />}
+        />
+        <SettingRow
+          title="Cap per call"
+          htmlFor="per-call"
+          description="Passed to Claude Code as --max-budget-usd on every call."
+          control={
+            <NumberField
+              id="per-call"
+              aria-label="Claude per-call cap in US dollars"
+              value={Number(s.claude_per_call_cap_usd ?? 0.5)}
+              onChange={(v) => save({ claude_per_call_cap_usd: v })}
+              min={0.01}
+              max={5}
+              step={0.05}
+              prefix="$"
+              display={(v) => v.toFixed(2)}
+              className="w-32"
+            />
+          }
+        />
+      </Section>
+
       <div className="grid gap-3 md:grid-cols-2">
         <Callout icon={Moon} color="#818CF8" title="Over budget">
           Claude tasks are deferred to midnight IST; local models keep working and nothing is skipped.
@@ -124,8 +208,24 @@ export function BudgetTab() {
           Anything due within 48 h that is blocked on the budget becomes a Needs Prerit item instead of waiting.
         </Callout>
       </div>
+      {live && Object.keys(live.by_task).length > 0 && (
+        <Section kicker="Today" title="Spend by task" icon={Sparkles} color={CLAUDE} rows={false}>
+          <ul className="divide-y divide-white/[.06] text-[13px]">
+            {Object.entries(live.by_task).map(([task, v]) => (
+              <li key={task} className="flex items-center justify-between py-2">
+                <span className="font-mono text-ink/85">{task}</span>
+                <span className="text-muted tabular">
+                  {v.calls} call{v.calls === 1 ? '' : 's'} · {formatUSD(v.spent_usd)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
       <p className="px-1 text-xs text-faint">
-        Phase (a): Claude work is simulated, so today's spend stays at $0. Real calls arrive with the claude_code adapter in phase (b).
+        {live?.claude_available === false
+          ? 'Claude is not logged in, so nothing is being spent; see Models or Needs Prerit to log in.'
+          : `Costs are Claude Code's own estimates under subscription auth (notional spend).${live?.reserved_usd ? ` ${formatUSD(live.reserved_usd)} is reserved for calls in flight.` : ''}`}
       </p>
     </div>
   );
@@ -183,5 +283,86 @@ function RingGauge({ frac, color, spent, budget }: { frac: number; color: string
         <div className="mt-0.5 text-xs text-muted">of {formatUSD(budget)} today</div>
       </div>
     </div>
+  );
+}
+
+function ProviderSection({ live }: { live: Awaited<ReturnType<typeof api.budget>> | undefined }) {
+  const s = useSettings();
+  const { save } = useSaver();
+  const xai = live?.xai;
+  const models = xai?.models ?? [];
+  const status = !xai?.key_present
+    ? { text: 'no key in .env', color: '#5B6577' }
+    : xai.available
+      ? { text: 'connected', color: '#34D399' }
+      : { text: xai.reason ?? (xai.checked ? 'unavailable' : 'not checked yet'), color: colors.warn };
+  return (
+    <Section kicker="Provider" title="Cloud model" icon={Cloud} color={CLAUDE}>
+      <SettingRow
+        title="Use"
+        description="Escalations, polish, sign-off and the Strategist go to this provider (same budget and caps). Auto picks xAI when HQ_XAI_API_KEY is in .env, otherwise the Claude CLI. Sign-off can fall back to the other provider when the first wrote part of the text."
+        control={
+          <Segmented
+            aria-label="Cloud provider"
+            value={String(s.cloud_llm ?? 'auto')}
+            onChange={(v) => save({ cloud_llm: v })}
+            color={CLAUDE}
+            options={[
+              { value: 'auto', label: 'Auto' },
+              { value: 'claude', label: 'Claude CLI' },
+              { value: 'xai', label: 'xAI' },
+            ]}
+          />
+        }
+      />
+      <SettingRow
+        icon={KeyRound}
+        color={status.color}
+        title="xAI API key"
+        description="Put it in .env on this Mac as HQ_XAI_API_KEY=… and restart HQ. The UI never shows it; prompts are redacted before they leave, and only api.x.ai is allowed."
+        control={<Badge color={status.color}>{status.text}</Badge>}
+      />
+      <ModelField label="xAI model" settingKey="xai_model" fallback="grok-4-fast" models={models}
+        description="Escalations and polish. If the exact name isn't listed by xAI, the closest listed model is used." />
+      <ModelField label="xAI sign-off model" settingKey="xai_signoff_model" fallback="grok-4" models={models}
+        description="Should differ from the model above, so a polished letter can still be checked independently." />
+    </Section>
+  );
+}
+
+function ModelField({ label, settingKey, fallback, models, description }: {
+  label: string; settingKey: 'xai_model' | 'xai_signoff_model'; fallback: string; models: string[]; description: string;
+}) {
+  const s = useSettings();
+  const { save } = useSaver();
+  const current = String(s[settingKey] ?? fallback);
+  const [draft, setDraft] = useState(current);
+  useEffect(() => setDraft(current), [current]);
+  const listId = `${settingKey}-models`;
+  return (
+    <SettingRow
+      title={label}
+      htmlFor={settingKey}
+      description={description}
+      control={
+        <>
+          <TextInput
+            id={settingKey}
+            mono
+            list={listId}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value.trim())}
+            onBlur={() => draft && draft !== current && save({ [settingKey]: draft })}
+            onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+            className="w-48"
+          />
+          <datalist id={listId}>
+            {models.map((m) => (
+              <option key={m} value={m} />
+            ))}
+          </datalist>
+        </>
+      }
+    />
   );
 }

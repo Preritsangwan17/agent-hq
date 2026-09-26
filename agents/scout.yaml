@@ -4,10 +4,10 @@ avatar: "🛰️"
 color: "#22D3EE"
 role: scout
 description: Finds opportunities on ATS boards, program pages and alert emails.
-adapter: sim
-adapter_config: {sim_model: qwen3-4b-2507}
+adapter: script
+adapter_config: {module: hq.pipeline.agents.scout, sim_model: qwen3-4b-2507}
 model: null
-capabilities: [discover.ats, discover.program_page, parse.job]
+capabilities: [discover.ats, discover.feed, discover.program_page, parse.job]
 cost_tier: local
 concurrency: 1
 schedule: {mode: interval, minutes: 1}

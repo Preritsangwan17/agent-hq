@@ -18,16 +18,17 @@ from croniter import croniter
 
 from hq import settings as paths
 from hq.adapters import RunContext, RunResult, build_adapters
-from hq.adapters.base import Cancelled
+from hq.adapters.base import Cancelled, Deferred, Services
 from hq.agents.registry import Registry
 from hq.agents.schema import RESERVED_SIDE_EFFECTS, SIDE_EFFECT_OWNERS, AgentConfig, is_side_effect_family
 from hq.db import repo, serializers
 from hq.db.conn import connect, dumps, tx
 from hq.db.migrate import migrate
-from hq.db.seed import get_settings, seed_settings, set_settings
-from hq.pipeline.state import next_tasks, priority_for
+from hq.db.seed import get_settings, seed_all, set_settings
+from hq.pipeline.state import TERMINAL, next_tasks, priority_for
 from hq.util.ids import new_id
 from hq.util.timeutil import IST, now_iso, parse_iso, to_iso, today_ist, utcnow
+from hq.worker import budget as budget_mod
 from hq.worker import queue
 from hq.worker.effects import apply_effects
 
@@ -58,11 +59,12 @@ class Worker:
                  adapters: dict[str, Any] | None = None, loop_interval: float = 0.5, lease_s: float = queue.LEASE_S,
                  heartbeat_s: float = queue.HEARTBEAT_S, watchdog_s: float = 5.0, stale_agent_s: float = 60.0,
                  worker_heartbeat_s: float = 10.0, backoff: Callable[[int], float] | None = None,
-                 sim_kwargs: dict[str, Any] | None = None, watch: bool = True, schedule: bool = True):
+                 sim_kwargs: dict[str, Any] | None = None, watch: bool = True, schedule: bool = True,
+                 services: Services | None = None, model_upkeep: bool = False):
         self.conn = conn or connect()
         migrate(self.conn)
         with tx(self.conn):
-            seed_settings(self.conn)
+            seed_all(self.conn)
         self.registry = Registry(agents_dir or paths.AGENTS_DIR, self.conn)
         self.adapters = adapters or build_adapters(**(sim_kwargs or {}))
         self.loop_interval = loop_interval
@@ -89,10 +91,42 @@ class Worker:
         self._last_heartbeat = 0.0
         self._last_retention = 0.0
         self.worker_id = f"worker-{os.getpid()}"
+        self.services = services or self._build_services()
+        if self.services.sim is None:
+            self.services.sim = self.adapters.get("sim")
+        if self.services.fetcher is None:
+            from hq.pipeline.discover.fetch import Fetcher
+
+            self.services.fetcher = Fetcher(self.conn)
+        self._gmail_injected = self.services.gmail is not None   # tests hand in the fake
+        if not self._gmail_injected:
+            self._rebuild_gmail()
+        self._recovered = False
+        self._last_notify = 0.0
+        self._last_gmail_check = 0.0
+        self._last_recover = 0.0
+        self.model_upkeep = model_upkeep
+        self.benchmarking: asyncio.Task | None = None
+        self._last_discovery = 0.0
+        self._last_model_state = 0.0
+        self._last_claude_check = 0.0
+
+    def _build_services(self) -> Services:
+        from hq.llm.cloud import CloudRunner
+        from hq.llm.router import Router
+        from hq.models.manager import ModelManager
+
+        manager = ModelManager(self.conn)
+        cloud = CloudRunner(self.conn)
+        return Services(router=Router(self.conn, manager, cloud), claude=cloud, manager=manager)
 
     # ── lifecycle ───────────────────────────────────────────────────────────────────────────────────
     def startup(self) -> None:
+        from hq.util import netguard
+
         with tx(self.conn):
+            # the go-live checklist reads this to know HQ really restarted with the new .env
+            set_settings(self.conn, {"worker_env_mode": netguard.current_mode()}, by="worker")
             orphans = queue.recover_orphans(self.conn)
             self.conn.execute("UPDATE agent_live SET now_line=NULL, progress=NULL, current_task_id=NULL, "
                               "opportunity_id=NULL, tok_s=NULL, seq=seq+1, updated_at=?", (now_iso(),))
@@ -104,6 +138,8 @@ class Worker:
         self._rescan = False
         self._refresh_state()
         self._worker_heartbeat()
+        if self.model_upkeep and self.services.manager is not None:
+            self.services.manager.adopt_or_reap()
 
     def stop(self) -> None:
         self.stop_event.set()
@@ -141,6 +177,11 @@ class Worker:
         pending = [r.aio for r in self.running.values() if r.aio]
         if pending:
             await asyncio.gather(*pending, return_exceptions=True)
+        if self.benchmarking and not self.benchmarking.done():
+            self.benchmarking.cancel()
+            await asyncio.gather(self.benchmarking, return_exceptions=True)
+        if self.services.manager is not None and self.services.manager.servers:
+            await self.services.manager.shutdown()
         with tx(self.conn):
             set_settings(self.conn, {"worker_heartbeat_at": None}, by="worker")
             repo.emit(self.conn, "worker.stopped", f"Worker stopped (pid {os.getpid()})", data={"pid": os.getpid()})
@@ -150,6 +191,10 @@ class Worker:
 
     # ── the loop ────────────────────────────────────────────────────────────────────────────────────
     async def tick(self) -> None:
+        if not self._recovered:  # resolve sends a crash left behind before anything can send again
+            self._recovered = True
+            self._last_recover = time.monotonic()
+            await self._recover_outbound()
         self._consume_commands()
         self.settings = get_settings(self.conn)
         if self._rescan:
@@ -170,7 +215,155 @@ class Worker:
         if now - self._last_retention >= 3600:
             self._last_retention = now
             self._retention()
+        if self.model_upkeep:
+            await self._model_upkeep(now)
+        await self._mail_upkeep(now)
         self._update_statuses()
+
+    # ── mail upkeep (phase d): notifications, Gmail health, send recovery ───────────────────────────
+    def _rebuild_gmail(self) -> None:
+        if self._gmail_injected:
+            return
+        from hq.gmail.client import from_env
+
+        self.services.gmail = from_env()
+
+    async def _mail_upkeep(self, now: float) -> None:
+        from hq import notify
+
+        if now - self._last_notify >= 2:
+            self._last_notify = now
+            try:
+                await notify.deliver_pending(self.conn)
+            except Exception as exc:  # noqa: BLE001 — a banner must never kill the loop
+                log.warning("notification delivery failed: %s", exc)
+        if now - self._last_gmail_check >= 3600 or self._last_gmail_check == 0.0:
+            self._last_gmail_check = now
+            await self._gmail_health()
+        if now - self._last_recover >= 300:
+            self._last_recover = now
+            await self._recover_outbound()
+
+    async def _recover_outbound(self) -> None:
+        from hq.pipeline.apply import guard
+
+        try:
+            res = await guard.recover(self.conn, self.services.gmail)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("outbound recovery failed: %s", exc)
+            return
+        if any(res.values()):
+            with tx(self.conn):
+                repo.emit(self.conn, "log", "Send recovery after a restart: " + ", ".join(
+                    f"{n} {k}" for k, n in res.items() if n), level="warn", data=res)
+
+    async def _gmail_health(self) -> None:
+        from hq import notify
+        from hq.gmail import auth
+        from hq.gmail.api import GmailAuthError, GmailError, GmailTransient
+
+        gmail = self.services.gmail
+        prev = get_settings(self.conn).get("gmail_state") or {}
+        if gmail is None:
+            if prev.get("connected"):
+                with tx(self.conn):
+                    set_settings(self.conn, {"gmail_state": {**prev, "connected": False, "healthy": False}},
+                                 by="worker")
+            return
+        state = {**prev, "connected": True, "checked_at": now_iso(),
+                 "scopes": [x.rsplit("/", 1)[-1] for x in auth.granted_scopes()]}
+        try:
+            prof = await gmail.profile()
+            state.update(healthy=True, error=None, email=prof.get("emailAddress"), last_ok_at=now_iso())
+        except GmailAuthError as exc:
+            state.update(healthy=False, error=str(exc))
+            with tx(self.conn):
+                notify.create(self.conn, "warn", "Gmail needs reconnecting", str(exc)[:200], "/settings?tab=gmail",
+                              dedupe_open=True)
+                if not self.conn.execute("SELECT 1 FROM needs_prerit WHERE title='Reconnect Gmail' AND status IN "
+                                         "('open','snoozed')").fetchone():
+                    repo.insert_need(self.conn, {
+                        "kind": "decision", "title": "Reconnect Gmail", "priority": 75, "est_minutes": 2,
+                        "instructions_md": f"HQ can't read Gmail ({exc}). Open **Settings › Gmail** and connect again "
+                                           "(read-only). Replies and follow-ups wait until then.",
+                        "direct_url": "/settings?tab=gmail"})
+        except (GmailTransient, GmailError) as exc:
+            state.update(healthy=False, error=str(exc)[:200])
+        with tx(self.conn):
+            set_settings(self.conn, {"gmail_state": state}, by="worker")
+
+    async def _gmail_self_test(self) -> None:
+        from hq.pipeline.apply import guard
+
+        try:
+            res = await guard.self_test(self.conn, self.services.gmail)
+            st = {"ok": True, "at": now_iso(), "status": res.status, "mode": res.mode}
+        except guard.GuardBlocked as exc:
+            st = {"ok": False, "at": now_iso(), "error": exc.reason, "kind": exc.kind}
+        with tx(self.conn):
+            set_settings(self.conn, {"gmail_self_test": st}, by="worker")
+            repo.emit(self.conn, "log", "Self-test email " + ("sent to Prerit's own address" if st["ok"]
+                                                              else f"failed: {st.get('error')}"),
+                      level="info" if st["ok"] else "warn", data=st)
+
+    # ── models / Claude upkeep (phase b) ────────────────────────────────────────────────────────────
+    async def _model_upkeep(self, now: float) -> None:
+        mgr = self.services.manager
+        if mgr is not None:
+            try:
+                await mgr.tick()
+            except Exception as exc:  # upkeep must never kill the loop
+                log.warning("model manager tick failed: %s", exc)
+            if now - self._last_model_state >= 10:
+                self._last_model_state = now
+                mgr.publish_state()
+        if now - self._last_discovery >= 600 or self._last_discovery == 0.0:
+            self._last_discovery = now
+            await self._discover()
+        if self.services.claude is not None and (now - self._last_claude_check >= 600 or self._last_claude_check == 0.0):
+            self._last_claude_check = now
+            await self._check_claude()
+
+    async def _discover(self) -> None:
+        from hq.models import discovery
+
+        found = await asyncio.to_thread(discovery.discover_all)
+        result = discovery.rescan(self.conn, found)
+        new_usable = result["usable_new"]
+        if new_usable and self.settings.get("benchmark_on_new_model", True):
+            self.start_benchmark(new_usable, quick=True)
+
+    async def _check_claude(self) -> None:
+        runner = self.services.claude
+        before = runner.state(self.settings)
+        await runner.available(force=True)
+        after = runner.state(self.settings)
+        with tx(self.conn):
+            set_settings(self.conn, {"claude_state": {**after, "checked_at": now_iso()}}, by="worker")
+            if before.get("available") != after.get("available") and before.get("checked"):
+                who = "xAI" if after.get("provider") == "xai" else "Claude"
+                repo.emit(self.conn, "claude.status", f"{who} {'available' if after['available'] else 'unavailable'}"
+                          + (f": {after['reason']}" if after.get("reason") else ""),
+                          level="info" if after["available"] else "warn", data=after)
+
+    def start_benchmark(self, model_ids: list[str] | None, quick: bool = True) -> bool:
+        if self.benchmarking and not self.benchmarking.done():
+            return False
+        from hq.models.benchmark.suite import run_suite
+
+        async def go() -> None:
+            try:
+                await run_suite(self.conn, self.services.manager, model_ids=model_ids, quick=quick)
+            except Exception as exc:
+                log.exception("benchmark failed")
+                with tx(self.conn):
+                    set_settings(self.conn, {"benchmark_state": {"running": False, "error": str(exc)[:300]}},
+                                 by="worker")
+                    repo.emit(self.conn, "benchmark.done", f"Benchmark failed: {exc}", level="error",
+                              data={"error": str(exc)[:300]})
+
+        self.benchmarking = asyncio.create_task(go(), name="benchmark")
+        return True
 
     def _consume_commands(self) -> None:
         for cmd in repo.pending_commands(self.conn):
@@ -190,7 +383,29 @@ class Worker:
                         self.cancelled_tasks.add(run.task["id"])
             elif kind in ("rescan_agents", "agent_changed"):
                 self._rescan = True
-            elif kind not in ("pause_all", "resume_all", "freeze_outbound", "settings_changed"):
+            elif kind == "probation_release":
+                result = self._release_probation(payload.get("task_id"), bool(payload.get("approved")))
+            elif kind == "models_rescan":
+                self._last_discovery = 0.0 if self.model_upkeep else self._last_discovery
+                if not self.model_upkeep:
+                    result = {"ok": False, "error": "model upkeep disabled in this worker"}
+            elif kind == "models_benchmark":
+                ids = [payload["model_id"]] if payload.get("model_id") else None
+                result = {"ok": self.start_benchmark(ids, quick=payload.get("suite", "quick") != "full")}
+            elif kind == "model_unload":
+                mgr = self.services.manager
+                if mgr is not None:
+                    asyncio.get_running_loop().create_task(mgr.unload(payload.get("model_id", "")))
+                result = {"ok": mgr is not None}
+            elif kind == "claude_recheck":
+                self._last_claude_check = 0.0
+            elif kind == "gmail_recheck":
+                self._rebuild_gmail()
+                self._last_gmail_check = 0.0
+            elif kind == "gmail_self_test":
+                asyncio.get_running_loop().create_task(self._gmail_self_test())
+                result = {"ok": True, "started": True}
+            elif kind not in ("pause_all", "resume_all", "freeze_outbound", "settings_changed", "roles_changed"):
                 result = {"ok": False, "ignored": kind}
             with tx(self.conn):
                 repo.consume_command(self.conn, cmd["id"], result)
@@ -257,6 +472,8 @@ class Worker:
             return False  # defence in depth: the loader already rejects this
         if cfg.adapter == "sim" and not self.settings.get("sim_enabled", True):
             return False
+        if cfg.adapter == "openai_compatible" and self.benchmarking and not self.benchmarking.done():
+            return False  # the benchmark measures each model alone
         return cfg.adapter in self.adapters
 
     def _dispatch(self) -> None:
@@ -314,7 +531,8 @@ class Worker:
             repo.set_live(self.conn, cfg.id, now_line=f"Starting {cap}…", progress=0.0, current_task_id=task["id"],
                           opportunity_id=opp_id, heartbeat_at=now_iso(), tok_s=None)
         ctx = RunContext(conn=self.conn, task=task, agent=cfg, run_id=run.run_id, settings=dict(self.settings),
-                         cancel_reason=lambda: self.cancel_reason(task["id"], cfg.id, cap), on_heartbeat=run.beat)
+                         cancel_reason=lambda: self.cancel_reason(task["id"], cfg.id, cap), on_heartbeat=run.beat,
+                         services=self.services)
         hb = asyncio.create_task(self._lease_heartbeat(task["id"]))
         t0 = time.monotonic()
         try:
@@ -323,6 +541,8 @@ class Worker:
                 result = await adapter.run(task, ctx)
             except Cancelled as exc:
                 self._on_cancelled(run, exc.reason, t0)
+            except Deferred as exc:
+                self._on_deferred(run, exc, t0)
             except asyncio.CancelledError:
                 reason = run.hard_reason or "worker shutting down"
                 if reason.startswith("stuck"):
@@ -377,38 +597,75 @@ class Worker:
             "counters_date=?, last_error=COALESCE(?, last_error), updated_at=? WHERE id=?",
             (today, tasks, today, errors, today, tokens, today, last_error, now_iso(), agent_id))
 
+    def _on_probation(self, cfg: AgentConfig) -> bool:
+        if cfg.builtin:
+            return False
+        row = self.conn.execute("SELECT probation_runs_left FROM agents WHERE id=?", (cfg.id,)).fetchone()
+        return bool(row and row["probation_runs_left"] > 0)
+
+    def _hold_for_review(self, run: Run, result: RunResult, t0: float) -> None:
+        """A new agent's output waits in Needs Prerit (kind approve) instead of touching the pipeline."""
+        task, cfg = run.task, run.agent
+        cap = task["capability"]
+        held = {"probation_hold": True, "output": result.output, "effects": result.effects,
+                "opp_results": [[o, r] for o, r in result.opp_results], "summary": result.summary}
+        with tx(self.conn):
+            queue.complete(self.conn, task["id"], held)
+            left = self.conn.execute("UPDATE agents SET probation_runs_left=probation_runs_left-1 WHERE id=? "
+                                     "RETURNING probation_runs_left", (cfg.id,)).fetchone()["probation_runs_left"]
+            preview = dumps(result.output)[:1500]
+            need_id = repo.insert_need(self.conn, {
+                "opportunity_id": task.get("opportunity_id"), "kind": "approve",
+                "title": f"Review {cfg.name}'s output ({cap})",
+                "instructions_md": (f"**{cfg.name}** is a new agent on probation ({left} more reviews after this). "
+                                    f"Nothing it produced has been used yet.\n\n"
+                                    f"Summary: {result.summary or cap}\n\n```json\n{preview}\n```\n\n"
+                                    "Mark **done** to accept it into the pipeline, or **dismiss** to discard it."),
+                "priority": 45, "est_minutes": 1,
+                "payload_json": dumps({"probation_task_id": task["id"], "agent_id": cfg.id, "capability": cap}),
+            })
+            need = serializers.need_json(repo.get_need_row(self.conn, need_id))
+            repo.emit(self.conn, "needs.created", need["title"], agent_id=cfg.id,
+                      opportunity_id=task.get("opportunity_id"), task_id=task["id"], data={"need": need})
+            self._finish_run(run, "succeeded", t0, result=result)
+            tokens = (result.prompt_tokens or 0) + (result.completion_tokens or 0)
+            self._bump_counters(cfg.id, tasks=1, tokens=tokens)
+            repo.emit(self.conn, "task.succeeded", f"{cfg.name} ✓ {result.summary or cap} (held for review)",
+                      agent_id=cfg.id, opportunity_id=task.get("opportunity_id"), task_id=task["id"],
+                      data={"task_id": task["id"], "capability": cap, "agent_id": cfg.id, "held": True})
+        self.error_until.pop(cfg.id, None)
+
+    def _release_probation(self, task_id: str, approved: bool) -> dict[str, Any]:
+        task = queue.get_task(self.conn, task_id)
+        held = (task or {}).get("result_json") or {}
+        if not task or not held.get("probation_hold"):
+            return {"ok": False, "error": "no held result"}
+        agent_id = task["lease_owner"]
+        cfg = self.registry.configs.get(agent_id)
+        if not approved or cfg is None:
+            with tx(self.conn):
+                queue.complete(self.conn, task_id, {**held, "probation_hold": False, "discarded": True})
+                repo.emit(self.conn, "log", f"Discarded held output of {agent_id} ({task['capability']})",
+                          agent_id=agent_id, task_id=task_id, opportunity_id=task.get("opportunity_id"))
+            return {"ok": True, "discarded": True}
+        result = RunResult(output=held.get("output") or {}, effects=held.get("effects") or [],
+                           opp_results=[(o, r) for o, r in held.get("opp_results") or []], summary=held.get("summary"))
+        with tx(self.conn):
+            queue.complete(self.conn, task_id, {**held, "probation_hold": False, "approved": True})
+            self._apply_result(task, cfg, result, run_id=None)
+            repo.emit(self.conn, "log", f"Prerit approved {cfg.name}'s output ({task['capability']})",
+                      agent_id=cfg.id, task_id=task_id, opportunity_id=task.get("opportunity_id"))
+        return {"ok": True, "approved": True}
+
     def _on_succeeded(self, run: Run, result: RunResult, t0: float) -> None:
         task, cfg = run.task, run.agent
         cap = task["capability"]
+        if self._on_probation(cfg):
+            self._hold_for_review(run, result, t0)
+            return
         with tx(self.conn):
             queue.complete(self.conn, task["id"], result.output)
-            outcome = apply_effects(self.conn, result.effects, agent_id=cfg.id, task_id=task["id"],
-                                    run_id=run.run_id, opportunity_id=task.get("opportunity_id"))
-            stage_changes: dict[str, tuple[str, str]] = {}
-            if not result.output.get("noop"):
-                targets = result.opp_results or (
-                    [(task["opportunity_id"], result.output)] if task.get("opportunity_id") else [])
-                for opp_id, res in targets:
-                    self._transition(task, cfg, opp_id, res, stage_changes)
-            for opp_id in outcome.created_opps:
-                opp = serializers.opp_summary_by_id(self.conn, opp_id)
-                if opp:
-                    repo.emit(self.conn, "opp.created", f"New: {opp['company_name']} — {opp['title']} "
-                              f"({opp['city']}, {opp['country_iso2']})", agent_id=cfg.id, opportunity_id=opp_id,
-                              task_id=task["id"], data={"opp": opp})
-            for opp_id, (old, new) in stage_changes.items():
-                opp = serializers.opp_summary_by_id(self.conn, opp_id)
-                if opp:
-                    reason = f" ({opp['stage_reason']})" if opp.get("stage_reason") and new == "filtered" else ""
-                    repo.emit(self.conn, "opp.stage", f"{opp['company_name']} — {opp['title']}: {old} → {new}{reason}",
-                              level="alert" if new in ("interview", "offer") else "info", agent_id=cfg.id,
-                              opportunity_id=opp_id, task_id=task["id"], data={"opp": opp, "from": old, "to": new})
-            for opp_id in outcome.touched_opps - set(stage_changes) - set(outcome.created_opps):
-                opp = serializers.opp_summary_by_id(self.conn, opp_id)
-                if opp:
-                    repo.emit(self.conn, "opp.updated", f"Updated {opp['company_name']} — {opp['title']}",
-                              level="debug", agent_id=cfg.id, opportunity_id=opp_id, task_id=task["id"],
-                              data={"opp": opp})
+            self._apply_result(task, cfg, result, run_id=run.run_id)
             self._finish_run(run, "succeeded", t0, result=result)
             tokens = (result.prompt_tokens or 0) + (result.completion_tokens or 0)
             self._bump_counters(cfg.id, tasks=1, tokens=tokens)
@@ -418,6 +675,36 @@ class Worker:
                             "attempt": task["attempts"] + 1, "model_id": result.model_id, "tok_s": result.tok_s,
                             "tokens": tokens or None, "cost_usd": result.cost_usd})
         self.error_until.pop(cfg.id, None)
+
+    def _apply_result(self, task: dict[str, Any], cfg: AgentConfig, result: RunResult, *, run_id: str | None) -> None:
+        """Effects + pipeline transitions + opp events for a successful result. Caller owns the transaction."""
+        outcome = apply_effects(self.conn, result.effects, agent_id=cfg.id, task_id=task["id"],
+                                run_id=run_id, opportunity_id=task.get("opportunity_id"))
+        stage_changes: dict[str, tuple[str, str]] = {}
+        if not result.output.get("noop"):
+            targets = result.opp_results or (
+                [(task["opportunity_id"], result.output)] if task.get("opportunity_id") else [])
+            for opp_id, res in targets:
+                self._transition(task, cfg, opp_id, res, stage_changes)
+        for opp_id in outcome.created_opps:
+            opp = serializers.opp_summary_by_id(self.conn, opp_id)
+            if opp:
+                repo.emit(self.conn, "opp.created", f"New: {opp['company_name']} — {opp['title']} "
+                          f"({opp['city']}, {opp['country_iso2']})", agent_id=cfg.id, opportunity_id=opp_id,
+                          task_id=task["id"], data={"opp": opp})
+        for opp_id, (old, new) in stage_changes.items():
+            opp = serializers.opp_summary_by_id(self.conn, opp_id)
+            if opp:
+                reason = f" ({opp['stage_reason']})" if opp.get("stage_reason") and new == "filtered" else ""
+                repo.emit(self.conn, "opp.stage", f"{opp['company_name']} — {opp['title']}: {old} → {new}{reason}",
+                          level="alert" if new in ("interview", "offer") else "info", agent_id=cfg.id,
+                          opportunity_id=opp_id, task_id=task["id"], data={"opp": opp, "from": old, "to": new})
+        for opp_id in outcome.touched_opps - set(stage_changes) - set(outcome.created_opps):
+            opp = serializers.opp_summary_by_id(self.conn, opp_id)
+            if opp:
+                repo.emit(self.conn, "opp.updated", f"Updated {opp['company_name']} — {opp['title']}",
+                          level="debug", agent_id=cfg.id, opportunity_id=opp_id, task_id=task["id"],
+                          data={"opp": opp})
 
     def _transition(self, task: dict[str, Any], cfg: AgentConfig, opp_id: str, res: dict[str, Any],
                     stage_changes: dict[str, tuple[str, str]]) -> None:
@@ -437,6 +724,8 @@ class Worker:
             repo.update_opportunity(self.conn, opp_id, values)
             prev = stage_changes.get(opp_id)
             stage_changes[opp_id] = (prev[0] if prev else old, new)
+            if new in TERMINAL:
+                self._close_stale_needs(opp_id, f"role {new}")
         for spec in specs:
             new_task = queue.enqueue(
                 self.conn, spec.capability, payload=spec.payload, opportunity_id=opp_id,
@@ -453,6 +742,19 @@ class Worker:
                           data={"from_agent": cfg.id, "to_agent": to_agent, "capability": spec.capability,
                                 "opportunity_id": opp_id})
 
+    def _close_stale_needs(self, opp_id: str, reason: str) -> None:
+        """A filtered/closed role no longer needs Prerit's keep/drop, approval or form: dismiss those items.
+        Interview/offer/money/legal alerts are never touched."""
+        rows = self.conn.execute(
+            "SELECT id FROM needs_prerit WHERE opportunity_id=? AND status IN ('open','snoozed') AND kind IN "
+            "('decision','approve','submit_form','review_letter','missing_info')", (opp_id,)).fetchall()
+        for r in rows:
+            self.conn.execute("UPDATE needs_prerit SET status='dismissed', resolved_at=?, snoozed_until=NULL WHERE id=?",
+                              (now_iso(), r["id"]))
+            need = serializers.need_json(repo.get_need_row(self.conn, r["id"]))
+            repo.emit(self.conn, "needs.updated", f"{need['title']}: closed ({reason})", level="debug",
+                      opportunity_id=opp_id, data={"need": need})
+
     def _on_failed(self, run: Run, error: str, t0: float, model_id: str | None = None) -> None:
         task, cfg = run.task, run.agent
         with tx(self.conn):
@@ -460,6 +762,46 @@ class Worker:
             self._finish_run(run, "failed", t0, error=error[:2000], model_id=model_id)
             self._bump_counters(cfg.id, errors=1, last_error=error[:500])
         self.error_until[cfg.id] = time.monotonic() + ERROR_STATUS_S
+
+    def _on_deferred(self, run: Run, exc: Deferred, t0: float) -> None:
+        """Wait without burning an attempt: budget (until midnight IST), memory (60 s) or rate limit (1 h)."""
+        task, cfg = run.task, run.agent
+        status = exc.status if exc.status in ("deferred_budget", "waiting_memory") else "queued"
+        with tx(self.conn):
+            self.conn.execute(
+                "UPDATE tasks SET status=?, not_before=?, lease_owner=NULL, lease_expires_at=NULL, last_error=?, "
+                "updated_at=? WHERE id=?", (status, exc.until_iso, exc.reason[:500], now_iso(), task["id"]))
+            self._finish_run(run, "deferred", t0, error=exc.reason[:500])
+            level = "warn" if status == "deferred_budget" else "info"
+            repo.emit(self.conn, "budget.capped" if status == "deferred_budget" else "log",
+                      f"{cfg.name}: {task['capability']} waits — {exc.reason}", level=level, agent_id=cfg.id,
+                      opportunity_id=task.get("opportunity_id"), task_id=task["id"],
+                      data={"task_id": task["id"], "status": status, "until": exc.until_iso})
+            if status == "deferred_budget":
+                self._budget_deadline_need(task)
+
+    def _budget_deadline_need(self, task: dict[str, Any]) -> None:
+        """A budget-blocked item due within 48 h goes to Needs Prerit instead of silently waiting."""
+        opp_id = task.get("opportunity_id")
+        if not opp_id:
+            return
+        opp = self.conn.execute("SELECT company_name, title, deadline_at FROM opportunities WHERE id=?",
+                                (opp_id,)).fetchone()
+        deadline = parse_iso(opp["deadline_at"]) if opp else None
+        if not deadline or (deadline - utcnow()).total_seconds() > 48 * 3600:
+            return
+        title = f"Claude budget blocks {opp['company_name']} (due soon)"
+        if self.conn.execute("SELECT 1 FROM needs_prerit WHERE title=? AND status='open'", (title,)).fetchone():
+            return
+        need_id = repo.insert_need(self.conn, {
+            "opportunity_id": opp_id, "kind": "decision", "title": title, "priority": 80, "due_at": opp["deadline_at"],
+            "est_minutes": 1,
+            "instructions_md": (f"**{opp['company_name']} — {opp['title']}** is due within 48 hours, but "
+                                f"`{task['capability']}` needs Claude and today's budget is used up. Raise the budget "
+                                "in Settings › Budget, or let it wait until midnight IST."),
+        })
+        need = serializers.need_json(repo.get_need_row(self.conn, need_id))
+        repo.emit(self.conn, "needs.created", title, level="warn", opportunity_id=opp_id, data={"need": need})
 
     def _on_cancelled(self, run: Run, reason: str, t0: float) -> None:
         task, cfg = run.task, run.agent
@@ -528,6 +870,11 @@ class Worker:
     # ── watchdog / heartbeat / upkeep ───────────────────────────────────────────────────────────────
     def _watchdog(self) -> None:
         with tx(self.conn):
+            revived = budget_mod.revive_deferred(self.conn)
+            revived += self.conn.execute("UPDATE tasks SET status='queued', updated_at=? WHERE status='waiting_memory' "
+                                         "AND (not_before IS NULL OR not_before <= ?)", (now_iso(), now_iso())).rowcount
+            if revived:
+                repo.emit(self.conn, "log", f"{revived} waiting task(s) back in the queue", level="debug")
             for t in queue.expired_leases(self.conn):
                 if t["id"] in self.running:
                     queue.extend_lease(self.conn, t["id"], self.lease_s)
@@ -568,6 +915,16 @@ class Worker:
             self.conn.execute("DELETE FROM events WHERE ts < ?", (to_iso(utcnow() - timedelta(days=60)),))
             self.conn.execute("DELETE FROM commands WHERE consumed_at IS NOT NULL AND consumed_at < ?",
                               (to_iso(utcnow() - timedelta(days=2)),))
+        from hq.util import backup
+
+        try:
+            did = backup.housekeeping(self.conn)
+        except (sqlite3.Error, OSError) as exc:  # a failed backup must never stop the worker
+            log.warning("housekeeping failed: %s", exc)
+            did = [f"backup failed: {exc}"]
+        if did:
+            with tx(self.conn):
+                repo.emit(self.conn, "log", "Housekeeping: " + ", ".join(did), level="debug")
 
     def _update_statuses(self) -> None:
         running = Counter(self._running_counts())

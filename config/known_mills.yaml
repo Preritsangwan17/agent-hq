@@ -1,0 +1,7 @@
+# Organisations Prerit has decided to treat as placement/certificate mills. Matching postings are filtered as
+# scams (company name or posting text, case-insensitive). The original 11-name list from the planning session was
+# not saved in the repo, so this starts empty — add names here, e.g.:
+#   - name: "Example Virtual Internships Pvt Ltd"
+#     note: "charges a 'training fee' before the internship"
+# Behaviour-based checks (fees, certificate-only offers, ID/bank requests) run regardless of this list.
+mills: []

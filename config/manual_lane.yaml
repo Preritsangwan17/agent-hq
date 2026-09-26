@@ -1,0 +1,20 @@
+# Sites whose terms forbid automated access. HQ NEVER fetches these domains (hard block in the fetcher);
+# postings found through them (e.g. alert emails, a pasted link) become Needs Prerit packs.
+domains:
+  - linkedin.com
+  - internshala.com
+  - naukri.com
+  - wellfound.com
+  - angel.co
+  - indeed.com
+  - indeed.co.in
+  - indeed.co.uk
+  - indeed.de
+  - workatastartup.com
+  - ycombinator.com
+  - glassdoor.com
+  - glassdoor.co.in
+  - unstop.com
+  - foundit.in
+  - monster.com
+  - shine.com

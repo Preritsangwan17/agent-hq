@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "required": ["results"],
+  "properties": {
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["i", "target"],
+        "properties": {"i": {"type": "integer"}, "target": {"type": "boolean"}}
+      }
+    }
+  }
+}

@@ -14,6 +14,7 @@ import { hqStream, useLiveConnection } from '@/lib/stream';
 import { BootScreen, PageFallback } from './BootScreen';
 import { Header, PausedBanner, PausedVignette } from './Header';
 import { MobileTabBar } from './MobileTabBar';
+import { RefusalBanner } from './NotificationBell';
 import { titleFor } from './nav';
 import { Sidebar } from './Sidebar';
 
@@ -25,7 +26,7 @@ export function AppShell() {
   const loadError = useHQ((s) => s.loadError);
 
   useLiveConnection();
-  useHealth();
+  const health = useHealth();
 
   useEffect(() => {
     setUnauthorizedHandler(() => {
@@ -63,6 +64,7 @@ export function AppShell() {
         />
         <div className="flex min-w-0 flex-1 flex-col">
           <Header />
+          <RefusalBanner reason={health.data?.worker_refusal} />
           <PausedBanner />
           <main className="mx-auto w-full max-w-[1680px] flex-1 px-4 pb-28 pt-4 md:px-6 md:pb-12 md:pt-6 lg:px-8">
             {ready ? (

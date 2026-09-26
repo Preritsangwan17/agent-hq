@@ -93,8 +93,11 @@ export interface HQState {
   pauseReason: string | null;
   worker: WorkerState;
   conn: ConnState;
+  /** unacknowledged notifications (header bell) */
+  notificationsUnacked: number;
 
   applySnapshot: (s: Snapshot) => void;
+  setNotificationsUnacked: (n: number) => void;
   setStats: (s: Stats) => void;
   setConn: (p: Partial<ConnState>) => void;
   setWorker: (p: Partial<WorkerState>) => void;
@@ -124,6 +127,7 @@ export const useHQ = create<HQState>()((set) => ({
   pauseReason: null,
   worker: { alive: null, heartbeatAt: null, version: null },
   conn: { sse: 'idle', attempts: 0, lastMessageAt: null, lastError: null },
+  notificationsUnacked: 0,
 
   applySnapshot: (s) => {
     const agents: Record<string, Agent> = {};
@@ -154,8 +158,10 @@ export const useHQ = create<HQState>()((set) => ({
       clockSkewMs: Number.isFinite(skew) ? skew : 0,
       pausedAt: s.settings.global_pause ? prev.pausedAt : null,
       pauseReason: s.settings.global_pause ? prev.pauseReason : null,
+      notificationsUnacked: s.notifications_unacked ?? prev.notificationsUnacked,
     }));
   },
+  setNotificationsUnacked: (n) => set({ notificationsUnacked: Math.max(0, n) }),
   setStats: (stats) => set({ stats }),
   setConn: (p) => set((st) => ({ conn: { ...st.conn, ...p } })),
   setWorker: (p) => set((st) => ({ worker: { ...st.worker, ...p } })),
@@ -207,6 +213,7 @@ const STATS_EVENTS = /^(opp\.|needs\.|task\.(succeeded|dead))/;
 function applyBatch(batch: StreamMessage[]): void {
   const s = useHQ.getState();
   let { agents, agentOrder, live, opportunities, needs, settings, worker, lastEventId, pausedAt, pauseReason } = s;
+  let notificationsUnacked = s.notificationsUnacked;
   const cow = { agents: false, live: false, opps: false, needs: false };
   const fresh: HQEvent[] = [];
   const handoffs: HandoffPulse[] = [];
@@ -305,6 +312,12 @@ function applyBatch(batch: StreamMessage[]): void {
       case 'settings.updated':
         if (d.settings && typeof d.settings === 'object') settings = { ...settings, ...d.settings };
         break;
+      case 'mode.changed':
+        if (typeof d.mode === 'string') settings = { ...settings, mode: d.mode as Settings['mode'] };
+        break;
+      case 'notification':
+        notificationsUnacked += 1;
+        break;
       case 'worker.heartbeat':
       case 'worker.started':
         worker = { ...worker, alive: true, heartbeatAt: ev.ts };
@@ -338,6 +351,7 @@ function applyBatch(batch: StreamMessage[]): void {
   if (cow.opps) patch.opportunities = opportunities;
   if (cow.needs) patch.needs = needs;
   if (settings !== s.settings) patch.settings = settings;
+  if (notificationsUnacked !== s.notificationsUnacked) patch.notificationsUnacked = notificationsUnacked;
   if (worker !== s.worker) patch.worker = worker;
   if (pausedAt !== s.pausedAt) patch.pausedAt = pausedAt;
   if (pauseReason !== s.pauseReason) patch.pauseReason = pauseReason;
@@ -418,8 +432,13 @@ export async function patchAgent(id: string, patch: AgentPatch): Promise<Agent> 
   return a;
 }
 
-export async function resolveNeed(id: string, status: 'done' | 'snoozed' | 'dismissed', snooze_hours?: number) {
-  const n = await api.patchNeed(id, { status, snooze_hours });
+export async function resolveNeed(
+  id: string,
+  status: 'done' | 'snoozed' | 'dismissed',
+  snooze_hours?: number,
+  choice?: string,
+) {
+  const n = await api.patchNeed(id, { status, snooze_hours, choice });
   useHQ.getState().upsertNeed(n);
   scheduleStatsRefresh();
   return n;

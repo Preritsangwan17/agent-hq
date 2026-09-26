@@ -16,7 +16,18 @@ const MAX_BACKOFF_MS = 30_000;
  * EventSource only delivers named events we subscribe to. Contract types live in `EVENT_TYPES` (types.ts);
  * these are tolerated extras the backend may emit. Unnamed frames (`message`) are always received.
  */
-const EXTRA_EVENT_TYPES = ['task.cancelled', 'task.deferred', 'agent.invalid', 'agent.error', 'budget.deferred'];
+const EXTRA_EVENT_TYPES = [
+  'task.cancelled', 'task.deferred', 'agent.invalid', 'agent.error', 'budget.deferred',
+  // phase (b): models, benchmarks, roles, Claude budget
+  'model.discovered', 'model.status', 'benchmark.started', 'benchmark.progress', 'benchmark.done', 'roles.updated',
+  'budget.updated', 'budget.capped', 'claude.status',
+  // settings / pipeline / inbox / strategist (phases c–e)
+  'profile.updated', 'source.updated', 'fetch.error', 'gate.result', 'document.created', 'application.updated',
+  'mail.received', 'mail.classified', 'thread.locked', 'thread.unlocked', 'followup.scheduled', 'strategy.report',
+  'golive.updated',
+  // phase (d): inbox, sends, mode
+  'inbox.updated', 'mail.sent', 'mode.changed',
+];
 const STALE_MS = 75_000;
 
 class HQStream {

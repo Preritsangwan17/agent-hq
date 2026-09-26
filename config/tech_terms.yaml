@@ -1,0 +1,90 @@
+# Technology the fact gate knows about. `whitelist` = shown in Prerit's code (F-SKILLS + project techniques).
+# `known` terms outside the whitelist may only appear in negated or aspirational clauses ("haven't used SQL yet",
+# "keen to learn PyTorch"), or when a verified job quote cited by the sentence contains them.
+whitelist:
+  - python
+  - pandas
+  - numpy
+  - scikit-learn
+  - sklearn
+  - scipy
+  - sparse matri(x|ces)
+  - csr
+  - streamlit
+  - jupyter
+  - git
+  - github
+  - yaml
+known:
+  - sql
+  - mysql
+  - postgres(ql)?
+  - mongodb
+  - nosql
+  - pytorch
+  - torch
+  - tensorflow
+  - keras
+  - jax
+  - llms?
+  - large language models?
+  - llm apis?
+  - openai
+  - langchain
+  - llamaindex
+  - agent frameworks?
+  - agentic
+  - genai
+  - generative ai
+  - rag
+  - vector (database|db|store)s?
+  - hugging ?face
+  - transformers
+  - bert
+  - gpt(-\d)?
+  - deep learning
+  - neural networks?
+  - cnns?
+  - rnns?
+  - lstms?
+  - computer vision
+  - opencv
+  - nlp
+  - natural language processing
+  - xgboost
+  - lightgbm
+  - catboost
+  - spark
+  - pyspark
+  - hadoop
+  - airflow
+  - mlflow
+  - kafka
+  - docker
+  - kubernetes
+  - aws
+  - gcp
+  - azure
+  - cloud (platforms?|infrastructure|environments?|computing)
+  - cloud-based
+  - fastapi
+  - flask
+  - django
+  - react
+  - node(\.js)?
+  - javascript
+  - typescript
+  - java
+  - c\+\+
+  - golang
+  - rust
+  - tableau
+  - power bi
+  - excel
+  - knowledge graphs?
+  - graph databases?
+  - neo4j
+  - distributed systems
+  - microservices
+  - rest apis?
+  - ci/cd

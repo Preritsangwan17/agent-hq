@@ -1,0 +1,95 @@
+# Inbox rules (CONTRACT_D §2): deterministic guards that run before and alongside the classifier model.
+# A thread is locked (notify-only: HQ never sends anything on it) when these rules OR the classifier see any of the
+# lock kinds below. Patterns are case-insensitive regexes over subject + body.
+
+# Senders whose mail is in scope even without a linked application.
+ats_senders: [greenhouse, greenhouse-mail, lever, hire, ashbyhq, workday, myworkday, myworkdayjobs, smartrecruiters,
+              hackerrank, codesignal, codility, hackerearth, icims, jobvite, bamboohr, recruitee, workable, teamtailor,
+              taleo, successfactors, mettl, testgorilla]
+alert_senders: [linkedin, internshala, naukri, ziprecruiter, indeed, glassdoor, wellfound, angel, instahyre, foundit,
+                cutshort, unstop, monster, simplyhired]
+
+rejection:
+  - "not (be )?moving forward"
+  - "decided (not )?to (pursue|proceed with) other candidates|pursue other candidates"
+  - "decided not to proceed"
+  - "regret to inform"
+  - "position has (been|now been) filled"
+  - "not (been )?shortlisted"
+  - "no open (positions|roles|internships)"
+  - "(were|are) (not able|unable) to offer"
+  - "will not be (proceeding|progressing)"
+  - "unsuccessful"
+  - "not (selected|a match)|isn't a match"
+
+# Strong signals that decide the rules' label (checked in the order: scam, rejection, offer, legal, assessment,
+# interview_invite, auto_ack, job_alert, info_request; nothing matched → no opinion).
+labels:
+  scam_pay:
+    - "registration fee|enrol+ment fee|processing (fee|charge)|security deposit|refundable|training kit|\\bpurchase\\b"
+    - "\\bpay (a |the )?(rs\\.?|inr|₹|usd|\\$)|\\bupi\\b|\\bcrypto|bitcoin|gift card|wire transfer"
+  offer:
+    - "offer letter|pleased to offer|delighted to offer|happy to offer|extend an offer|your offer|we are offering"
+    - "(?<!expected )(?<!current )\\bctc\\b"
+  legal:
+    - "\\bnda\\b|non-disclosure|background (verification|check)|\\bbgv\\b"
+  assessment:
+    - "hackerrank|codesignal|codility|hackerearth|testgorilla|mettl"
+    - "coding (test|assessment|challenge|round)|take[- ]home|online (test|assessment|quiz)|aptitude|assessment"
+  interview_strong:
+    - "calendly|time ?slots?|zoom|google meet|teams meeting|schedule (a|an) |are you free|free for a"
+    - "technical discussion|meet (on|via|over)|pick a slot|book a (time|slot)"
+  interview_weak:
+    - "\\binterview|shortlisted|\\bround\\b|\\bcall\\b|\\bchat\\b|discuss a possible"
+
+lock:
+  money:
+    - "\\bfees?\\b|registration fee|enrol+ment fee|processing (fee|charge)"
+    - "\\bpay(ment)? (of|a|the)?\\s*(rs\\.?|inr|₹|usd|\\$)"
+    - "\\bpurchase\\b|training kit|security deposit|refundable"
+    - "bank (account|details)|\\bupi\\b|\\bcrypto|bitcoin|\\bcheque\\b|wire transfer|gift card"
+  documents:
+    - "\\baadhaa?r\\b|\\bpan( card)?\\b|passport|\\bvisa\\b|id proof|identity proof|joining documents?|kyc"
+  offer:
+    - "offer letter|pleased to offer|delighted to offer|happy to offer|extend an offer|your offer|offer you"
+    - "\\bctc\\b|compensation|salary|expected stipend|stipend expectation|stipend of"
+    - "joining date|date of joining|onboarding"
+  legal:
+    - "\\bnda\\b|non-disclosure|background (verification|check)|\\bbgv\\b|\\bcontract\\b|\\bagreement\\b"
+  assessment:
+    - "hackerrank|codesignal|codility|hackerearth|testgorilla|mettl"
+    - "coding (test|assessment|challenge|round)|take[- ]home|online (test|assessment|quiz)|aptitude|assessment"
+    - "assignment"
+  interview:
+    - "\\binterview|calendly|time ?slots?|availability|\\bavailable\\b|are you free|free for a"
+    - "schedule (a|an|the)|\\bcall\\b|\\bchat\\b|zoom|google meet|\\bmeet\\b|teams meeting|hangout"
+    - "\\bround\\b|shortlisted|technical discussion|discuss a possible|work full[- ]time from|can you work"
+  profile:
+    - "\\bc?gpa\\b|\\bmarks?\\b|percentage|graduation year|year of graduation|transcript|marksheet"
+
+auto_ack:
+  - "received your application|application (has been )?received|application (was |has been )?submitted"
+  - "thank(s| you) for (applying|your application)|automated (confirmation|message|email)|no reply is needed"
+  - "confirms that your application"
+
+job_alert:
+  - "new jobs? matching|jobs? (you may be interested in|for you)|internships? for you|matches your profile"
+  - "job alert|recommended jobs|based on your preferences|apply now"
+
+info_request:
+  - "could you (please )?(re)?(send|share|provide|confirm)|can you (please )?(re)?(send|share|provide|confirm)"
+  - "please (re)?(send|share|provide|confirm|let us know)|kindly (send|share|provide)|we need your|let us know your"
+  - "did not come through"
+
+# What HQ may answer on its own (and only these). Everything else is left for Prerit.
+requested_items:
+  resume: "\\b(resume|résumé|cv)\\b"
+  github: "github"
+  linkedin: "linkedin"
+  repo: "repo(sitory)?|portfolio|project link"
+  transcript: "transcript|marksheet|mark sheet|grade sheet"
+  academics: "\\bc?gpa\\b|graduation year|year of graduation|percentage"
+  availability: "availability|available|start date|joining date|full[- ]time from|can you work"
+  pay: "stipend|salary|ctc|compensation"
+  documents: "aadhaa?r|\\bpan\\b|passport|visa|id proof"
+allowed_items: [resume, github, linkedin, repo]

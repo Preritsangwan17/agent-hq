@@ -13,7 +13,7 @@ from hq.sim.pool import ROLES_BY_KEY, compute_pay
 
 AGENT_KEYS = {"id", "name", "avatar", "color", "role", "adapter", "model", "capabilities", "cost_tier", "concurrency",
               "schedule", "enabled", "paused", "status", "builtin", "side_effects", "tasks_today", "errors_today",
-              "tokens_today", "restarts", "last_error", "live", "description"}
+              "tokens_today", "restarts", "last_error", "live", "description", "probation_runs_left"}
 LIVE_KEYS = {"agent_id", "now_line", "progress", "current_task_id", "opportunity_id", "model_id", "tok_s",
              "heartbeat_at", "updated_at"}
 EVENT_KEYS = {"id", "ts", "type", "level", "agent_id", "opportunity_id", "task_id", "message", "data"}
@@ -25,13 +25,18 @@ OPP_KEYS = {"id", "company_name", "title", "kind", "role_type", "city", "country
             "deadline_confidence", "pay", "url", "apply_channel", "source_label", "active_agent_id", "needs_prerit",
             "updated_at", "first_seen_at"}
 DETAIL_EXTRA = {"summary", "notes_unverified", "applications", "documents", "timeline", "gates",
-                "eligibility_checks", "needs"}
+                "eligibility_checks", "needs",
+                # phase (c): the evidence behind every verdict
+                "description_available", "location_raw", "apply_url", "automation", "posted_at", "fit_breakdown",
+                "benefits", "eligibility_confidence", "parse", "requirements", "job_quotes", "scam_checks", "sources",
+                "runs", "document_sentences"}
 NEED_KEYS = {"id", "opportunity_id", "kind", "title", "instructions_md", "answers", "files", "direct_url", "priority",
              "due_at", "est_minutes", "status", "created_at"}
 STATS_KEYS = {"found", "verified", "drafted", "applied", "replies", "interviews", "offers", "rejected", "filtered",
               "success_rate", "needs_open", "claude_cost_today_usd", "claude_budget_usd", "claude_calls_today",
               "local_tokens_today", "pay", "by_stage", "sim"}
-SNAPSHOT_KEYS = {"settings", "agents", "opportunities", "events", "stats", "needs", "server_time", "last_event_id"}
+SNAPSHOT_KEYS = {"settings", "agents", "opportunities", "events", "stats", "needs", "server_time", "last_event_id",
+                 "notifications_unacked"}
 
 
 def seed_opp(conn, key: str = "quillfeather-nlp", stage: str = "found", **extra) -> str:
@@ -59,7 +64,7 @@ def test_snapshot_shape(authed, team, db):
         assert set(agent["live"]) == LIVE_KEYS
         assert agent["status"] == "offline"  # no worker heartbeat yet
     applicant = next(a for a in snap["agents"] if a["id"] == "applicant")
-    assert applicant["side_effects"] == ["apply.email_send"]
+    assert applicant["side_effects"] == ["apply.email_send", "apply.ats_submit"]
     assert set(snap["stats"]) == STATS_KEYS
     assert snap["settings"]["mode"] == "dry_run" and snap["settings"]["sim_speed"] == 1.0
     assert snap["last_event_id"] == max(e["id"] for e in snap["events"])

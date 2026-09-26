@@ -1,0 +1,38 @@
+# Scam signals (hq/pipeline/verify/scam.py). `fee` hits are decisive (filtered as fee_required / scam);
+# the rest add up to `suspicious`.
+fee:
+  - 'registration fee'
+  - 'application fee'
+  - 'processing fee'
+  - 'training fee'
+  - 'security deposit'
+  - 'refundable deposit'
+  - 'pay (?:a |an )?(?:small |nominal |one-time )?(?:fee|amount|charge)'
+  - 'fee of (?:rs\.?|inr|₹|usd|\$|¥|jpy)\s?[\d,]+'
+  - '(?:rs\.?|inr|₹)\s?[\d,]+\s*(?:/-)?\s*(?:fee|to (?:register|enroll|apply))'
+  - 'examination fee'
+  - 'course fee'
+  - 'kit charges?'
+certificate_only:
+  - 'certificate (?:will be )?(?:provided|given) (?:after|upon|on) completion'
+  - 'internship certificate only'
+  - 'unpaid.*certificate'
+  - 'letter of recommendation (?:on|after) completion'
+id_bank_request:
+  - 'aadhaa?r (?:card )?(?:number|copy|details)'
+  - 'pan (?:card )?(?:number|copy|details)'
+  - 'bank (?:account|details|statement)'
+  - 'passport (?:copy|number|scan)'
+  - 'otp'
+money_language:
+  - 'crypto(?:currency)?'
+  - 'bitcoin'
+  - 'usdt'
+  - 'cheque'
+  - 'check (?:deposit|payment)'
+  - 'wire transfer'
+  - 'gift cards?'
+  - 'western union'
+free_mail_domains: [gmail.com, yahoo.com, outlook.com, hotmail.com, rediffmail.com, proton.me, protonmail.com, yandex.com]
+brand_names: [google, microsoft, amazon, meta, apple, openai, anthropic, nvidia, deepmind, stripe, netflix, adobe, ibm,
+              intel, samsung, tcs, infosys, wipro, flipkart, deloitte, accenture]

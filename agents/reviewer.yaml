@@ -4,8 +4,8 @@ avatar: "🧠"
 color: "#FB7185"
 role: reviewer
 description: Final Claude sign-off on every outbound text before anything is applied.
-adapter: sim
-adapter_config: {sim_model: claude}
+adapter: script
+adapter_config: {module: hq.pipeline.agents.checks, sim_model: claude}
 model: null
 capabilities: [factcheck.signoff]
 cost_tier: claude

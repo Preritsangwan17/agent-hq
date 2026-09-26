@@ -10,6 +10,7 @@ import { formatClockIST, formatRelative } from '@/lib/format';
 import { useIsMobile, useNow } from '@/lib/hooks';
 import { useHQ, useIsPaused } from '@/lib/store';
 import { KillSwitch } from './KillSwitch';
+import { NotificationBell } from './NotificationBell';
 import { LogoMark } from './Logo';
 import { navFor, titleFor } from './nav';
 import { BudgetGauge, ConnectionIndicator, ModeBadge, SimIndicator } from './StatusCluster';
@@ -52,6 +53,7 @@ export function Header() {
           {!mobile && <span className="h-6 w-px bg-white/10" aria-hidden />}
           <BudgetGauge compact={mobile} />
           <ConnectionIndicator showLabel={!mobile} />
+          <NotificationBell compact={mobile} />
           <KillSwitch compact={mobile} />
         </div>
       </div>

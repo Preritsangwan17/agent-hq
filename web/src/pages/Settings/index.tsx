@@ -1,5 +1,5 @@
 /**
- * /settings — Autonomy & Mode, Rules, Budget, Schedules, Simulation, Profile & Facts, Security.
+ * /settings — Autonomy & Mode, Rules, Sources, Budget, Schedules, Simulation, Profile & Facts, Security.
  * Every editable value is PATCHed to /api/settings optimistically (see saver.tsx); the active tab lives in
  * `?tab=` so it survives reloads and can be linked.
  */
@@ -7,7 +7,9 @@ import {
   FlaskConical,
   Gauge,
   LockKeyhole,
+  Mail,
   MoonStar,
+  Radar,
   ShieldCheck,
   SlidersHorizontal,
   UserRound,
@@ -24,11 +26,13 @@ import { SaveIndicator } from './controls';
 import { SettingsSaverProvider, useSaver } from './saver';
 import { AutonomyTab } from './tabs/AutonomyTab';
 import { BudgetTab } from './tabs/BudgetTab';
+import { GmailTab } from './tabs/GmailTab';
 import { ProfileTab } from './tabs/ProfileTab';
 import { RulesTab } from './tabs/RulesTab';
 import { SchedulesTab } from './tabs/SchedulesTab';
 import { SecurityTab } from './tabs/SecurityTab';
 import { SimulationTab } from './tabs/SimulationTab';
+import { SourcesTab } from './tabs/SourcesTab';
 
 interface TabDef {
   id: string;
@@ -43,6 +47,8 @@ interface TabDef {
 const TABS: readonly TabDef[] = [
   { id: 'autonomy', label: 'Autonomy & Mode', short: 'Autonomy', icon: ShieldCheck, color: '#22D3EE', blurb: 'Mode, approvals, outbound, kill switch', Component: AutonomyTab },
   { id: 'rules', label: 'Rules', icon: SlidersHorizontal, color: '#2DD4BF', blurb: 'Gates, pay floor, fit, daily caps', Component: RulesTab },
+  { id: 'sources', label: 'Sources', icon: Radar, color: '#22D3EE', blurb: 'Job boards, programme pages, paste a link', Component: SourcesTab },
+  { id: 'gmail', label: 'Gmail', icon: Mail, color: '#60A5FA', blurb: 'Connect read-only, replies, notifications', Component: GmailTab },
   { id: 'budget', label: 'Budget', icon: Gauge, color: '#E879F9', blurb: 'Claude spend and call cap', Component: BudgetTab },
   { id: 'schedules', label: 'Schedules', icon: MoonStar, color: '#818CF8', blurb: 'Quiet hours, keep awake', Component: SchedulesTab },
   { id: 'simulation', label: 'Simulation', icon: FlaskConical, color: '#38BDF8', blurb: 'Sim on/off, speed, reset', Component: SimulationTab },

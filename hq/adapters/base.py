@@ -28,6 +28,26 @@ class TransientError(Exception):
     """A failure worth retrying with backoff (network blip, 503, model server restart)."""
 
 
+class Deferred(Exception):
+    """The task can't run now and should wait without burning an attempt: over the Claude budget
+    (status deferred_budget until midnight IST), waiting for memory (waiting_memory) or rate-limited (queued)."""
+
+    def __init__(self, status: str, until_iso: str, reason: str):
+        super().__init__(reason)
+        self.status, self.until_iso, self.reason = status, until_iso, reason
+
+
+@dataclass
+class Services:
+    """Worker-owned LLM plumbing handed to adapters through the RunContext."""
+    router: Any = None      # hq.llm.router.Router
+    claude: Any = None      # hq.llm.cloud.CloudRunner (Claude CLI + xAI)
+    manager: Any = None     # hq.models.manager.ModelManager
+    sim: Any = None         # hq.adapters.sim.SimAdapter (simulated opportunities)
+    fetcher: Any = None     # hq.pipeline.discover.fetch.Fetcher (polite GETs)
+    gmail: Any = None       # hq.gmail.client.GmailClient (or the test fake); None until Gmail is connected
+
+
 @dataclass
 class RunResult:
     output: dict[str, Any] = field(default_factory=dict)       # summary; also the input to pipeline.state
@@ -54,7 +74,10 @@ class Adapter(Protocol):
 class RunContext:
     def __init__(self, *, conn: sqlite3.Connection, task: dict[str, Any], agent: AgentConfig, run_id: str,
                  settings: dict[str, Any], cancel_reason: Callable[[], str | None],
-                 on_heartbeat: Callable[[], None] | None = None):
+                 on_heartbeat: Callable[[], None] | None = None, services: Services | None = None):
+        self.services = services or Services()
+        self.cost_usd = 0.0
+        self.tokens = 0
         self.conn = conn
         self.task = task
         self.agent = agent
@@ -116,3 +139,71 @@ class RunContext:
         if not sql.lstrip().upper().startswith(("SELECT", "WITH")):
             raise ValueError("RunContext.query is read-only")
         return [dict(r) for r in self.conn.execute(sql, params).fetchall()]
+
+    # ── LLM helpers (phase b) ─────────────────────────────────────────────────────────────────────────
+    async def llm(self, role: str, messages: list[dict[str, str]], schema: dict[str, Any] | None, *,
+                  now_line: str | None = None, **kw: Any) -> Any:
+        """Route to the role's model (escalating local → local → Claude). Updates the live row with model + tok/s."""
+        router = self.services.router
+        if router is None:
+            raise TransientError("no model router in this worker")
+        line = now_line or self._last_line or f"{role}…"
+
+        def on_progress(model_id: str, tok_s: float | None, _: str | None) -> None:
+            self.progress(None, line, tok_s=round(tok_s, 1) if tok_s else None, model_id=model_id)
+
+        self.check_cancel()
+        res = await router.route(role, messages, schema, agent_id=self.agent.id, task_id=self.task["id"],
+                                 parent_run_id=self.run_id, on_progress=on_progress, **kw)
+        self.model_id = res.model_id
+        self.cost_usd += res.cost_usd or 0.0
+        self.tokens += (res.prompt_tokens or 0) + (res.completion_tokens or 0)
+        self.progress(None, line, tok_s=res.tok_s, model_id=res.model_id)
+        self.check_cancel()
+        return res
+
+    async def claude(self, task_type: str, prompt: str, schema: dict[str, Any], *, system_prompt: str,
+                     model: str | None = None) -> Any:
+        """One budgeted cloud call (Claude CLI or xAI, by the model id; default = the `cloud_llm` provider).
+        Over budget → Deferred(deferred_budget); unavailable → Deferred for 10 min."""
+        from hq.llm import cloud
+        from hq.llm.claude import ClaudeError, ClaudeRateLimited, ClaudeUnavailable
+        from hq.util.timeutil import iso_in
+        from hq.worker import budget
+
+        s = self.settings
+        m = model or cloud.main_model(s)
+        runner = self.services.claude
+        if runner is None or not await cloud.is_available(runner, m):
+            raise Deferred("queued", iso_in(600),
+                           f"{cloud.label(m)} unavailable ({getattr(runner, 'reason', 'no runner')})")
+        r = budget.reserve(self.conn, task_type, s, run_id=self.run_id)
+        if r is None:
+            raise Deferred("deferred_budget", budget.to_iso(budget.next_midnight_ist()),
+                           "Cloud daily budget or call cap reached")
+        self.progress(None, f"Asking {cloud.label(m)} ({m.split(':')[-1]})…", model_id=cloud.tag(m))
+        try:
+            res = await runner.run(prompt, schema=schema, system_prompt=system_prompt, model=m,
+                                   max_budget_usd=float(s.get("claude_per_call_cap_usd", 0.5)))
+        except ClaudeError as exc:
+            cost = getattr(exc, "cost_usd", None)
+            if cost is not None:
+                budget.commit(self.conn, r, cost_usd=cost, model=m, subtype=exc.kind)
+                self.cost_usd += cost
+            else:
+                budget.release(self.conn, r)
+            if isinstance(exc, ClaudeRateLimited):
+                raise Deferred("queued", iso_in(3600), str(exc)) from exc
+            if isinstance(exc, ClaudeUnavailable):
+                raise Deferred("queued", iso_in(600), str(exc)) from exc
+            raise
+        budget.commit(self.conn, r, cost_usd=res.cost_usd, model=m, input_tokens=res.input_tokens,
+                      output_tokens=res.output_tokens, cache_read_tokens=res.cache_read_tokens)
+        self.model_id = cloud.tag(m)
+        self.cost_usd += res.cost_usd or 0.0
+        return res
+
+    @property
+    def _last_line(self) -> str | None:
+        row = self.conn.execute("SELECT now_line FROM agent_live WHERE agent_id=?", (self.agent.id,)).fetchone()
+        return row["now_line"] if row else None

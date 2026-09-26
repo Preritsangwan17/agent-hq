@@ -2,6 +2,7 @@
 Mutations only write rows (settings, commands, audit, events, tasks); the worker acts on them."""
 from __future__ import annotations
 
+import json
 import sqlite3
 from typing import Any, Iterator, Literal
 
@@ -59,6 +60,7 @@ class FreezeBody(BaseModel):
 class NeedPatch(BaseModel):
     status: Literal["done", "snoozed", "dismissed", "open"]
     snooze_hours: float | None = Field(default=None, gt=0, le=24 * 30)
+    choice: str | None = Field(default=None, max_length=40)  # decision items: one of payload.options[].value
 
 
 class AgentPatch(BaseModel):
@@ -232,9 +234,66 @@ def create_agent(body: dict[str, Any], request: Request, conn: sqlite3.Connectio
     path = write_agent_file(agents_dir, cfg)
     sync_file(conn, path)
     with tx(conn):
+        conn.execute("UPDATE agents SET probation_runs_left=? WHERE id=?", (PROBATION_RUNS, cfg.id))
         repo.audit(conn, "prerit", "agent.create", cfg.id, after=cfg.to_yaml_dict(), remote_addr=_addr(request))
         repo.add_command(conn, "agent_changed", {"agent_id": cfg.id})
     return serializers.agent_json_by_id(conn, cfg.id)
+
+
+LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1"}
+PROBATION_RUNS = 5  # a wizard-created agent's first outputs wait for Prerit's approval
+
+
+def _probe_endpoint(url: str) -> dict[str, Any]:
+    """GET a local model/HTTP agent endpoint (loopback only — the wizard never contacts third parties)."""
+    import httpx
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or (parsed.hostname or "") not in LOOPBACK_HOSTS:
+        return {"ok": False, "url": url, "error": "only http(s)://localhost or 127.0.0.1 endpoints can be probed"}
+    try:
+        r = httpx.get(url, timeout=2.0)
+    except httpx.HTTPError as exc:
+        return {"ok": False, "url": url, "error": f"{type(exc).__name__}: {exc}"[:200]}
+    detail: Any = None
+    try:
+        body = r.json()
+        if isinstance(body, dict) and isinstance(body.get("data"), list):
+            detail = {"models": [m.get("id") for m in body["data"] if isinstance(m, dict)][:20]}
+    except ValueError:
+        pass
+    return {"ok": r.status_code < 400, "url": url, "status": r.status_code, "detail": detail}
+
+
+@router.post("/agents/validate")
+def validate_agent(body: dict[str, Any], request: Request, conn: sqlite3.Connection = Conn) -> dict[str, Any]:
+    """Dry run of POST /api/agents for the wizard's last step: validation errors, the YAML that would be written,
+    an id clash check and, for endpoint adapters, a loopback-only reachability probe. Writes nothing."""
+    import yaml
+
+    reserved = [c for c in body.get("capabilities") or [] if c in RESERVED_SIDE_EFFECTS]
+    errors: list[dict[str, str]] = []
+    if reserved:
+        errors.append({"field": "capabilities",
+                       "message": f"side-effect capabilities are reserved for built-in agents: {', '.join(reserved)}"})
+    try:
+        cfg = AgentConfig.model_validate({**body, "builtin": False})
+    except ValidationError as exc:
+        errors += [{"field": ".".join(str(p) for p in e["loc"]), "message": e["msg"]} for e in exc.errors()]
+        return {"ok": False, "errors": errors, "yaml": None, "probe": None}
+    if (repo.agent_row(conn, cfg.id) or (paths.AGENTS_DIR / f"{cfg.id}.yaml").exists()
+            or (paths.AGENTS_DIR / f"{cfg.id}.yaml.disabled").exists()):
+        errors.append({"field": "id", "message": f"an agent with id '{cfg.id}' already exists"})
+    if cfg.adapter == "script" and not auth.is_loopback(request):
+        errors.append({"field": "adapter", "message": "script agents can only be created from this Mac"})
+    probe = None
+    endpoint = cfg.adapter_config.get("base_url") or cfg.adapter_config.get("endpoint")
+    if cfg.adapter in ("openai_compatible", "http") and isinstance(endpoint, str) and endpoint:
+        url = endpoint.rstrip("/") + ("/models" if cfg.adapter == "openai_compatible" else "/health")
+        probe = _probe_endpoint(url)
+    text = yaml.safe_dump(cfg.to_yaml_dict(), sort_keys=False, allow_unicode=True)
+    return {"ok": not errors, "errors": errors, "yaml": text, "probe": probe}
 
 
 @router.patch("/agents/{agent_id}")
@@ -379,6 +438,15 @@ def patch_need(need_id: str, body: NeedPatch, request: Request, conn: sqlite3.Co
         if need is None:
             raise ApiError(404, "need not found")
         now = now_iso()
+        if need["kind"] == "decision" and body.status in ("done", "dismissed"):
+            payload = serializers._loads(need.get("payload_json"), {})
+            allowed = [o.get("value") for o in payload.get("options") or [] if isinstance(o, dict)]
+            choice = body.choice if body.status == "done" else (body.choice or "drop")
+            if choice not in allowed:
+                raise ApiError(422, f"choice must be one of: {', '.join(map(str, allowed))}")
+            conn.execute("UPDATE needs_prerit SET payload_json=? WHERE id=?",
+                         (json.dumps({**payload, "choice": choice}), need_id))
+            need = {**need, "payload_json": json.dumps({**payload, "choice": choice})}
         if body.status == "snoozed":
             until = iso_in((body.snooze_hours or 24) * 3600)
             conn.execute("UPDATE needs_prerit SET status='snoozed', snoozed_until=? WHERE id=?", (until, need_id))
@@ -406,8 +474,32 @@ def _need_followups(conn: sqlite3.Connection, need: dict[str, Any], status: str)
     """What Prerit's answer means for the pipeline. `submit_form` done = he submitted the pack himself;
     `approve` done = explicit approval for the Applicant to proceed (autonomy approve_first)."""
     done: list[str] = []
+    payload = serializers._loads(need.get("payload_json"), {})
+    if payload.get("probation_task_id") and status in ("done", "dismissed"):
+        repo.add_command(conn, "probation_release", {"task_id": payload["probation_task_id"],
+                                                      "approved": status == "done"})
+        return [f"probation:{'approved' if status == 'done' else 'discarded'}"]
+    if need["kind"] == "decision" and payload.get("decision") == "outbound_ambiguous" and status in ("done", "dismissed"):
+        from hq.pipeline.apply import guard
+
+        guard.resolve_ambiguous(conn, payload.get("outbound_id", ""), sent=payload.get("choice") == "sent")
+        return [f"outbound:{payload.get('choice')}"]
+    if need["kind"] == "approve_reply" and status == "done" and payload.get("document_id"):
+        from hq.api.routes_inbox import queue_reply
+
+        doc = conn.execute("SELECT d.*, t.notify_only_lock FROM documents d LEFT JOIN email_threads t ON "
+                           "t.id=d.email_thread_id WHERE d.id=?", (payload["document_id"],)).fetchone()
+        if doc is None or doc["status"] not in ("draft", "approved") or doc["notify_only_lock"]:
+            return ["reply:not_sent"]
+        return ["task:reply.send"] if queue_reply(conn, dict(doc), bool(payload.get("attach_resume"))) else []
     opp_id, app_id = need.get("opportunity_id"), need.get("application_id")
     opp = repo.get_opportunity_row(conn, opp_id) if opp_id else None
+    if need["kind"] == "decision" and opp is not None and status in ("done", "dismissed") and \
+            opp["stage"] == "verified" and not opp["stage_override"]:
+        # Prerit answered a keep/drop question: score again (it holds while any decision is still open)
+        task_id = queue.enqueue(conn, "score.fit", opportunity_id=opp_id, priority=priority_for("score.fit"),
+                                idempotency_key=f"decision:{need['id']}", source_agent="prerit")
+        return [f"decision:{payload.get('choice')}"] + (["task:score.fit"] if task_id else [])
     if status != "done" or opp is None or opp["stage_override"]:
         return done
     if need["kind"] == "submit_form" and opp["stage"] == "checked":
@@ -421,12 +513,14 @@ def _need_followups(conn: sqlite3.Connection, need: dict[str, Any], status: str)
                   data={"opp": summary, "from": "checked", "to": "applied"})
         done.append("stage:applied")
     elif need["kind"] == "approve" and opp["stage"] == "checked":
-        cap = "apply.email_send" if opp["apply_channel"] == "email" else "apply.manual_pack"
+        route = payload.get("route") or ("email" if opp["apply_channel"] == "email" else "pack")
+        cap = {"email": "apply.email_send", "mock_ats": "apply.ats_submit"}.get(route, "apply.manual_pack")
         task_id = queue.enqueue(conn, cap, opportunity_id=opp_id, application_id=app_id, priority=priority_for(cap),
                                 idempotency_key=f"approve:{need['id']}", source_agent="prerit")
-        if app_id:
-            conn.execute("UPDATE applications SET status='queued', approved_by='prerit', approved_at=?, updated_at=? "
-                         "WHERE id=?", (now_iso(), now_iso(), app_id))
+        if app_id:  # the approval binds to the exact letter + résumé digest shown in the item
+            conn.execute("UPDATE applications SET status='queued', approved_by='prerit', approved_at=?, updated_at=?, "
+                         "approval_sha256=COALESCE(?, approval_sha256) WHERE id=?",
+                         (now_iso(), now_iso(), payload.get("sha256"), app_id))
         repo.update_opportunity(conn, opp_id, {"stage_reason": "approved by Prerit"})
         if task_id:
             done.append(f"task:{cap}")

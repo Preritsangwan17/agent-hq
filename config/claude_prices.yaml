@@ -1,0 +1,13 @@
+# Seed cost estimates (USD) per Claude task type for the budget's EMA. Real `total_cost_usd` values replace
+# these as calls complete (EMA alpha 0.3). Client-side estimates under subscription auth — "notional" spend.
+default: 0.08
+task_types:
+  factcheck.signoff: 0.06
+  polish.final: 0.10
+  verify.eligibility_hard: 0.05
+  strategy.daily_review: 0.25
+  debug.failed_run: 0.08
+  living_cost.research: 0.12
+  check.quality: 0.04
+  escalation: 0.06
+  benchmark: 0.05

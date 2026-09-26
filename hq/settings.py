@@ -1,6 +1,6 @@
 """Paths and environment for Agent HQ. Everything else imports from here.
 
-Tests and throwaway runs point HQ_ENV_FILE / HQ_DB_PATH (and optionally HQ_AGENTS_DIR, HQ_RUN_DIR, HQ_LOG_DIR)
+Tests and throwaway runs point HQ_ENV_FILE / HQ_DB_PATH (and optionally HQ_DATA_DIR, HQ_AGENTS_DIR, HQ_RUN_DIR, HQ_LOG_DIR)
 at data/test/ so they never touch Prerit's real passcode, database, agent configs or pidfiles.
 Code elsewhere reads these as module attributes at call time (``settings.DB_PATH``) so tests can monkeypatch them.
 """
@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DATA = ROOT / "data"
+DATA = Path(os.environ.get("HQ_DATA_DIR", ROOT / "data"))
 DB_PATH = Path(os.environ.get("HQ_DB_PATH", DATA / "hq.db"))
 RUN_DIR = Path(os.environ.get("HQ_RUN_DIR", DATA / "run"))
 LOG_DIR = Path(os.environ.get("HQ_LOG_DIR", DATA / "logs"))
@@ -24,8 +24,8 @@ API_PORT = int(os.environ.get("HQ_PORT", "8765"))
 TZ_DISPLAY = "Asia/Kolkata"
 
 
-def load_env(path: Path | None = None) -> dict:
-    """Parse .env (KEY=VALUE lines) into os.environ without overriding values already set."""
+def read_env_file(path: Path | None = None) -> dict:
+    """Parse .env (KEY=VALUE lines) without touching os.environ."""
     path = path or ENV_PATH
     values = {}
     if path.exists():
@@ -35,13 +35,39 @@ def load_env(path: Path | None = None) -> dict:
                 continue
             key, _, value = line.partition("=")
             values[key.strip()] = value.strip().strip('"').strip("'")
+    return values
+
+
+def load_env(path: Path | None = None) -> dict:
+    """Parse .env (KEY=VALUE lines) into os.environ without overriding values already set."""
+    values = read_env_file(path)
     for key, value in values.items():
         os.environ.setdefault(key, value)
     return values
 
 
-def set_env_value(key: str, value: str, path: Path | None = None) -> None:
-    """Insert or replace KEY=VALUE in .env (file mode 600) and in os.environ."""
+_fresh_cache: dict[str, tuple[float, dict]] = {}
+
+
+def env_fresh(key: str) -> str | None:
+    """A secret/connection value as it is in .env *now* (so connecting Gmail or adding an API key needs no restart),
+    falling back to the process environment. Safety flags (HQ_FORCE_DRY_RUN, HQ_MODE) deliberately don't use this."""
+    path = ENV_PATH
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        mtime = -1.0
+    cached = _fresh_cache.get(str(path))
+    if cached is None or cached[0] != mtime:
+        cached = (mtime, read_env_file(path) if mtime >= 0 else {})
+        _fresh_cache[str(path)] = cached
+    value = cached[1].get(key)
+    return value if value else (os.environ.get(key) or None)
+
+
+def set_env_value(key: str, value: str, path: Path | None = None, *, export: bool = True) -> None:
+    """Insert or replace KEY=VALUE in .env (file mode 600) and, unless export=False, in os.environ (safety flags
+    like HQ_FORCE_DRY_RUN must only take effect after a restart, so they are written with export=False)."""
     path = path or ENV_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
     lines = path.read_text().splitlines() if path.exists() else []
@@ -56,7 +82,8 @@ def set_env_value(key: str, value: str, path: Path | None = None) -> None:
         out.append(f"{key}={value}")
     path.write_text("\n".join(out) + "\n")
     path.chmod(0o600)
-    os.environ[key] = value
+    if export:
+        os.environ[key] = value
 
 
 def ensure_dirs() -> None:

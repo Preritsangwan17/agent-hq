@@ -61,7 +61,7 @@ CAPABILITY_IDS = [c[0] for c in CAPABILITIES]
 
 # Capabilities the scheduler may create tasks for on interval/cron agents (others need an opportunity).
 SCHEDULABLE = ["discover.ats", "discover.program_page", "discover.feed", "discover.email_alerts",
-               "inbox.poll", "strategy.daily_review"]
+               "inbox.poll", "followup.send", "strategy.daily_review"]
 
 # Display order of the starting team (CONTRACT §6); user-created agents follow in creation order.
 TEAM_ORDER = ["scout", "verifier", "writer", "factchecker", "reviewer", "resume", "applicant", "inbox", "followup",
@@ -71,7 +71,7 @@ PALETTE = ["#22D3EE", "#2DD4BF", "#A78BFA", "#F59E0B", "#FB7185", "#60A5FA", "#F
            "#FB923C", "#E879F9", "#34D399", "#818CF8", "#FACC15", "#38BDF8", "#F87171", "#C084FC"]
 
 ID_RE = re.compile(r"^[a-z][a-z0-9_-]{1,31}$")
-MODEL_RE = re.compile(r"^(auto|(mlx|ollama|lmstudio|llamacpp|claude|sim|openai):.+)$")
+MODEL_RE = re.compile(r"^(auto|(mlx|ollama|lmstudio|llamacpp|claude|xai|sim|openai):.+)$")
 
 
 def is_side_effect_family(capability: str) -> bool:

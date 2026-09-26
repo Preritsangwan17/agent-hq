@@ -1,4 +1,4 @@
-/** Autonomy & Mode: read-only mode ladder, autonomy (auto / approve-first), freeze outbound, big kill switch. */
+/** Autonomy & Mode: mode ladder, the go-live checklist, autonomy (auto / approve-first), freeze outbound, kill switch. */
 import {
   Check,
   FlaskConical,
@@ -29,6 +29,7 @@ import { MODE_META, colors, withAlpha } from '@/theme/tokens';
 import { SettingRow, Toggle } from '../controls';
 import { Callout, Section } from '../parts';
 import { useSaver } from '../saver';
+import { GoLiveSection } from './GoLiveSection';
 
 export function AutonomyTab() {
   const s = useSettings();
@@ -36,6 +37,8 @@ export function AutonomyTab() {
   return (
     <div className="space-y-5">
       <ModePanel mode={s.mode} />
+
+      <GoLiveSection />
 
       <Section
         kicker="Approvals"
@@ -93,7 +96,7 @@ function ModePanel({ mode }: { mode: Mode }) {
       />
       <div className="relative flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
         <div className="min-w-0">
-          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted">Current mode · read-only</div>
+          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted">Current mode · changes only via the checklist</div>
           <div className="mt-2 flex flex-wrap items-center gap-3">
             <span
               className="inline-flex items-center gap-2.5 rounded-2xl border px-4 py-2 font-display text-2xl font-bold tracking-[0.08em] md:text-3xl"
@@ -108,7 +111,7 @@ function ModePanel({ mode }: { mode: Mode }) {
               {meta.label}
             </span>
             <Badge color="#8B95A7" icon={LockKeyhole} size="md">
-              Locked in phase (a)
+              Loopback-only · typed GO LIVE
             </Badge>
           </div>
           <p className="mt-3 max-w-xl text-sm leading-relaxed text-ink/85">{meta.hint}</p>
@@ -139,18 +142,20 @@ function ModePanel({ mode }: { mode: Mode }) {
                 >
                   {m.label}
                 </div>
-                <div className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-faint">{current ? 'Now' : 'Phase (d)'} · {l.note}</div>
+                <div className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-faint">{current ? 'Now' : i < idx ? 'Done' : 'Checklist'} · {l.note}</div>
               </li>
             );
           })}
         </ol>
       </div>
 
-      <Callout icon={LockKeyhole} color="#FBBF24" title="GO LIVE comes in phase (d) — loopback only" className="relative mt-5">
-        Switching to SELF-TEST or LIVE needs an <b>.env</b> edit, a restart and a typed confirmation from this Mac (127.0.0.1). It is
-        never available from the phone or the LAN, and it only unlocks after the go-live checklist: profile fields confirmed, golden
-        fact tests green, at least 5 reviewed dry-run applications, caps set and the Gmail send-scope consent.
-      </Callout>
+      {mode !== 'live' && (
+        <Callout icon={LockKeyhole} color="#FBBF24" title="Going live is loopback-only" className="relative mt-5">
+          Switching to SELF-TEST or LIVE needs an <b>.env</b> edit, a restart and a typed confirmation from this Mac (127.0.0.1). It is
+          never available from the phone or the LAN, and it only unlocks after the checklist below: profile fields confirmed, golden
+          fact tests green, at least 5 reviewed dry-run applications, caps set and the Gmail send-scope consent.
+        </Callout>
+      )}
     </GlassPanel>
   );
 }
