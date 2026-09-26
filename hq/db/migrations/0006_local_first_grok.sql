@@ -1,6 +1,9 @@
--- 0006: Grok (xAI) is the only cloud model, local models come first, per-model on/off switches.
+-- 0006: local models first; cloud providers (Claude CLI, Codex CLI, Grok) each switchable; per-model on/off.
 ALTER TABLE claude_usage RENAME TO cloud_usage;
-ALTER TABLE cloud_usage ADD COLUMN cost_source TEXT;          -- reported (exact, from xAI) | estimated (price table)
+ALTER TABLE cloud_usage ADD COLUMN cost_source TEXT;   -- reported (exact, from xAI) | estimated | subscription
+ALTER TABLE cloud_usage ADD COLUMN provider TEXT;      -- xai | claude | codex (NULL = rows from before: xai)
+ALTER TABLE cloud_usage ADD COLUMN notional_usd REAL;  -- a subscription CLI's API-equivalent figure (not spend)
+CREATE INDEX IF NOT EXISTS idx_cloud_usage_provider ON cloud_usage(provider, created_at);
 CREATE INDEX IF NOT EXISTS idx_cloud_usage_date ON cloud_usage(date_local);
 ALTER TABLE models ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1;   -- Prerit's on/off switch per local model
 

@@ -439,7 +439,7 @@ def test_engine_switch_and_per_model_switch_routes(authed, db):
     _add_model(db, "mlx:q/Qwen3-30B", 17.0)
     r = authed.post("/api/ai/engines", json={"engines": "local"}, headers=MUTATE)
     assert r.status_code == 200 and r.json()["policy"]["engines"] == "local"
-    assert authed.get("/api/settings").json()["settings"]["grok_enabled"] is False
+    assert authed.get("/api/settings").json()["settings"]["cloud_ai_enabled"] is False
     assert authed.post("/api/ai/engines", json={"engines": "some"}, headers=MUTATE).status_code == 400
     assert authed.post("/api/ai/engines", json={"engines": "none"}, headers=MUTATE).json()["policy"]["engines"] == "none"
     r = authed.post("/api/models/mlx:q/Qwen3-30B/enabled", json={"enabled": False}, headers=MUTATE)

@@ -381,12 +381,12 @@ class Worker:
     async def _check_cloud(self) -> None:
         runner = self.services.cloud
         before = runner.state(self.settings)
-        await runner.available(force=True)
+        await (runner.check_all() if hasattr(runner, "check_all") else runner.available(force=True))
         after = runner.state(self.settings)
         with tx(self.conn):
             set_settings(self.conn, {"cloud_state": {**after, "checked_at": now_iso()}}, by="worker")
             if before.get("available") != after.get("available") and before.get("checked"):
-                repo.emit(self.conn, "cloud.status", f"Grok {'available' if after['available'] else 'unavailable'}"
+                repo.emit(self.conn, "cloud.status", f"Cloud models {'available' if after['available'] else 'unavailable'}"
                           + (f": {after['reason']}" if after.get("reason") else ""),
                           level="info" if after["available"] else "warn", data=after)
 

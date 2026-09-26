@@ -38,10 +38,10 @@ CAPABILITIES: list[tuple[str, str, str, str]] = [
     ("draft.research_statement", "Draft research statement", "draft", "Research-program statement."),
     ("draft.form_answers", "Draft form answers", "draft", "Answers mapped to facts or confirmed fields."),
     ("draft.followup", "Draft follow-up", "draft", "One polite follow-up."),
-    ("polish.final", "Final polish", "draft", "Grok polish, only when the local-first policy allows it."),
+    ("polish.final", "Final polish", "draft", "Cloud polish, only when the local-first policy allows it."),
     ("factcheck.deterministic", "Fact rules", "check", "Deterministic fact-gate rules."),
     ("factcheck.sentence", "Sentence fact-check", "check", "Independent per-sentence verifier."),
-    ("factcheck.signoff", "Sign-off", "check", "Independent final sign-off: a second local model, or Grok."),
+    ("factcheck.signoff", "Sign-off", "check", "Independent final sign-off: a second local model, or a cloud model."),
     ("check.quality", "Quality gate", "check", "Specificity, clichés, length, salutation."),
     ("build.resume", "Build résumé", "build", "Approved bullets only, one page."),
     ("apply.email_send", "Send application email", "apply", "Outbound email (reserved side effect)."),
@@ -71,7 +71,7 @@ PALETTE = ["#22D3EE", "#2DD4BF", "#A78BFA", "#F59E0B", "#FB7185", "#60A5FA", "#F
            "#FB923C", "#E879F9", "#34D399", "#818CF8", "#FACC15", "#38BDF8", "#F87171", "#C084FC"]
 
 ID_RE = re.compile(r"^[a-z][a-z0-9_-]{1,31}$")
-MODEL_RE = re.compile(r"^(auto|(mlx|ollama|lmstudio|llamacpp|xai|sim|openai):.+)$")
+MODEL_RE = re.compile(r"^(auto|(mlx|ollama|lmstudio|llamacpp|xai|claude|codex|sim|openai):.+)$")
 
 
 def is_side_effect_family(capability: str) -> bool:

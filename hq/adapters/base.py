@@ -29,7 +29,7 @@ class TransientError(Exception):
 
 
 class Deferred(Exception):
-    """The task can't run now and should wait without burning an attempt: over the Grok budget
+    """The task can't run now and should wait without burning an attempt: over the Grok budget or a CLI's window
     (status deferred_budget until midnight IST), waiting for memory (waiting_memory) or rate-limited (queued)."""
 
     def __init__(self, status: str, until_iso: str, reason: str):
@@ -41,7 +41,7 @@ class Deferred(Exception):
 class Services:
     """Worker-owned LLM plumbing handed to adapters through the RunContext."""
     router: Any = None      # hq.llm.router.Router
-    cloud: Any = None       # hq.llm.cloud.CloudRunner (Grok via xAI's API)
+    cloud: Any = None       # hq.llm.cloud.CloudRunner (Claude CLI, Codex CLI, Grok)
     manager: Any = None     # hq.models.manager.ModelManager
     sim: Any = None         # hq.adapters.sim.SimAdapter (simulated opportunities)
     fetcher: Any = None     # hq.pipeline.discover.fetch.Fetcher (polite GETs)
@@ -143,7 +143,7 @@ class RunContext:
     # ── LLM helpers (phase b) ─────────────────────────────────────────────────────────────────────────
     async def llm(self, role: str, messages: list[dict[str, str]], schema: dict[str, Any] | None, *,
                   now_line: str | None = None, **kw: Any) -> Any:
-        """Route to the role's model (local → a different local model → Grok when hq.llm.policy allows it).
+        """Route to the role's model (local → a different local model → a cloud model when hq.llm.policy allows it).
         Updates the live row with model + tok/s."""
         router = self.services.router
         if router is None:
@@ -164,27 +164,31 @@ class RunContext:
         return res
 
     async def cloud(self, task_type: str, prompt: str, schema: dict[str, Any], *, system_prompt: str,
-                    model: str | None = None) -> Any:
-        """One budgeted Grok call (default: the fast model). Grok switched off, unavailable → Deferred;
-        over budget → Deferred(deferred_budget) until midnight IST."""
+                    model: str | None = None, tier: str = "fast", lineage: set[str] | None = None) -> Any:
+        """One cloud call: the given model, or the first suitable provider (hq.llm.cloud order: subscription CLIs,
+        then Grok). Cloud switched off / nothing reachable → Deferred; Grok over its $ limit → Deferred until
+        midnight IST."""
         from hq.llm import cloud, policy
         from hq.llm.errors import CloudError, CloudRateLimited, CloudUnavailable
         from hq.util.timeutil import iso_in
         from hq.worker import budget
 
         s = self.settings
-        if not policy.grok_on(s):
-            raise Deferred("queued", iso_in(3600), "Grok is switched off (Settings › AI & budget)")
-        m = model or cloud.fast_model(s)
+        if not policy.cloud_on(s):
+            raise Deferred("queued", iso_in(3600), "cloud models are switched off (Settings › AI & budget)")
         runner = self.services.cloud
-        if runner is None or not await cloud.is_available(runner, m):
-            raise Deferred("queued", iso_in(600),
-                           f"Grok unavailable ({getattr(runner, 'reason', None) or 'no API key in .env'})")
-        r = budget.reserve(self.conn, task_type, s, run_id=self.run_id)
+        m = cloud.tag(model) if model else await cloud.pick(runner, s, tier, lineage or set(), conn=self.conn)
+        if m is None or runner is None or not await cloud.is_available(runner, m):
+            raise Deferred("queued", iso_in(600), "no cloud model reachable right now "
+                                                  f"({getattr(runner, 'reason', None) or 'none switched on'})")
+        prov = cloud.provider_of(m) or "xai"
+        r = budget.reserve(self.conn, task_type, s, run_id=self.run_id, provider=prov)
         if r is None:
+            if prov in cloud.SUBSCRIPTIONS:
+                raise Deferred("queued", iso_in(1800), f"{cloud.label(m)}: HQ's share of this 5-hour window is used")
             raise Deferred("deferred_budget", budget.to_iso(budget.next_midnight_ist()),
                            "Grok daily budget or call cap reached")
-        self.progress(None, f"Asking Grok ({m.split(':')[-1]})…", model_id=cloud.tag(m))
+        self.progress(None, f"Asking {cloud.label(m)} ({m.split(':', 1)[-1]})…", model_id=m)
         try:
             res = await runner.run(prompt, schema=schema, system_prompt=system_prompt, model=m,
                                    max_budget_usd=float(s.get("cloud_per_call_cap_usd", 0.5)))
@@ -196,14 +200,15 @@ class RunContext:
             else:
                 budget.release(self.conn, r)
             if isinstance(exc, CloudRateLimited):
-                raise Deferred("queued", iso_in(3600), str(exc)) from exc
+                raise Deferred("queued", iso_in(600 if prov in cloud.SUBSCRIPTIONS else 3600), str(exc)) from exc
             if isinstance(exc, CloudUnavailable):
                 raise Deferred("queued", iso_in(600), str(exc)) from exc
             raise
         budget.commit(self.conn, r, cost_usd=res.cost_usd, model=m, input_tokens=res.input_tokens,
                       output_tokens=res.output_tokens, cache_read_tokens=res.cache_read_tokens,
-                      cost_source=getattr(res, "cost_source", None))
-        self.model_id = cloud.tag(m)
+                      cost_source=getattr(res, "cost_source", None),
+                      notional_usd=(getattr(res, "raw", None) or {}).get("notional_usd"))
+        self.model_id = m
         self.cost_usd += res.cost_usd or 0.0
         return res
 

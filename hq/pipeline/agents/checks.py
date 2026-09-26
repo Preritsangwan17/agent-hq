@@ -3,8 +3,8 @@
 The fact gate runs every layer on every version: (a) deterministic rules, (b) an independent local verifier whose
 model differs from every model in the document's lineage ("partial" fails), (c) a final sign-off by a model that
 didn't write the text and (when local) isn't the layer-(b) checker either. hq.llm.policy decides whether that
-sign-off is a second local model (free) or Grok. Any failure sends targeted feedback back to the Writer and all
-layers run again; after 3 loops there may be one Grok polish (policy), then the letter goes to Needs Prerit.
+sign-off is a second local model (free) or a cloud model. Any failure sends targeted feedback back to the Writer and all
+layers run again; after 3 loops there may be one cloud polish (policy), then the letter goes to Needs Prerit.
 """
 from __future__ import annotations
 
@@ -64,8 +64,7 @@ def _carry(task: dict[str, Any], doc: dict[str, Any]) -> dict[str, Any]:
 async def _polish_allowed(ctx: RunContext, opp: dict[str, Any], reason: str) -> bool:
     if not policy.polish(ctx.settings, opp, reason).allowed:
         return False
-    runner = ctx.services.cloud
-    return runner is not None and await cloud.is_available(runner, cloud.fast_model(ctx.settings))
+    return await cloud.pick(ctx.services.cloud, ctx.settings, "fast", conn=ctx.conn) is not None
 
 
 async def _fail(task: dict[str, Any], ctx: RunContext, opp: dict[str, Any], doc: dict[str, Any], layer: str,
@@ -83,7 +82,7 @@ async def _fail(task: dict[str, Any], ctx: RunContext, opp: dict[str, Any], doc:
         effects.append(need_effect(
             opp, kind="review_letter", title=f"Review the letter for {label(opp)}",
             instructions=("The fact gate still rejects this letter after 3 rewrites"
-                          + (" and a Grok polish" if carry.get("polished") else "") + ". Edit it yourself or skip "
+                          + (" and a cloud polish" if carry.get("polished") else "") + ". Edit it yourself or skip "
                           "the role. Problems found:\n\n" + "\n".join(f"- {f}" for f in feedback[:10])
                           + f"\n\n---\n\n{doc['content_text']}"),
             priority=60, est_minutes=5, application_id=doc["application_id"],
@@ -190,7 +189,7 @@ async def quality(task: dict[str, Any], ctx: RunContext, opp: dict[str, Any], do
     polish = (int(opp.get("fit_score") or 0) >= int(ctx.settings.get("fit_polish_threshold", 80))
               and not p.get("polished") and await _polish_allowed(ctx, opp, "high fit"))
     return _pass(task, doc, "quality", [], f"{label(opp)} v{doc['version']}: quality gate passed"
-                 + (f" (specificity {rubric:.0f}/5)" if rubric else "") + (" — high fit, Grok polish next" if polish else ""),
+                 + (f" (specificity {rubric:.0f}/5)" if rubric else "") + (" — high fit, cloud polish next" if polish else ""),
                  extra={"polish": polish, "checks": report.checks}, model_id=rubric_model)
 
 
@@ -226,8 +225,8 @@ async def signoff(task: dict[str, Any], ctx: RunContext, opp: dict[str, Any], do
         lines.append(f"[{i}] PREVIOUS: {prev}\n[{i}] SENTENCE: {x['text']}")
         prev = x["text"]
     user = f"FACTS:\n{facts_block(load_facts())}\n\nSENTENCES:\n" + "\n\n".join(lines)
-    output, mid, who, cost = None, None, None, None
-    if decision.model is None:  # a second, independent local model signs off — free
+    output, mid, who, cost, by = None, None, None, None, "local"
+    if decision.tier is None:  # a second, independent local model signs off — free
         try:
             res = await ctx.llm("fact_checker", [{"role": "system", "content": load_prompt("fact_checker")},
                                                  {"role": "user", "content": user}], load_schema("factcheck"),
@@ -235,18 +234,19 @@ async def signoff(task: dict[str, Any], ctx: RunContext, opp: dict[str, Any], do
                                 now_line=f"Local sign-off for {opp['company_name']}…")
             output, mid, who = res.output, res.model_id, res.model_id
         except EscalationExhausted:
-            decision = policy.Decision(policy.grok_on(s), cloud.fast_model(s), "the local sign-off model failed")
+            decision = policy.Decision(policy.cloud_on(s), "fast", "the local sign-off model failed")
             if not decision.allowed:
-                raise Deferred("queued", iso_in(1800), "the local sign-off model failed and Grok is switched off")
+                raise Deferred("queued", iso_in(1800), "the local sign-off model failed and cloud models are off")
     if output is None:
-        model = await cloud.signoff_model(ctx.services.cloud, s, lineage,
-                                          strong_first=decision.model == cloud.strong_model(s)) \
-            if ctx.services.cloud else None
-        if model is None:  # every reachable Grok model wrote part of this text (or Grok is unreachable): wait
+        model = await cloud.signoff_model(ctx.services.cloud, s, lineage, strong_first=decision.tier == "strong",
+                                          conn=ctx.conn) if ctx.services.cloud else None
+        if model is None:  # every reachable cloud model wrote part of this text (or none is reachable): wait
             raise Deferred("queued", iso_in(3600), "no independent model is available for sign-off")
         res = await ctx.cloud("factcheck.signoff", user, load_schema("factcheck"),
                               system_prompt=load_prompt("fact_checker"), model=model)
-        output, mid, who, cost = res.output, cloud.tag(model), f"Grok {model.split(':')[-1]}", res.cost_usd
+        mid = cloud.tag(model)
+        output, who, cost, by = res.output, f"{cloud.label(mid)} {mid.split(':', 1)[-1]}", res.cost_usd, \
+            cloud.provider_of(mid)
     got = {r["i"]: r for r in (output or {}).get("results", []) if isinstance(r, dict) and isinstance(r.get("i"), int)}
     feedback = []
     for i, x in enumerate(sents):
@@ -263,5 +263,4 @@ async def signoff(task: dict[str, Any], ctx: RunContext, opp: dict[str, Any], do
                            f"{label(opp)}: {who} sign-off rejected {len(feedback)} sentence(s)", model_id=mid)
     effects.append({"op": "document.update", "id": doc["id"], "values": {"status": "passed"}})
     return _pass(task, doc, "fact.signoff", effects, f"{label(opp)} v{doc['version']}: signed off by {who}",
-                 extra={"signoff_by": "local" if decision.model is None and cost is None else "grok",
-                        "why": decision.reason}, model_id=mid, cost=cost)
+                 extra={"signoff_by": by, "why": decision.reason}, model_id=mid, cost=cost)

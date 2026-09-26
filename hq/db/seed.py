@@ -36,7 +36,16 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "model_pool_budget_gb": 32,      # M4 Pro, 48 GB unified memory: ~36 GB can be wired for the GPU
     "usability_mode": True,
     "local_ai_enabled": True,        # the local models on this Mac (free, private)
+    "cloud_ai_enabled": True,        # master switch for every cloud provider below
+    "claude_cli_enabled": False,     # Claude CLI on Prerit's subscription (opt in; needs `claude auth login`)
+    "codex_cli_enabled": False,      # ChatGPT's Codex CLI on his subscription (opt in; needs `codex login`)
     "grok_enabled": True,            # Grok via xAI's API (paid) — also needs HQ_XAI_API_KEY in .env
+    "prefer_subscriptions": True,    # already-paid subscription CLIs before pay-per-token Grok
+    "claude_cli_model": "sonnet",
+    "claude_cli_strong_model": "opus",
+    "codex_model": "",               # "" = the Codex CLI's default model
+    "claude_window_calls": 30,       # HQ's share of each 5-hour Claude window (the rest stays yours)
+    "codex_window_calls": 30,        # HQ's share of each 5-hour ChatGPT/Codex window
     "cloud_mode": "saver",           # saver (API-saving) | balanced | quality
     "xai_model": "grok-4-fast",      # fast, cheap tier
     "xai_signoff_model": "grok-4",   # strong tier (sign-off of important applications)
@@ -95,6 +104,10 @@ def _model_name(v: Any) -> str:
     return v
 
 
+def _model_or_default(v: Any) -> str:
+    return "" if v in ("", None) else _model_name(v)
+
+
 def _hhmm(v: Any) -> str:
     if not isinstance(v, str) or len(v) != 5 or v[2] != ":":
         raise SettingError("expected HH:MM")
@@ -138,7 +151,16 @@ EDITABLE: dict[str, Callable[[Any], Any]] = {
     "model_pool_budget_gb": _num(2, 40),
     "usability_mode": _bool,
     "local_ai_enabled": _bool,
+    "cloud_ai_enabled": _bool,
+    "claude_cli_enabled": _bool,
+    "codex_cli_enabled": _bool,
     "grok_enabled": _bool,
+    "prefer_subscriptions": _bool,
+    "claude_cli_model": _choice("haiku", "sonnet", "opus"),
+    "claude_cli_strong_model": _choice("haiku", "sonnet", "opus"),
+    "codex_model": _model_or_default,
+    "claude_window_calls": _num(0, 1000, integer=True),
+    "codex_window_calls": _num(0, 1000, integer=True),
     "cloud_mode": _choice("saver", "balanced", "quality"),
     "grok_credit_usd": _optional(_num(0.0, 100_000.0)),
     "gmail_poll_minutes": _num(1, 60, integer=True),

@@ -25,6 +25,7 @@ from hq.util.ids import new_id
 from hq.util.timeutil import IST, now_iso, to_iso, today_ist, utcnow
 
 EMA_ALPHA = 0.3
+PAID = "COALESCE(provider,'xai')='xai'"   # Grok rows; subscription CLIs (claude, codex) never count against the $ limit
 
 
 @dataclass
@@ -49,7 +50,7 @@ def seed_price(task_type: str) -> float:
 def ema_cost(conn: sqlite3.Connection, task_type: str) -> float:
     ema = seed_price(task_type)
     rows = conn.execute(
-        "SELECT cost_usd_est FROM cloud_usage WHERE task_type=? AND cost_usd_est IS NOT NULL "
+        f"SELECT cost_usd_est FROM cloud_usage WHERE task_type=? AND cost_usd_est IS NOT NULL AND {PAID} "
         "AND subtype NOT IN ('reserved','released') ORDER BY created_at DESC LIMIT 50", (task_type,)).fetchall()
     for r in reversed(rows):
         ema = EMA_ALPHA * float(r[0]) + (1 - EMA_ALPHA) * ema
@@ -66,45 +67,57 @@ def usage_today(conn: sqlite3.Connection, date_ist: str | None = None) -> dict[s
     row = conn.execute(
         "SELECT COALESCE(SUM(CASE WHEN subtype NOT IN ('reserved','released') THEN cost_usd_est END),0) AS spent, "
         "COALESCE(SUM(CASE WHEN subtype='reserved' THEN reserved_usd END),0) AS reserved, "
-        "COUNT(CASE WHEN subtype!='released' THEN 1 END) AS calls FROM cloud_usage WHERE date_local=?",
+        f"COUNT(CASE WHEN subtype!='released' THEN 1 END) AS calls FROM cloud_usage WHERE date_local=? AND {PAID}",
         (day,)).fetchone()
     by_task = {r["task_type"]: {"calls": r["n"], "spent_usd": round(r["s"] or 0, 4)} for r in conn.execute(
-        "SELECT task_type, COUNT(*) AS n, SUM(cost_usd_est) AS s FROM cloud_usage WHERE date_local=? "
+        f"SELECT task_type, COUNT(*) AS n, SUM(cost_usd_est) AS s FROM cloud_usage WHERE date_local=? AND {PAID} "
         "AND subtype NOT IN ('released') GROUP BY task_type", (day,))}
     return {"date_ist": day, "spent_usd": round(row["spent"], 4), "reserved_usd": round(row["reserved"], 4),
             "calls": row["calls"], "by_task": by_task}
 
 
 def reserve(conn: sqlite3.Connection, task_type: str, settings: dict[str, Any] | None = None, *,
-            run_id: str | None = None) -> Reservation | None:
-    """Reserve the estimate, or None when today's budget/call cap would be exceeded. Own transaction."""
+            run_id: str | None = None, provider: str = "xai") -> Reservation | None:
+    """Reserve the estimate, or None when today's Grok budget/call cap (or, for a subscription CLI, HQ's share of
+    its 5-hour window) would be exceeded. Own transaction."""
+    from hq.llm import cloud
+
     s = settings or get_settings(conn)
-    budget = float(s.get("cloud_daily_budget_usd", 2.0))
-    cap = int(s.get("cloud_daily_call_cap", 40))
-    est = ema_cost(conn, task_type)
     with tx(conn):
+        if provider in cloud.SUBSCRIPTIONS:
+            if cloud.window_calls(conn, provider) >= cloud.window_cap(s, provider):
+                return None
+            rid = new_id()
+            conn.execute(
+                "INSERT INTO cloud_usage(id, run_id, task_type, date_local, reserved_usd, subtype, provider, "
+                "created_at) VALUES (?,?,?,?,0, 'reserved', ?, ?)",
+                (rid, run_id, task_type, today_ist().isoformat(), provider, now_iso()))
+            return Reservation(rid, task_type, 0.0, today_ist().isoformat())
+        budget = float(s.get("cloud_daily_budget_usd", 2.0))
+        cap = int(s.get("cloud_daily_call_cap", 40))
+        est = ema_cost(conn, task_type)
         u = usage_today(conn)
         if u["calls"] >= cap or u["spent_usd"] + u["reserved_usd"] + est > budget + 1e-9:
             return None
         rid = new_id()
         conn.execute(
-            "INSERT INTO cloud_usage(id, run_id, task_type, date_local, reserved_usd, subtype, created_at) "
-            "VALUES (?,?,?,?,?, 'reserved', ?)", (rid, run_id, task_type, u["date_ist"], est, now_iso()))
+            "INSERT INTO cloud_usage(id, run_id, task_type, date_local, reserved_usd, subtype, provider, created_at) "
+            "VALUES (?,?,?,?,?, 'reserved', 'xai', ?)", (rid, run_id, task_type, u["date_ist"], est, now_iso()))
     return Reservation(rid, task_type, est, u["date_ist"])
 
 
 def commit(conn: sqlite3.Connection, r: Reservation, *, cost_usd: float | None, model: str | None = None,
            input_tokens: int | None = None, output_tokens: int | None = None, cache_read_tokens: int | None = None,
-           subtype: str = "success", cost_source: str | None = None) -> None:
+           subtype: str = "success", cost_source: str | None = None, notional_usd: float | None = None) -> None:
     """Record the real (client-estimated) cost; a missing cost keeps the reservation estimate."""
     cost = r.estimate_usd if cost_usd is None else float(cost_usd)
     with tx(conn):
         conn.execute(
             "UPDATE cloud_usage SET cost_usd_est=?, model=?, input_tokens=?, output_tokens=?, cache_read_tokens=?, "
-            "subtype=?, cost_source=? WHERE id=?",
+            "subtype=?, cost_source=?, notional_usd=? WHERE id=?",
             (cost, model, input_tokens, output_tokens, cache_read_tokens, subtype,
-             cost_source if cost_usd is not None else "estimated", r.id))
-        repo.emit(conn, "budget.updated", f"Grok {r.task_type}: ${cost:.3f}", level="debug",
+             cost_source if cost_usd is not None else "estimated", notional_usd, r.id))
+        repo.emit(conn, "budget.updated", f"{model or 'cloud'} {r.task_type}: ${cost:.3f}", level="debug",
                   data=budget_state(conn))
 
 

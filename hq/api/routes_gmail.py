@@ -121,7 +121,7 @@ def golive_state(conn: sqlite3.Connection) -> dict[str, Any]:
     local_checkers = conn.execute("SELECT COUNT(*) FROM role_assignments r LEFT JOIN models m ON m.id=r.model_id "
                                   "WHERE r.role='fact_checker' AND COALESCE(m.enabled,1)=1 AND "
                                   "COALESCE(r.reason,'') NOT LIKE 'below floor%'").fetchone()[0]
-    grok_ok = bool(cloud.get("available")) and bool(s.get("grok_enabled", True))
+    grok_ok = bool(cloud.get("available")) and bool(s.get("cloud_ai_enabled", True))
     local_ok = local_checkers >= 2 and bool(s.get("local_ai_enabled", True))
     self_test = s.get("gmail_self_test") or {}
     items = [
@@ -140,11 +140,11 @@ def golive_state(conn: sqlite3.Connection) -> dict[str, Any]:
          "detail": f"{cap} emails/day · 3 lab emails/day · 1 per domain per 14 days · "
                    f"${float(s.get('cloud_daily_budget_usd', 0)):.2f} Grok/day"},
         {"id": "cloud", "gate": True,
-         "label": "Final sign-off available: two independent local checkers or Grok (or the policy acknowledged)",
+         "label": "Final sign-off available: two independent local checkers or a cloud model (or the policy acknowledged)",
          "ok": local_ok or grok_ok or bool(s.get("signoff_policy_ack")),
-         "detail": ("two independent local checkers" if local_ok else "Grok available" if grok_ok else
+         "detail": ("two independent local checkers" if local_ok else "a cloud model is available" if grok_ok else
                     "acknowledged: local checks only" if s.get("signoff_policy_ack") else
-                    cloud.get("reason") or "no second local checker and Grok not available")},
+                    cloud.get("reason") or "no second local checker and no cloud model available")},
         {"id": "send_scope", "gate": False, "label": "Send permission granted (second Google consent)",
          "ok": gauth.has_send_scope(), "detail": ", ".join(x.rsplit("/", 1)[-1] for x in gauth.granted_scopes())
          or "—"},

@@ -3,7 +3,8 @@
 `await router.route(role, messages, schema, …)` tries, in order:
   level 0 — the highest-ranked model assigned to the role (not excluded, not in the document lineage),
   level 1 — the next-ranked DIFFERENT local model (a different family when one exists),
-  level 2 — Grok (the paid cloud model), only when the caller's policy allows it and within today's budget,
+  level 2 — a cloud model (Claude CLI / Codex CLI subscriptions, then paid Grok), only when hq.llm.policy allows
+            it and within the limits,
 and raises EscalationExhausted otherwise. A level fails on invalid JSON after one repair turn, or when the output
 carries a `confidence` below the threshold. Every attempt is an `agent_runs` row linked by `escalated_from_run_id`.
 """
@@ -144,14 +145,15 @@ class Router:
         if cloud_use is None:
             raise EscalationExhausted(f"no local model for {role} succeeded (this step stays local)", attempts)
         decision = policy.escalate(s, cloud_use, local_tried=bool(attempts))
-        if pinned_model and cloud.is_cloud(pinned_model) and policy.grok_on(s):
-            decision = policy.Decision(True, pinned_model, "pinned to Grok")
+        pinned_cloud = pinned_model if pinned_model and cloud.is_cloud(pinned_model) else None
+        if pinned_cloud and cloud.provider_of(pinned_cloud) in cloud.enabled_providers(s):
+            decision = policy.Decision(True, "fast", "pinned to a cloud model")
         if not decision.allowed or self.cloud is None:
-            raise EscalationExhausted(f"no local model for {role} succeeded; Grok not used: "
+            raise EscalationExhausted(f"no local model for {role} succeeded; no cloud model used: "
                                       f"{decision.reason or 'no cloud runner'}", attempts)
-        cloud_model = cloud_model or decision.model
         return await self._cloud(role, messages, schema, task_type or f"escalation.{role}", agent_id, task_id,
-                                 parent_run_id, prev_run, attempts, s, cloud_model, lineage)
+                                 parent_run_id, prev_run, attempts, s, cloud_model or pinned_cloud, lineage,
+                                 decision.tier or "fast")
 
     async def _local(self, model_id: str, messages: list[dict[str, str]], schema: dict[str, Any] | None,
                      max_tokens: int, temperature: float,
@@ -183,47 +185,63 @@ class Router:
     async def _cloud(self, role: str, messages: list[dict[str, str]], schema: dict[str, Any] | None, task_type: str,
                      agent_id: str, task_id: str | None, parent_run_id: str | None, prev_run: str | None,
                      attempts: list[dict[str, Any]], s: dict[str, Any], cloud_model: str | None,
-                     lineage: tuple[str, ...] | list[str]) -> LLMResult:
+                     lineage: tuple[str, ...] | list[str], tier: str = "fast") -> LLMResult:
+        """Ask the first suitable cloud provider (hq.llm.cloud order); a provider that is rate-limited, logged out
+        or over its window hands over to the next one."""
         assert self.cloud is not None
-        model = cloud_model or cloud.fast_model(s)
-        mid, who = cloud.tag(model), cloud.label(model)
-        if mid in set(lineage):
-            raise EscalationExhausted(f"{mid} already authored this document", attempts)
-        if not await cloud.is_available(self.cloud, model):
-            raise EscalationExhausted(f"{who} unavailable ({self.cloud.reason})", attempts)
-        reservation = budget_mod.reserve(self.conn, task_type, s)
-        if reservation is None:
-            raise Deferred("deferred_budget", budget_mod.to_iso(budget_mod.next_midnight_ist()),
-                           "Cloud daily budget or call cap reached")
+        tried: set[str] = set()
         system, prompt = _to_prompt(messages)
-        run_id = new_id()
-        t0 = time.monotonic()
-        try:
-            res = await self.cloud.run(prompt, schema=schema or {"type": "object"}, system_prompt=system, model=model,
-                                       max_budget_usd=float(s.get("cloud_per_call_cap_usd", 0.5)))
-        except CloudError as exc:
-            cost = getattr(exc, "cost_usd", None)
-            if cost is not None or isinstance(exc, (CloudBadOutput, CloudBudgetExceeded)):
-                budget_mod.commit(self.conn, reservation, cost_usd=cost, model=model, subtype=exc.kind)
-            else:
-                budget_mod.release(self.conn, reservation)
-            self._record(run_id, agent_id, task_id, parent_run_id, prev_run, mid, None, "failed",
-                         str(exc), cost=cost, duration_ms=(time.monotonic() - t0) * 1000)
-            attempts.append({"level": 2, "model_id": mid, "error": str(exc)[:300]})
-            if isinstance(exc, CloudRateLimited):
-                raise Deferred("queued", iso_in(3600), f"{who} rate-limited: {exc}") from exc
-            if isinstance(exc, CloudUnavailable):
-                raise EscalationExhausted(f"{who} unavailable: {exc}", attempts) from exc
-            raise EscalationExhausted(f"{who} failed: {exc}", attempts) from exc
-        budget_mod.commit(self.conn, reservation, cost_usd=res.cost_usd, model=model, input_tokens=res.input_tokens,
-                          output_tokens=res.output_tokens, cache_read_tokens=res.cache_read_tokens,
-                          cost_source=getattr(res, "cost_source", None))
-        self._record(run_id, agent_id, task_id, parent_run_id, prev_run, mid, None, "succeeded", None,
-                     res.output, cost=res.cost_usd, duration_ms=res.duration_ms, prompt_tokens=res.input_tokens,
-                     completion_tokens=res.output_tokens)
-        attempts.append({"level": 2, "model_id": mid, "error": None, "cost_usd": res.cost_usd})
-        return LLMResult(mid, res.output, json.dumps(res.output), res.input_tokens, res.output_tokens,
-                         None, None, res.cost_usd, 2, run_id, attempts)
+        while True:
+            model = cloud_model or await cloud.pick(self.cloud, s, tier, set(lineage), conn=self.conn, skip=tried)
+            if model is None:
+                raise EscalationExhausted("no cloud model available (switched off, unreachable, over its usage "
+                                          "window, or it already wrote this text)", attempts)
+            mid, who = cloud.tag(model), cloud.label(model)
+            prov = cloud.provider_of(mid) or "xai"
+            if mid in set(lineage):
+                raise EscalationExhausted(f"{mid} already authored this document", attempts)
+            if cloud_model and not await cloud.is_available(self.cloud, mid):
+                raise EscalationExhausted(f"{who} unavailable ({self.cloud.reason})", attempts)
+            reservation = budget_mod.reserve(self.conn, task_type, s, provider=prov)
+            if reservation is None:
+                if prov in cloud.SUBSCRIPTIONS and not cloud_model:
+                    tried.add(prov)
+                    continue
+                raise Deferred("deferred_budget", budget_mod.to_iso(budget_mod.next_midnight_ist()),
+                               "Grok daily budget or call cap reached")
+            run_id = new_id()
+            t0 = time.monotonic()
+            try:
+                res = await self.cloud.run(prompt, schema=schema or {"type": "object"}, system_prompt=system,
+                                           model=mid, max_budget_usd=float(s.get("cloud_per_call_cap_usd", 0.5)))
+            except CloudError as exc:
+                cost = getattr(exc, "cost_usd", None)
+                if cost is not None or isinstance(exc, (CloudBadOutput, CloudBudgetExceeded)):
+                    budget_mod.commit(self.conn, reservation, cost_usd=cost, model=mid, subtype=exc.kind)
+                else:
+                    budget_mod.release(self.conn, reservation)
+                self._record(run_id, agent_id, task_id, parent_run_id, prev_run, mid, None, "failed",
+                             str(exc), cost=cost, duration_ms=(time.monotonic() - t0) * 1000)
+                attempts.append({"level": 2, "model_id": mid, "error": str(exc)[:300]})
+                if isinstance(exc, (CloudRateLimited, CloudUnavailable)) and not cloud_model:
+                    tried.add(prov)
+                    prev_run = run_id
+                    continue
+                if isinstance(exc, CloudRateLimited):
+                    raise Deferred("queued", iso_in(3600), f"{who} rate-limited: {exc}") from exc
+                if isinstance(exc, CloudUnavailable):
+                    raise EscalationExhausted(f"{who} unavailable: {exc}", attempts) from exc
+                raise EscalationExhausted(f"{who} failed: {exc}", attempts) from exc
+            budget_mod.commit(self.conn, reservation, cost_usd=res.cost_usd, model=mid, input_tokens=res.input_tokens,
+                              output_tokens=res.output_tokens, cache_read_tokens=res.cache_read_tokens,
+                              cost_source=getattr(res, "cost_source", None),
+                              notional_usd=(getattr(res, "raw", None) or {}).get("notional_usd"))
+            self._record(run_id, agent_id, task_id, parent_run_id, prev_run, mid, None, "succeeded", None,
+                         res.output, cost=res.cost_usd, duration_ms=res.duration_ms, prompt_tokens=res.input_tokens,
+                         completion_tokens=res.output_tokens)
+            attempts.append({"level": 2, "model_id": mid, "error": None, "cost_usd": res.cost_usd})
+            return LLMResult(mid, res.output, json.dumps(res.output), res.input_tokens, res.output_tokens,
+                             None, None, res.cost_usd, 2, run_id, attempts)
 
     # ── records ─────────────────────────────────────────────────────────────────────────────────────
     def _record(self, run_id: str, agent_id: str, task_id: str | None, parent_run_id: str | None,
@@ -236,7 +254,7 @@ class Router:
                 "prompt_tokens, completion_tokens, tok_s, ttft_ms, cost_usd, duration_ms, status, error, started_at, "
                 "finished_at, output_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (run_id, task_id, parent_run_id, escalated_from, agent_id,
-                 "xai" if model_id.startswith("xai:") else "openai_compatible", model_id,
+                 cloud.provider_of(model_id) or "openai_compatible", model_id,
                  prompt_tokens if chat is None else chat.prompt_tokens,
                  completion_tokens if chat is None else chat.completion_tokens, chat.tok_s if chat else None,
                  chat.ttft_ms if chat else None, cost,

@@ -317,12 +317,14 @@ def stats(conn: sqlite3.Connection, settings: dict[str, Any] | None = None) -> d
     since = ist_midnight_utc_iso()
     grok = conn.execute(
         "SELECT COALESCE(SUM(CASE WHEN subtype NOT IN ('reserved','released') THEN cost_usd_est END),0) AS cost, "
-        "COUNT(CASE WHEN subtype!='released' THEN 1 END) AS n FROM cloud_usage WHERE date_local=?",
+        "COUNT(CASE WHEN subtype!='released' THEN 1 END) AS n FROM cloud_usage WHERE date_local=? "
+        "AND COALESCE(provider,'xai')='xai'",
         (today_ist().isoformat(),)).fetchone()
     # top-level runs only (router escalation rows are children) and never Grok's tokens
     local = conn.execute(
         "SELECT COALESCE(SUM(COALESCE(prompt_tokens,0)+COALESCE(completion_tokens,0)),0) AS t FROM agent_runs "
         "WHERE started_at >= ? AND parent_run_id IS NULL AND COALESCE(model_id,'') NOT LIKE 'xai:%' "
+        "AND COALESCE(model_id,'') NOT LIKE 'claude:%' AND COALESCE(model_id,'') NOT LIKE 'codex:%' "
         "AND COALESCE(model_id,'') NOT LIKE 'sim:%'",
         (since,)).fetchone()
 

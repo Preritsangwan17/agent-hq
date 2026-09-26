@@ -1,4 +1,4 @@
-"""Writer (draft.cover_letter; also cold emails for email-channel research roles) and polish.final (Grok).
+"""Writer (draft.cover_letter; also cold emails for email-channel research roles) and polish.final (cloud).
 
 Inputs are verified facts with ids, the posting's verified quotes (J1…), the document rules and two gold exemplars;
 never legacy `angle` notes or unconfirmed profile values. Output is one entry per sentence with its citations,
@@ -112,7 +112,7 @@ async def draft(task: dict[str, Any], ctx: RunContext, opp: dict[str, Any]) -> R
         res = await ctx.llm("writer", msgs, load_schema("draft"), max_tokens=1200, temperature=0.2,
                             task_type="draft", now_line=f"Drafting v{version} for {label(opp)}…")
     except EscalationExhausted as exc:
-        raise Deferred("queued", iso_in(1800), f"no local writer model and Grok not used ({exc})") from exc
+        raise Deferred("queued", iso_in(1800), f"no local writer model and no cloud model used ({exc})") from exc
     sentences = clean_sentences(res.output, quotes)
     if not sentences:
         return RunResult(output={"ok": False, "version": version, "loop": loop, "feedback": "empty draft"},
@@ -141,9 +141,9 @@ async def draft(task: dict[str, Any], ctx: RunContext, opp: dict[str, Any]) -> R
 
 
 async def polish(task: dict[str, Any], ctx: RunContext, opp: dict[str, Any]) -> RunResult:
-    """Grok rewrites the latest version (to fix remaining issues, or to lift a high-fit letter) when hq.llm.policy
-    allows it. The result is a new version authored by Grok; every layer then re-checks it and the sign-off uses a
-    model that isn't in the lineage (a local checker, or the other Grok tier)."""
+    """A cloud model rewrites the latest version (to fix remaining issues, or to lift a high-fit letter) when
+    hq.llm.policy allows it. The result is a new version authored by that model; every layer then re-checks it and the
+    sign-off uses a model that isn't in the lineage (a local checker, or another cloud model)."""
     payload = task.get("payload") or {}
     prev = latest_doc(ctx, opp["id"])
     if prev is None:
@@ -160,8 +160,8 @@ async def polish(task: dict[str, Any], ctx: RunContext, opp: dict[str, Any]) -> 
                            task=task_line + "CURRENT DRAFT (JSON):\n" + json.dumps({"sentences": current}),
                            feedback=fb if isinstance(fb, list) else ([fb] if fb else None), sheet=load_facts())
     system, user = msgs[0]["content"], msgs[1]["content"]
-    model = cloud.fast_model(ctx.settings)
-    res = await ctx.cloud("polish.final", user, load_schema("draft"), system_prompt=system, model=model)
+    res = await ctx.cloud("polish.final", user, load_schema("draft"), system_prompt=system, tier="fast")
+    model = res.model
     sentences = clean_sentences(res.output, quotes)
     if not sentences:
         return RunResult(output={"ok": False}, summary="polish returned nothing", cost_usd=res.cost_usd)
@@ -178,7 +178,7 @@ async def polish(task: dict[str, Any], ctx: RunContext, opp: dict[str, Any]) -> 
         effects.append({"op": "application.update", "id": prev["application_id"], "values": {"letter_doc_id": doc_id}})
     return RunResult(output={"ok": True, "version": prev["version"] + 1, "loop": int(payload.get("loop") or 1),
                              "polished": True, "doc_id": doc_id},
-                     effects=effects, summary=f"Grok polished {label(opp)} (v{prev['version'] + 1})",
+                     effects=effects, summary=f"{cloud.label(model)} polished {label(opp)} (v{prev['version'] + 1})",
                      model_id=author, cost_usd=res.cost_usd, prompt_tokens=res.input_tokens,
                      completion_tokens=res.output_tokens)
 

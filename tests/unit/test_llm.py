@@ -9,7 +9,7 @@ from hq.adapters.base import Deferred
 from hq.db.conn import tx
 from hq.db.seed import get_settings, set_settings
 from hq.llm import client as llm_client
-from hq.llm import policy
+from hq.llm import cloud, policy
 from hq.llm.errors import CloudResult
 from hq.llm.router import EscalationExhausted, Router
 from hq.models import roles
@@ -47,16 +47,17 @@ def _set(db, **values: Any) -> dict[str, Any]:
 def test_policy_saver_mode_keeps_optional_work_local(db):
     s = get_settings(db)
     assert policy.mode(s) == "saver" and policy.engines(s) == "both"
-    assert policy.escalate(s, "needed").allowed and policy.escalate(s, "needed").model == "xai:grok-4-fast"
+    d = policy.escalate(s, "needed")
+    assert d.allowed and d.tier == "fast"
     assert not policy.escalate(s, "bulk").allowed
     assert not policy.escalate(s, "second_look", local_tried=True).allowed      # becomes a one-click decision
     top, low = {"fit_score": 90}, {"fit_score": 50}
     assert not policy.polish(s, top, "high fit").allowed                          # never optional polish
     assert policy.polish(s, top, "fix").allowed and not policy.polish(s, low, "fix").allowed
     d = policy.signoff(s, top, local_checker_available=True)
-    assert d.allowed and d.model is None                                           # free local sign-off
+    assert d.allowed and d.tier is None                                            # free local sign-off
     d = policy.signoff(s, top, local_checker_available=False)
-    assert d.allowed and d.model == "xai:grok-4-fast"
+    assert d.allowed and d.tier == "fast"
 
 
 def test_policy_balanced_and_quality_spend_on_important_applications(db):
@@ -64,27 +65,42 @@ def test_policy_balanced_and_quality_spend_on_important_applications(db):
     top, low = {"fit_score": 90}, {"fit_score": 50}
     assert policy.escalate(s, "second_look").allowed
     assert policy.polish(s, top, "high fit").allowed and not policy.polish(s, low, "high fit").allowed
-    assert policy.signoff(s, top, local_checker_available=True).model == "xai:grok-4"
-    assert policy.signoff(s, low, local_checker_available=True).model is None
+    assert policy.signoff(s, top, local_checker_available=True).tier == "strong"
+    assert policy.signoff(s, low, local_checker_available=True).tier is None
     s = _set(db, cloud_mode="quality")
-    assert policy.signoff(s, low, local_checker_available=True).model == "xai:grok-4"
+    assert policy.signoff(s, low, local_checker_available=True).tier == "strong"
 
 
 def test_policy_engine_switches(db):
     s = _set(db, **policy.engines_patch("local"))
     assert policy.engines(s) == "local" and not policy.escalate(s, "needed").allowed
     d = policy.signoff(s, None, local_checker_available=True)
-    assert d.allowed and d.model is None
+    assert d.allowed and d.tier is None
     assert not policy.signoff(s, None, local_checker_available=False).allowed
-    s = _set(db, **policy.engines_patch("grok"))
-    assert policy.engines(s) == "grok" and policy.escalate(s, "bulk").allowed      # Grok only: Grok does it all
+    s = _set(db, **policy.engines_patch("cloud"))
+    assert policy.engines(s) == "cloud" and policy.escalate(s, "bulk").allowed    # Cloud only: cloud does it all
     s = _set(db, **policy.engines_patch("none"))
     assert policy.engines(s) == "none" and not policy.escalate(s, "needed").allowed
+    s = _set(db, **policy.engines_patch("both"), grok_enabled=False)
+    assert policy.engines(s) == "local"                                            # no provider switched on
+    s = _set(db, claude_cli_enabled=True)
+    assert policy.engines(s) == "both" and policy.describe(s)["cloud_order"] == ["claude"]
     with pytest.raises(ValueError):
         policy.engines_patch("everything")
 
 
-# ── router ───────────────────────────────────────────────────────────────────────────────────────────
+def test_cloud_order_prefers_subscriptions_and_respects_switches(db):
+    s = _set(db, claude_cli_enabled=True, codex_cli_enabled=True)
+    assert cloud.enabled_providers(s) == ["claude", "codex", "xai"]
+    assert cloud.candidates(s, "fast") == ["claude:sonnet", "codex:default", "xai:grok-4-fast", "claude:opus",
+                                           "xai:grok-4"]
+    assert cloud.candidates(s, "strong")[0] == "claude:opus"
+    s = _set(db, prefer_subscriptions=False)
+    assert cloud.enabled_providers(s)[0] == "xai"
+    s = _set(db, cloud_ai_enabled=False)
+    assert cloud.enabled_providers(s) == []
+
+
 class FakeManager:
     def __init__(self) -> None:
         self.used: list[str] = []
@@ -182,14 +198,14 @@ async def test_router_defers_when_grok_budget_is_spent(db):
 async def test_router_obeys_the_on_off_switches(db):
     _setup_roles(db)
     grok = FakeCloud()
-    _set(db, **policy.engines_patch("grok"))
+    _set(db, **policy.engines_patch("cloud"))
     chat = make_chat({"mlx:q/Qwen3-4B": ['{"verdict": "no"}']})
     res = await Router(db, FakeManager(), grok, chat_fn=chat).route("eligibility", [{"role": "user", "content": "x"}],
                                                                    SCHEMA, cloud_use="bulk")
     assert res.model_id == "xai:grok-4-fast" and chat.calls == []                 # local models never touched
     _set(db, **policy.engines_patch("local"))
     chat = make_chat({"mlx:q/Qwen3-4B": [], "mlx:q/Qwen2.5-7B": [], "mlx:l/Llama-8B": []})
-    with pytest.raises(EscalationExhausted, match="Grok is switched off"):
+    with pytest.raises(EscalationExhausted, match="cloud models are switched off"):
         await Router(db, FakeManager(), grok, chat_fn=chat).route("eligibility", [{"role": "user", "content": "x"}],
                                                                   SCHEMA)
     assert len(grok.calls) == 1
