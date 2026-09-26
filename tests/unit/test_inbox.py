@@ -353,3 +353,54 @@ def test_marking_dry_run_applications_reviewed(authed, db):
     assert authed.post("/api/applications/a1/review", headers=MUTATE).json() == {"ok": True, "reviewed": 1}
     item = next(i for i in authed.get("/api/golive").json()["items"] if i["id"] == "reviewed")
     assert item["detail"] == "1/5 reviewed" and not item["ok"]
+
+
+# ── owner identity and the Gmail account ─────────────────────────────────────────────────────────────
+def test_owner_identity_is_served(authed):
+    me = authed.get("/api/auth/me").json()
+    assert me["owner"]["name"] == "Prerit Sangwan" and me["owner"]["email"] == "sangwanprerit40@gmail.com"
+    assert authed.get("/api/profile").json()["owner"]["email"] == "sangwanprerit40@gmail.com"
+    assert guard.PRERIT_EMAIL == "sangwanprerit40@gmail.com"
+
+
+def test_gmail_client_from_downloaded_json(authed, hq_env):
+    good = {"installed": {"client_id": "1234-abcdef.apps.googleusercontent.com", "client_secret": "GOCSPX-secret-xyz",
+                          "redirect_uris": ["http://localhost"]}}
+    r = authed.put("/api/gmail/client", json={"client_json": json.dumps(good)}, headers=MUTATE)
+    assert r.status_code == 200 and r.json()["client_configured"] is True
+    env = hq_env.env_file.read_text()
+    assert "HQ_GMAIL_CLIENT_ID=1234-abcdef.apps.googleusercontent.com" in env and "GOCSPX-secret-xyz" in env
+    web = {"web": {"client_id": "1234-abcdef.apps.googleusercontent.com", "client_secret": "GOCSPX-secret-xyz"}}
+    r = authed.put("/api/gmail/client", json={"client_json": json.dumps(web)}, headers=MUTATE)
+    assert r.status_code == 422 and "Desktop" in r.text
+    assert authed.put("/api/gmail/client", json={"client_json": "not json at all, sorry"},
+                      headers=MUTATE).status_code == 422
+    assert authed.put("/api/gmail/client", json={}, headers=MUTATE).status_code == 422
+
+
+async def test_consent_url_preselects_owner_account(hq_env, monkeypatch):
+    from urllib.parse import parse_qs, urlparse
+
+    from hq.gmail import auth as gauth
+
+    monkeypatch.setenv("HQ_GMAIL_CLIENT_ID", "1234-abcdef.apps.googleusercontent.com")
+    monkeypatch.setenv("HQ_GMAIL_CLIENT_SECRET", "GOCSPX-secret-xyz")
+    flow = gauth.OAuthFlow()
+    try:
+        url = await flow.start("readonly")
+    finally:
+        await flow.close()
+    assert parse_qs(urlparse(url).query)["login_hint"] == ["sangwanprerit40@gmail.com"]
+
+
+def test_wrong_gmail_account_blocks_golive_and_live_sends(authed, db, monkeypatch):
+    with tx(db):
+        set_settings(db, {"gmail_state": {"connected": True, "healthy": True, "email": "someone.else@gmail.com"}})
+    g = authed.get("/api/gmail").json()
+    assert g["account_mismatch"] == "someone.else@gmail.com" and g["owner_email"] == "sangwanprerit40@gmail.com"
+    item = next(i for i in authed.get("/api/golive").json()["items"] if i["id"] == "gmail")
+    assert item["ok"] is False and "someone.else@gmail.com" in item["detail"]
+    monkeypatch.setattr(guard.netguard, "current_mode", lambda: "live")
+    with pytest.raises(guard.GuardBlocked, match="not sangwanprerit40@gmail.com"):
+        guard.prepare(db, kind="self_test", to_addr=guard.PRERIT_EMAIL, subject="s", body="b", attachments=[],
+                      content_sha="x" * 64, agent_id="system")

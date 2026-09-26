@@ -27,6 +27,7 @@ export const qk = {
   events: (q: EventsQuery) => ['events', q] as const,
   agentsMeta: ['agents', 'meta'] as const,
   needs: (status: string) => ['needs', status] as const,
+  owner: ['owner'] as const,
 };
 
 /** GET /api/health every 10 s; mirrors worker liveness into the store. */
@@ -68,6 +69,12 @@ export function useOpportunitiesQuery(query: OppQuery = {}, enabled = true) {
 
 export function useEventsQuery(query: EventsQuery = {}, enabled = true) {
   return useQuery({ queryKey: qk.events(query), queryFn: () => api.events(query), enabled });
+}
+
+/** Who HQ works for — Prerit's name and email (config/resume.yaml), shown in the sidebar and settings. */
+export function useOwner() {
+  const q = useQuery({ queryKey: qk.owner, queryFn: api.auth.me, staleTime: 10 * 60_000, retry: false });
+  return q.data?.owner;
 }
 
 export function useAgentsMeta() {

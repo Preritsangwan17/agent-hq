@@ -25,10 +25,10 @@ import { EmptyState } from '@/components/EmptyState';
 import { ApiError, api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatRelative } from '@/lib/format';
-import type { AvailabilityWindow, ProfileFact, ProfileField, SharePolicy } from '@/lib/types';
+import type { AvailabilityWindow, Owner, ProfileFact, ProfileField, SharePolicy } from '@/lib/types';
 import { TextInput } from '@/pages/Agents/formKit';
 import { Segmented } from '../controls';
-import { Callout, Section } from '../parts';
+import { Callout, Code, Section } from '../parts';
 
 const PROFILE = '#60A5FA';
 const qkProfile = ['profile'] as const;
@@ -51,12 +51,13 @@ export function ProfileTab() {
   if (q.isError || !q.data) {
     return <EmptyState icon={UserRound} title="Couldn't load the profile" hint={q.error instanceof Error ? q.error.message : undefined} />;
   }
-  const { fields, facts, required_missing } = q.data;
+  const { fields, facts, required_missing, owner } = q.data;
   const required = fields.filter((f) => f.required_for_live);
   const done = required.length - required_missing.length;
 
   return (
     <div className="space-y-5">
+      {owner && <IdentitySection owner={owner} />}
       <Section
         kicker="Needed before go-live"
         title="Your details"
@@ -83,6 +84,50 @@ export function ProfileTab() {
 
 function asText(v: ProfileField['value']): string {
   return typeof v === 'string' ? v : '';
+}
+
+/** Name, email and links: what every letter, form answer and Gmail send uses. Read-only here. */
+function IdentitySection({ owner }: { owner: Owner }) {
+  const rows: { label: string; value: string | null; href?: string }[] = [
+    { label: 'Name', value: owner.name },
+    { label: 'Email', value: owner.email, href: `mailto:${owner.email}` },
+    { label: 'LinkedIn', value: owner.linkedin, href: owner.linkedin ?? undefined },
+    { label: 'GitHub', value: owner.github, href: owner.github ?? undefined },
+  ];
+  return (
+    <Section
+      kicker="Identity"
+      title="You"
+      icon={BadgeCheck}
+      color={PROFILE}
+      rows={false}
+      right={<Badge color="#34D399" size="md">verified</Badge>}
+      description={
+        <>
+          Letters are signed with this name, forms get this email, and Gmail must be connected as this address — HQ
+          refuses to send from any other account. To change them, edit <Code>config/resume.yaml</Code> and{' '}
+          <Code>config/facts.yaml</Code>.
+        </>
+      }
+    >
+      <dl className="grid gap-3 sm:grid-cols-2">
+        {rows.map((r) => (
+          <div key={r.label} className="min-w-0 rounded-xl border border-white/[.08] bg-white/[.03] px-3 py-2">
+            <dt className="text-[11px] uppercase tracking-[0.12em] text-muted">{r.label}</dt>
+            <dd className="mt-0.5 truncate text-[13.5px] text-ink">
+              {r.value && r.href ? (
+                <a href={r.href} target="_blank" rel="noopener noreferrer" className="hover:text-cyan-200">
+                  {r.value}
+                </a>
+              ) : (
+                (r.value ?? '—')
+              )}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </Section>
+  );
 }
 
 function FieldRow({ field }: { field: ProfileField }) {

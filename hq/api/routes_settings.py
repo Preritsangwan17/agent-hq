@@ -19,6 +19,7 @@ from hq.db import repo
 from hq.db.conn import tx
 from hq.db.serializers import _loads
 from hq.profile import fields as pfields
+from hq.profile import owner
 
 router = APIRouter(prefix="/api", dependencies=[Depends(auth.require_session)])
 
@@ -52,7 +53,7 @@ def profile(conn: sqlite3.Connection = Conn) -> dict[str, Any]:
     facts = [fact_json(dict(r)) for r in conn.execute("SELECT * FROM profile_facts ORDER BY category, id")]
     fields = [pfields.field_json(r) for r in pfields.field_rows(conn)]
     missing = [f["key"] for f in fields if f["required_for_live"] and not f["confirmed"]]
-    return {"facts": facts, "fields": fields, "required_missing": missing}
+    return {"facts": facts, "fields": fields, "required_missing": missing, "owner": owner.info()}
 
 
 @router.patch("/profile/fields/{key}")

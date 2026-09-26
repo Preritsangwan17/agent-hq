@@ -133,7 +133,9 @@ def auth_logout(response: Response) -> dict[str, Any]:
 
 @router.get("/auth/me")
 def auth_me() -> dict[str, Any]:
-    return {"ok": True}
+    from hq.profile import owner
+
+    return {"ok": True, "owner": owner.info()}
 
 
 # ── snapshot / events / stats ────────────────────────────────────────────────────────────────────────

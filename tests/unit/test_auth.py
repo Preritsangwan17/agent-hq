@@ -49,7 +49,8 @@ def test_status_setup_and_login_cookie_flags(client, hq_env):
     assert cookie.startswith("hq_session=")
     for flag in ("HttpOnly", "SameSite=strict", "Path=/", "Max-Age=2592000"):
         assert flag.lower() in cookie.lower()
-    assert client.get("/api/auth/me").json() == {"ok": True}
+    me = client.get("/api/auth/me").json()
+    assert me["ok"] is True and me["owner"]["email"] == "sangwanprerit40@gmail.com"
     assert client.get("/api/auth/status").json()["authenticated"] is True
 
     client.post("/api/auth/logout", headers=MUTATE)

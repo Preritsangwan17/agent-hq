@@ -1,4 +1,4 @@
-/** Segmented control with a sliding highlight (motion layoutId → transform only). Page-local UI primitive. */
+/** Segmented control with a sliding highlight (motion layoutId → transform only). */
 import type { LucideIcon } from 'lucide-react';
 import { LayoutGroup, motion } from 'motion/react';
 import { useId, type ReactNode } from 'react';

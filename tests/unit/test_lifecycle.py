@@ -216,3 +216,4 @@ def test_bootstrap_summary_is_friendly(hq_env, monkeypatch):
     assert summary([], 0, 11) == "database ready (data/hq.db, up to date) · 11 agents"
     monkeypatch.setattr(settings, "DB_PATH", Path("/elsewhere/hq.db"))
     assert summary([], 0, 1).startswith("database ready (/elsewhere/hq.db, up to date)")
+    assert summary([], 0, 10, 11) == "database ready (/elsewhere/hq.db, up to date) · 10 agents · 11 legacy applications imported"

@@ -414,3 +414,18 @@ async def test_quick_benchmark_fills_leaderboard_and_assigns_roles(db, hq_env):
     assert roles.ranked(db, "classifier") == ["mlx:q/Qwen3-4B"]
     assert (hq_env.root / "artifacts" / "bench" / "mlx_q_Qwen3-4B" / "factcheck.json").exists()
     assert db.execute("SELECT 1 FROM events WHERE type='benchmark.done'").fetchone()
+
+
+def test_mlx_missing_is_explained(tmp_path, monkeypatch):
+    """Intel Macs / Linux: mlx-lm isn't installed, so MLX models say why they can't run."""
+    from hq.models.discovery import mlx
+
+    snap = tmp_path / "models--mlx-community--Tiny-1B" / "snapshots" / "abc"
+    snap.mkdir(parents=True)
+    (snap / "config.json").write_text('{"model_type": "qwen3", "quantization": {"bits": 4}}')
+    (snap / "tokenizer_config.json").write_text('{"chat_template": "x"}')
+    (snap / "model.safetensors").write_bytes(b"0" * 1024)
+    monkeypatch.setattr(mlx, "mlx_installed", lambda: False)
+    monkeypatch.setattr(mlx.importlib.util, "find_spec", lambda name: None)
+    info = mlx.scan_repo(tmp_path / "models--mlx-community--Tiny-1B")
+    assert info is not None and not info.runtime_supported and "Apple Silicon" in info.incomplete_reason

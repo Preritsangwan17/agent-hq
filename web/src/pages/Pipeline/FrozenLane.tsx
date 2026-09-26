@@ -28,7 +28,7 @@ export function FrozenLane({ opps, state, needsOpen }: { opps: OppSummary[]; sta
         <span className="grid size-8 shrink-0 place-items-center rounded-xl border border-sky-200/25 bg-sky-200/[.07] shadow-[0_0_20px_-6px_rgba(147,197,253,0.7)]">
           <Snowflake className="size-4 text-sky-200" aria-hidden />
         </span>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-[12rem] flex-1">
           <div className="flex flex-wrap items-baseline gap-x-2">
             <h3 className="font-display text-[15px] font-semibold tracking-tight text-ink">Frozen · legacy shortlist</h3>
             <span className="font-display text-sm font-semibold tabular text-sky-200">{opps.length}</span>

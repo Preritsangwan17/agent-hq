@@ -1,10 +1,11 @@
 /** The Strategist's latest daily report (07:30 IST): summary, auto-applied low-risk actions and open proposals. */
 import { useQuery } from '@tanstack/react-query';
-import { ArrowRight, CheckCircle2, Compass, Lightbulb } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Compass, Lightbulb, Play } from 'lucide-react';
 import { Link } from 'react-router';
-import { Badge, EmptyState, GlassPanel, SectionHeader } from '@/components';
+import { Badge, Button, EmptyState, GlassPanel, SectionHeader } from '@/components';
 import { api } from '@/lib/api';
 import { formatDateIST, formatDateTimeIST } from '@/lib/format';
+import { useRunReview } from '@/pages/Analytics/StrategistPanel';
 import { Markdownish } from '@/pages/Needs/markdown';
 
 const STRAT = '#E879F9';
@@ -12,6 +13,7 @@ const STRAT = '#E879F9';
 export function StrategistCard() {
   const q = useQuery({ queryKey: ['strategy', 'latest'], queryFn: api.strategyLatest, refetchInterval: 5 * 60_000 });
   const report = q.data?.report;
+  const runner = useRunReview();
   return (
     <GlassPanel padding="lg" glow={STRAT} glowStrength={0.25}>
       <SectionHeader
@@ -32,7 +34,12 @@ export function StrategistCard() {
           compact
           color={STRAT}
           title="No report yet"
-          hint={q.data ? `The first review runs ${formatDateTimeIST(q.data.next_run_at)} IST.` : 'Reviews run every morning at 07:30 IST.'}
+          hint={runner.msg ?? (q.data ? `The first review runs ${formatDateTimeIST(q.data.next_run_at)} IST.` : 'Reviews run every morning at 07:30 IST.')}
+          action={
+            <Button size="sm" variant="secondary" icon={Play} loading={runner.busy} onClick={() => void runner.run()}>
+              Run review now
+            </Button>
+          }
         />
       ) : (
         <div className="mt-3 space-y-3">

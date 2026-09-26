@@ -153,3 +153,37 @@ def test_cli(tmp_path, monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "11 new" in out and "Readyly" in out and "₹25,000" in out and "(hours unknown)" in out
     assert (tmp_path / "artifacts" / "legacy" / "01-readyly" / "Prerit_Sangwan_Resume.pdf").exists()
+
+
+@needs_src
+def test_bootstrap_imports_legacy_once(hq_env):
+    from hq.db.seed import seed_all
+    from hq.db.conn import tx
+    from hq.util.bootstrap import import_legacy_once
+
+    conn = connect(hq_env.db)
+    migrate(conn)
+    with tx(conn):
+        seed_all(conn)
+    try:
+        assert import_legacy_once(conn, SRC) == 11
+        frozen = conn.execute("SELECT COUNT(*) FROM applications WHERE status='historical_frozen'").fetchone()[0]
+        assert frozen == 10
+        # second start: already there, nothing re-imported or overwritten
+        conn.execute("UPDATE opportunities SET stage_reason='edited by Prerit' WHERE canonical_key='legacy:01-readyly'")
+        assert import_legacy_once(conn, SRC) == 0
+        assert conn.execute("SELECT stage_reason FROM opportunities WHERE canonical_key='legacy:01-readyly'"
+                            ).fetchone()[0] == "edited by Prerit"
+    finally:
+        conn.close()
+
+
+def test_bootstrap_skips_missing_legacy_folder(hq_env, tmp_path):
+    from hq.util.bootstrap import import_legacy_once
+
+    conn = connect(hq_env.db)
+    migrate(conn)
+    try:
+        assert import_legacy_once(conn, tmp_path / "nope") == 0
+    finally:
+        conn.close()

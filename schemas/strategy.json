@@ -1,0 +1,21 @@
+{
+  "type": "object",
+  "required": ["report_md", "actions"],
+  "properties": {
+    "report_md": {"type": "string", "minLength": 20, "maxLength": 6000},
+    "actions": {
+      "type": "array",
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "required": ["type"],
+        "properties": {
+          "type": {"enum": ["add_ats_slug", "disable_source", "tune_keywords", "change_threshold", "note"]},
+          "params": {"type": "object"},
+          "rationale": {"type": ["string", "null"], "maxLength": 400},
+          "risk": {"enum": ["low", "medium", "high", null]}
+        }
+      }
+    }
+  }
+}

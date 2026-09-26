@@ -20,7 +20,8 @@ dependencies = [
     "python-dateutil>=2.9",
     "fpdf2>=2.8",
     "pypdf>=5.0",
-    "mlx-lm>=0.31.3",
+    # MLX only has Apple Silicon wheels; elsewhere (Intel Macs, Linux CI) HQ uses Ollama / LM Studio / cloud models
+    "mlx-lm>=0.31.3; sys_platform == 'darwin' and platform_machine == 'arm64'",
     "google-api-python-client>=2.140",
     "google-auth-oauthlib>=1.2",
     "playwright>=1.47",

@@ -16,9 +16,16 @@ Mac until you go live.
 | Applying | Email (only to an address quoted on the posting), or a pre-filled pack for ATS forms and LinkedIn/Internshala-type sites. Approve-first is on for your first live applications. |
 | Inbox | Reads Gmail (read-only until you go live). Interview / assessment / offer / money / legal mail locks the thread (HQ never writes there), raises an alert, a macOS banner and a Needs item. Simple info requests get a gated draft. One follow-up at day 10 if nobody replied. |
 | Safety | PAUSE ALL, Freeze outbound, forced dry run, typed GO LIVE from the Mac only, audit log, redaction of secrets and your phone number from anything sent to a model. |
+| Strategist | A daily review at 07:30 IST (or **Run review now**): what worked, what didn't, best-paying roles, budget. It turns off sources that keep failing (never while every source fails, e.g. no Wi-Fi) and adds Greenhouse/Lever/Ashby boards only after checking they exist; everything else is a proposal for you. Works without any model (built-in summary); a cloud or local model words it when available. |
+| Analytics | Funnel found → offer, found vs applied per day, reply rate by source / country / role (with n), which sources work, why roles were stopped, cloud spend vs cap, local tokens by model, pay histogram and pay by country. Every chart has a table view. |
 | Upkeep | Nightly database backup (14 kept), auto-start after login (launchd), crash recovery that checks Sent before any resend. |
 
-Not built: the daily Strategist report and the Analytics charts (the pages exist but are placeholders).
+**Whose HQ it is:** Prerit Sangwan · sangwanprerit40@gmail.com. Letters are signed with that name, forms get that
+email, the self-test goes only there, and HQ refuses to send from any other Gmail account. Both live in
+`config/resume.yaml` (and the fact sheet `config/facts.yaml`); the sidebar and Settings › Profile show them.
+
+The 11 applications from before HQ (the legacy shortlist in `legacy/applications`) are imported automatically on
+the first start as **Frozen** items with real ₹ pay; answer the Needs Prerit item saying which ones you actually sent.
 
 ## Install and start (once)
 
@@ -66,20 +73,25 @@ HQ works with whatever you give it:
    credit you get one Needs item, not failing tasks.
 2. **Claude CLI** (optional): `claude auth login` in Terminal.
 3. **Local models** (optional, free): Ollama or LM Studio running, or MLX models in the Hugging Face cache. HQ
-   finds them (Models page), benchmarks them and assigns roles. Rescan from the Models page.
+   finds them (Models page), benchmarks them and assigns roles. Rescan from the Models page. MLX needs an Apple
+   Silicon Mac with macOS 14 or newer; on an Intel Mac HQ still installs and runs — use Ollama, LM Studio or a
+   cloud model instead.
 
 Spending is capped per day (Settings › Budget, default $5) and per call; over the cap, cloud tasks wait until
 midnight IST.
 
 ## Connect Gmail (read-only)
 
-Settings › Gmail walks you through it:
+Settings › Gmail walks you through it (sign in to Google as **sangwanprerit40@gmail.com** throughout):
 
 1. Create a Google Cloud project and enable the Gmail API.
-2. OAuth consent screen: External, add yourself as a test user, then **Publish app** ("In production"). Testing
-   mode expires the token after 7 days. Google's "unverified app" warning is expected for a single user.
-3. Credentials › OAuth client ID › **Desktop app**; paste the ID and secret into Settings › Gmail (saved to `.env`).
-4. **Connect Gmail (read-only)** — Google opens in a new tab; approve and come back.
+2. OAuth consent screen: External, add sangwanprerit40@gmail.com as a test user, then **Publish app** ("In
+   production"). Testing mode expires the token after 7 days. Google's "unverified app" warning is expected for a
+   single user.
+3. Credentials › OAuth client ID › **Desktop app** › **Download JSON**. In Settings › Gmail choose that
+   `client_secret_….json` file (or paste the client ID and secret instead). It is saved to `.env` only.
+4. **Connect sangwanprerit40@gmail.com (read-only)** — Google opens in a new tab with your account pre-selected;
+   approve and come back. If a different account gets connected, HQ says so and will not send from it.
 
 HQ stores only mail related to your applications, companies you applied to, ATS senders and job alerts.
 
@@ -101,6 +113,7 @@ refuses to start and a red banner says why.
 ## Using it
 
 - **Command Center**: live agents and pay stats. **Pipeline**: every opportunity by stage. **Map**: where they are.
+- **Analytics**: what's working, with the Strategist's daily review underneath (**Run review now** any time).
 - **Needs Prerit**: your lane — packs to submit (copy buttons, résumé file, direct link), approvals, keep/drop
   decisions, interview/offer alerts. Mark each done when handled.
 - **Inbox**: replies, locks, reply drafts (edit / send / discard).

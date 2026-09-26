@@ -5,6 +5,7 @@ starting a consent, disconnecting, writing the live flags to .env, the self-test
 DRY RUN is allowed from anywhere (it only makes HQ safer)."""
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
 from typing import Any
@@ -21,6 +22,7 @@ from hq.db.conn import tx
 from hq.db.seed import get_settings, set_settings
 from hq.gmail import auth as gauth
 from hq.gmail.api import GmailAuthError
+from hq.profile import owner
 from hq.util.timeutil import now_iso, parse_iso, utcnow
 
 router = APIRouter(prefix="/api", dependencies=[Depends(auth.require_session)])
@@ -28,14 +30,22 @@ MIN_REVIEWED = 5
 CONFIRM_PHRASE = "GO LIVE"
 
 
+def account_mismatch(state: dict[str, Any]) -> str | None:
+    """The connected mailbox when it isn't the owner's (HQ only reads and sends as Prerit), else None."""
+    got = (state.get("email") or "").strip().lower()
+    return got if got and not owner.is_owner_address(got) else None
+
+
 def gmail_json(conn: sqlite3.Connection) -> dict[str, Any]:
     s = get_settings(conn)
     scopes = gauth.granted_scopes()
+    state = s.get("gmail_state") or {}
     return {"client_configured": bool(gauth.client_id() and gauth.client_secret()),
             "connected": gauth.connected(), "scopes": [x.rsplit("/", 1)[-1] for x in scopes],
             "send_scope": gauth.has_send_scope(scopes), "compose_scope": gauth.has_compose_scope(scopes),
-            "state": s.get("gmail_state") or {}, "oauth": gauth.FLOW.state(), "forced_dry_run": gauth.forced_dry_run(),
-            "refusal": s.get("worker_refusal")}
+            "state": state, "oauth": gauth.FLOW.state(), "forced_dry_run": gauth.forced_dry_run(),
+            "refusal": s.get("worker_refusal"), "owner_email": owner.email(),
+            "account_mismatch": account_mismatch(state)}
 
 
 @router.get("/gmail")
@@ -44,20 +54,52 @@ def get_gmail(conn: sqlite3.Connection = Conn) -> dict[str, Any]:
 
 
 class ClientIn(BaseModel):
+    """Either the ID + secret, or the whole `client_secret_….json` Google offers as a download."""
     model_config = ConfigDict(extra="forbid")
-    client_id: str = Field(min_length=20, max_length=200)
-    client_secret: str = Field(min_length=10, max_length=200)
+    client_id: str | None = Field(default=None, min_length=20, max_length=200)
+    client_secret: str | None = Field(default=None, min_length=10, max_length=200)
+    client_json: str | None = Field(default=None, min_length=20, max_length=20_000)
+
+
+def client_from_json(raw: str) -> tuple[str, str]:
+    """(client_id, client_secret) from Google's downloaded client file. Only Desktop ("installed") clients work with
+    the loopback consent HQ uses."""
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        raise ApiError(422, "that isn't the JSON file Google downloads (client_secret_….json)") from None
+    if not isinstance(data, dict):
+        raise ApiError(422, "that isn't the JSON file Google downloads (client_secret_….json)")
+    if "installed" not in data:
+        kind = next(iter(data), None)
+        hint = " — this is a Web application client; create a Desktop app client instead" if kind == "web" else ""
+        raise ApiError(422, f"no Desktop client in that file{hint}")
+    inst = data["installed"] or {}
+    cid, secret = str(inst.get("client_id") or ""), str(inst.get("client_secret") or "")
+    if not cid or not secret:
+        raise ApiError(422, "the file has no client_id / client_secret")
+    return cid, secret
 
 
 @router.put("/gmail/client")
 def put_client(body: ClientIn, request: Request, conn: sqlite3.Connection = Conn) -> dict[str, Any]:
     auth.require_loopback(request)
-    if not re.fullmatch(r"[\w.-]+\.apps\.googleusercontent\.com", body.client_id.strip()):
+    if body.client_json:
+        cid, secret = client_from_json(body.client_json)
+    elif body.client_id and body.client_secret:
+        cid, secret = body.client_id, body.client_secret
+    else:
+        raise ApiError(422, "paste the client ID and secret, or the downloaded client_secret_….json")
+    cid, secret = cid.strip(), secret.strip()
+    if not re.fullmatch(r"[\w.-]+\.apps\.googleusercontent\.com", cid):
         raise ApiError(422, "that doesn't look like a Desktop OAuth client ID (…apps.googleusercontent.com)")
-    paths.set_env_value("HQ_GMAIL_CLIENT_ID", body.client_id.strip())
-    paths.set_env_value("HQ_GMAIL_CLIENT_SECRET", body.client_secret.strip())
+    if not 10 <= len(secret) <= 200:
+        raise ApiError(422, "that doesn't look like an OAuth client secret")
+    paths.set_env_value("HQ_GMAIL_CLIENT_ID", cid)
+    paths.set_env_value("HQ_GMAIL_CLIENT_SECRET", secret)
     with tx(conn):
-        repo.audit(conn, "prerit", "gmail.client_saved", None, after={"client_id_suffix": body.client_id[-24:]},
+        repo.audit(conn, "prerit", "gmail.client_saved", None, after={"client_id_suffix": cid[-24:],
+                                                                      "from_json": bool(body.client_json)},
                    remote_addr=_addr(request))
     return gmail_json(conn)
 
@@ -119,11 +161,13 @@ def golive_state(conn: sqlite3.Connection) -> dict[str, Any]:
     cap = int(s.get("email_daily_cap", 10))
     cloud = s.get("claude_state") or {}
     self_test = s.get("gmail_self_test") or {}
+    wrong_account = account_mismatch(g)
     items = [
-        {"id": "gmail", "gate": True, "label": "Gmail connected and healthy (read-only)",
-         "ok": bool(gauth.connected() and g.get("healthy")),
-         "detail": g.get("email") or g.get("error") or ("connected — waiting for the first check"
-                                                        if gauth.connected() else "not connected")},
+        {"id": "gmail", "gate": True, "label": f"Gmail connected and healthy (read-only) as {owner.email()}",
+         "ok": bool(gauth.connected() and g.get("healthy")) and not wrong_account,
+         "detail": (f"connected as {wrong_account} — disconnect and connect {owner.email()} instead"
+                    if wrong_account else g.get("email") or g.get("error") or
+                    ("connected — waiting for the first check" if gauth.connected() else "not connected"))},
         {"id": "profile", "gate": True, "label": "Required profile fields confirmed", "ok": not missing,
          "detail": "all confirmed" if not missing else "missing: " + ", ".join(missing)},
         {"id": "reviewed", "gate": True, "label": f"At least {MIN_REVIEWED} dry-run applications reviewed",
