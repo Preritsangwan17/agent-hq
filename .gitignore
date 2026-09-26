@@ -1,0 +1,18 @@
+# secrets & runtime data
+.env
+data/
+*.db
+*.db-wal
+*.db-shm
+# python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+# node
+web/node_modules/
+web/dist/
+# os
+.DS_Store
+# artifacts
+artifacts/
