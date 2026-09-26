@@ -39,6 +39,14 @@ types:
     default_recipient: "Hiring Team"
     signoff: true
     repo_link_max: 0
+    job_quote: false
+  reply:
+    max_words: 120
+    salutation: "Dear {recipient},"
+    default_recipient: "Hiring Team"
+    signoff: true
+    repo_link_max: 1
+    job_quote: false
   paragraph:
     min_words: 60
     max_words: 120

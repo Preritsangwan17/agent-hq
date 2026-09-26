@@ -4,7 +4,6 @@ compliance + 0.1 × no clichés."""
 from __future__ import annotations
 
 import re
-from pathlib import Path
 from typing import Any
 
 from hq import settings as paths

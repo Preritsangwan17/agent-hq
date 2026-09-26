@@ -479,6 +479,19 @@ def _need_followups(conn: sqlite3.Connection, need: dict[str, Any], status: str)
         repo.add_command(conn, "probation_release", {"task_id": payload["probation_task_id"],
                                                       "approved": status == "done"})
         return [f"probation:{'approved' if status == 'done' else 'discarded'}"]
+    if need["kind"] == "decision" and payload.get("decision") == "outbound_ambiguous" and status in ("done", "dismissed"):
+        from hq.pipeline.apply import guard
+
+        guard.resolve_ambiguous(conn, payload.get("outbound_id", ""), sent=payload.get("choice") == "sent")
+        return [f"outbound:{payload.get('choice')}"]
+    if need["kind"] == "approve_reply" and status == "done" and payload.get("document_id"):
+        from hq.api.routes_inbox import queue_reply
+
+        doc = conn.execute("SELECT d.*, t.notify_only_lock FROM documents d LEFT JOIN email_threads t ON "
+                           "t.id=d.email_thread_id WHERE d.id=?", (payload["document_id"],)).fetchone()
+        if doc is None or doc["status"] not in ("draft", "approved") or doc["notify_only_lock"]:
+            return ["reply:not_sent"]
+        return ["task:reply.send"] if queue_reply(conn, dict(doc), bool(payload.get("attach_resume"))) else []
     opp_id, app_id = need.get("opportunity_id"), need.get("application_id")
     opp = repo.get_opportunity_row(conn, opp_id) if opp_id else None
     if need["kind"] == "decision" and opp is not None and status in ("done", "dismissed") and \

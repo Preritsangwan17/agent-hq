@@ -6,7 +6,6 @@ mode it opens an `approve` item bound to the sha256 of the exact letter + résum
 from __future__ import annotations
 
 import hashlib
-from pathlib import Path
 from typing import Any
 
 from hq import settings as paths

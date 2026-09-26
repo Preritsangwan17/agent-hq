@@ -8,7 +8,6 @@ An empty account (no credit) or a rejected key becomes one Needs Prerit item ins
 """
 from __future__ import annotations
 
-import os
 import sqlite3
 import time
 from functools import lru_cache
@@ -35,7 +34,7 @@ CREDIT_WORDS = ("credit", "billing", "balance", "spending limit", "insufficient"
 
 
 def api_key() -> str | None:
-    key = os.environ.get(KEY_ENV, "").strip()
+    key = (paths.env_fresh(KEY_ENV) or "").strip()
     return key or None
 
 

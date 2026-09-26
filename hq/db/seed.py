@@ -42,6 +42,11 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "claude_per_call_cap_usd": 0.5,
     "require_claude_signoff": True,
     "benchmark_on_new_model": True,
+    # phase (d): Gmail, inbox, notifications, go-live
+    "gmail_poll_minutes": 3,
+    "auto_reply_enabled": False,     # effective only in LIVE and ≥ 14 days after going live (CONTRACT_D §2)
+    "mac_notifications": True,
+    "signoff_policy_ack": False,     # go-live without a cloud sign-off model, acknowledged by Prerit
 }
 
 
@@ -125,6 +130,10 @@ EDITABLE: dict[str, Callable[[Any], Any]] = {
     "claude_model": _choice("haiku", "sonnet", "opus"),
     "claude_signoff_model": _choice("haiku", "sonnet", "opus"),
     "cloud_llm": _choice("auto", "claude", "xai"),
+    "gmail_poll_minutes": _num(1, 60, integer=True),
+    "auto_reply_enabled": _bool,
+    "mac_notifications": _bool,
+    "signoff_policy_ack": _bool,
     "xai_model": _model_name,
     "xai_signoff_model": _model_name,
     "claude_per_call_cap_usd": _num(0.01, 5.0),

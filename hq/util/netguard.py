@@ -21,6 +21,7 @@ from hq import settings as paths
 LOOPBACK = {"127.0.0.1", "localhost", "::1"}
 SEND_HOSTS = {"gmail.googleapis.com", "oauth2.googleapis.com", "www.googleapis.com"}
 LLM_HOSTS = {"api.x.ai"}  # cloud model API (redacted prompts only); the Claude CLI talks to Anthropic itself
+AUTH_ENDPOINTS = {("oauth2.googleapis.com", "/token")}  # OAuth code exchange / token refresh (not mail)
 
 
 class NetGuardError(PermissionError):
@@ -62,6 +63,8 @@ def check(method: str, url: str, *, mode: str | None = None) -> None:
     if m in ("GET", "HEAD") or host in LOOPBACK:
         return
     if host in LLM_HOSTS and m == "POST" and urlparse(url).path.startswith("/v1/"):
+        return
+    if m == "POST" and (host, urlparse(url).path) in AUTH_ENDPOINTS:
         return
     if (mode or current_mode()) in ("live", "self_test") and host in SEND_HOSTS:
         return

@@ -76,8 +76,9 @@ def check_quality(sentences: list[dict[str, Any]], *, doc_kind: str, org: str, r
     org_core = re.sub(r"[^\w& ]", "", re.sub(r"\s*\([^)]*\)", "", org).split(",")[0]).strip().lower()
     add("names_org", bool(org_core) and org_core in full.lower().replace("’", "'"),
         f"Name the organisation ({org.split(',')[0]}) in the text")
-    add("job_quote", any(s.get("job_quote_ids") for s in sentences),
-        "Refer to at least one verified quote from the posting")
+    if rules.job_quote:
+        add("job_quote", any(s.get("job_quote_ids") for s in sentences),
+            "Refer to at least one verified quote from the posting")
     hits = sorted({h.lower() for s in sentences for h in cliche_hits(s["text"])})
     add("no_cliches", not hits, "Remove clichés: " + ", ".join(hits) if hits else "No clichés")
     n = words(body)

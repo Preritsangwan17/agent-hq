@@ -28,6 +28,7 @@ class DocRules:
     signoff: bool
     subject: bool
     repo_link_max: int
+    job_quote: bool = True      # the quality gate wants ≥ 1 verified posting quote (letters; not follow-ups/replies)
 
 
 @lru_cache(maxsize=2)
@@ -47,7 +48,7 @@ def doc_rules(kind: str) -> DocRules:
     par = t.get("paragraphs")
     return DocRules(kind, t.get("min_words"), t.get("max_words"), tuple(par) if par else None, t.get("salutation"),
                     t.get("default_recipient"), bool(t.get("signoff")), bool(t.get("subject")),
-                    int(t.get("repo_link_max", 1)))
+                    int(t.get("repo_link_max", 1)), bool(t.get("job_quote", True)))
 
 
 def rules_text(r: DocRules, recipient: str | None = None) -> str:

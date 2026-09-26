@@ -45,6 +45,7 @@ class Services:
     manager: Any = None     # hq.models.manager.ModelManager
     sim: Any = None         # hq.adapters.sim.SimAdapter (simulated opportunities)
     fetcher: Any = None     # hq.pipeline.discover.fetch.Fetcher (polite GETs)
+    gmail: Any = None       # hq.gmail.client.GmailClient (or the test fake); None until Gmail is connected
 
 
 @dataclass

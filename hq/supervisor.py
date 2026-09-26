@@ -47,6 +47,7 @@ class Supervisor:
         self.caffeinate: subprocess.Popen | None = None
         self.pidfile = settings.RUN_DIR / "supervisor.pid"
         self._last_settings_check = 0.0
+        self.refused_env_mtime = -2.0
 
     # ── pidfile ─────────────────────────────────────────────────────────────────────────────────────
     def claim_pidfile(self) -> bool:
@@ -96,6 +97,17 @@ class Supervisor:
             pass
 
     def record_exit(self, child: Child, code: int) -> None:
+        if child.name == "worker" and code == WORKER_REFUSED:
+            # a safety refusal (send-capable Gmail grant while forced dry run): don't loop; retry when .env changes
+            child.next_start = float("inf")
+            self.refused_env_mtime = _env_mtime()
+            log.error("worker refused to start (safety check); waiting for .env to change")
+            self._event("Supervisor: the worker refused to start for safety — see the banner / Settings › Gmail",
+                        {"child": child.name, "exit_code": code})
+            if child.proc is not None:
+                self.clear_child_pidfile(child, child.proc.pid)
+            child.proc = None
+            return
         uptime = time.monotonic() - child.started_at
         if uptime > HEALTHY_AFTER_S:
             child.backoff = BACKOFF_MIN_S
@@ -181,6 +193,10 @@ class Supervisor:
                 if now - self._last_settings_check > 10:
                     self._last_settings_check = now
                     self.sync_caffeinate()
+                    for child in self.children:
+                        if child.next_start == float("inf") and _env_mtime() != self.refused_env_mtime:
+                            child.next_start = now  # .env changed: try again
+                            settings.load_env()
                 time.sleep(0.25)
         finally:
             self.shutdown()
@@ -207,6 +223,16 @@ class Supervisor:
             self.caffeinate.terminate()
         self.release_pidfile()
         log.info("supervisor stopped")
+
+
+WORKER_REFUSED = 78
+
+
+def _env_mtime() -> float:
+    try:
+        return settings.ENV_PATH.stat().st_mtime
+    except OSError:
+        return -1.0
 
 
 def _describe(code: int) -> str:

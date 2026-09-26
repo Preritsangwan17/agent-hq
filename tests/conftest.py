@@ -29,6 +29,18 @@ MUTATE = {"X-HQ": "1", "Origin": "http://localhost:5173"}
 PASSCODE = "correct-horse-42"
 
 
+@pytest.fixture(autouse=True)
+def _restore_environ():
+    """Code under test may export values into os.environ (settings.set_env_value); never let them leak."""
+    before = dict(os.environ)
+    yield
+    for key in set(os.environ) - set(before):
+        del os.environ[key]
+    for key, value in before.items():
+        if os.environ.get(key) != value:
+            os.environ[key] = value
+
+
 @pytest.fixture
 def hq_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     from hq import settings

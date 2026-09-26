@@ -4,12 +4,12 @@ avatar: "📬"
 color: "#A3E635"
 role: inbox
 description: Watches for replies and classifies them; interviews, offers and money are notify-only.
-adapter: sim
-adapter_config: {sim_model: qwen3-4b-2507}
+adapter: script
+adapter_config: {module: hq.pipeline.agents.inbox, sim_model: qwen3-4b-2507}
 model: null
-capabilities: [inbox.poll, inbox.classify]
+capabilities: [inbox.poll, inbox.classify, reply.send]
 cost_tier: local
 concurrency: 1
-schedule: {mode: interval, minutes: 2}
+schedule: {mode: interval, minutes: 1}   # Gmail itself is polled every gmail_poll_minutes (3)
 enabled: true
 builtin: true

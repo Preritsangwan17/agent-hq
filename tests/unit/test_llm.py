@@ -21,7 +21,6 @@ from hq.llm.claude import (
     LOGIN_NEED_TITLE,
 )
 from hq.llm.router import EscalationExhausted, Router
-from hq.models import roles
 from hq.models.discovery.base import ModelInfo, upsert_models
 
 SCHEMA = {"type": "object", "required": ["verdict"], "properties": {"verdict": {"enum": ["yes", "no"]},

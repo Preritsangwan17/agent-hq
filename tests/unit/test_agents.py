@@ -29,11 +29,11 @@ def test_starting_team_is_valid_and_matches_contract():
         "reviewer": ("#FB7185", ["factcheck.signoff"]),
         "resume": ("#60A5FA", ["build.resume"]),
         "applicant": ("#F472B6", ["apply.email_send", "apply.ats_submit", "apply.manual_pack"]),
-        "inbox": ("#A3E635", ["inbox.poll", "inbox.classify"]),
-        "followup": ("#FB923C", ["followup.schedule"]),
+        "inbox": ("#A3E635", ["inbox.poll", "inbox.classify", "reply.send"]),
+        "followup": ("#FB923C", ["followup.schedule", "followup.send"]),
         "strategist": ("#E879F9", ["strategy.daily_review"]),
     }
-    phase_c = {"scout", "verifier", "writer", "factchecker", "reviewer", "resume", "applicant"}
+    phase_c = {"scout", "verifier", "writer", "factchecker", "reviewer", "resume", "applicant", "inbox", "followup"}
     found = {}
     for path in REPO_AGENTS.glob("*.yaml"):
         cfg, _ = parse_agent_file(path)

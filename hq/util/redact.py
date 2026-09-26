@@ -5,13 +5,13 @@ and anything shaped like a phone number, card number or government ID. The phone
 """
 from __future__ import annotations
 
-import os
 import re
 import sqlite3
 
 SECRET_KEYS = ("HQ_PASSCODE_HASH", "HQ_SESSION_SECRET", "HQ_GMAIL_CLIENT_SECRET", "HQ_GMAIL_REFRESH_TOKEN",
                "HQ_XAI_API_KEY")
-API_KEY = re.compile(r"\b(?:xai|sk-ant|sk)-[A-Za-z0-9_-]{20,}")
+# also: Google OAuth tokens (ya29.… access tokens, 1//… refresh tokens) wherever they appear
+API_KEY = re.compile(r"\b(?:xai|sk-ant|sk)-[A-Za-z0-9_-]{20,}|\bya29\.[A-Za-z0-9_.-]{20,}|\b1//[A-Za-z0-9_-]{20,}")
 PRIVATE_FIELDS = ("phone", "dob", "address")
 PHONE = re.compile(r"(?<!\w)(\+?\d{1,3}[\s-]?)?(\(?\d{2,5}\)?[\s-]?)\d{3,5}[\s-]?\d{4,5}(?!\w)")
 CARD = re.compile(r"(?<!\d)(?:\d[ -]?){13,19}(?!\d)")
@@ -34,8 +34,10 @@ def redact(text: str, conn: sqlite3.Connection | None = None) -> str:
     if not text:
         return text
     out = text
+    from hq import settings as paths
+
     for key in SECRET_KEYS:
-        val = os.environ.get(key)
+        val = paths.env_fresh(key)
         if val and len(val) >= 8:
             out = out.replace(val, f"[{key}]")
     for val in _private_values(conn):

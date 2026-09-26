@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from hq.adapters.base import Deferred, RunContext, RunResult
-from hq.pipeline.agents.common import label, load_opp, loads, need_effect, sim_or_none
+from hq.pipeline.agents.common import label, load_opp, need_effect, sim_or_none
 from hq.pipeline.agents.writer import application_for, latest_doc
 from hq.pipeline.apply import guard
 from hq.pipeline.apply.answers import DEFAULT_QUESTIONS, answer_all
@@ -86,21 +86,26 @@ async def email(task: dict[str, Any], ctx: RunContext, opp: dict[str, Any], app:
     subject = doc.get("subject") or f"Application: {opp['title']} — Prerit Sangwan"
     attachments = [{"name": Path(resume["content_path"]).name, "path": resume["content_path"]}] if resume else []
     try:
-        res = guard.send_email(ctx.conn, application_id=app["id"], to_addr=opp["apply_email"], subject=subject,
-                               body=doc["content_text"] or "", attachments=attachments, content_sha=sha,
-                               agent_id=ctx.agent.id, task_id=task["id"])
+        res = await guard.send(ctx.conn, ctx.services.gmail, kind="application", to_addr=opp["apply_email"],
+                               subject=subject, body=doc["content_text"] or "", attachments=attachments,
+                               content_sha=sha, application_id=app["id"], agent_id=ctx.agent.id, task_id=task["id"])
     except guard.GuardBlocked as exc:
         if exc.kind == "paused":
             raise Deferred("queued", iso_in(600), exc.reason) from exc
         if exc.kind == "cap":
             raise Deferred("queued", to_iso(next_midnight_ist()), exc.reason) from exc
-        if exc.kind == "recipient":
+        if exc.kind in ("recipient", "failed"):
             return RunResult(output={"ok": False, "fallback_pack": True, "stage_reason": exc.reason},
                              summary=f"{label(opp)}: not emailing ({exc.reason}) — building a pack instead")
+        if exc.kind == "ambiguous":
+            return RunResult(output={"ok": False, "stage_reason": "send unconfirmed — check Sent (Needs Prerit)"},
+                             summary=f"{label(opp)}: {exc.reason}")
         return RunResult(output={"ok": False, "stage_reason": exc.reason}, summary=f"{label(opp)}: {exc.reason}")
     return RunResult(output={"ok": True, "message_id": res.message_id, "status": res.status},
                      effects=[{"op": "document.update", "id": doc["id"], "values": {"status": "sent"}}],
-                     summary=f"{label(opp)}: sent to the mock mailbox ({res.status}, {res.mode})")
+                     summary=f"{label(opp)}: " + ("sent to the mock mailbox (dry run)" if res.mode == "dry_run"
+                                                  else f"sent via Gmail ({res.mode})")
+                             + (" — already sent before" if res.status == "duplicate" else ""))
 
 
 async def greenhouse_questions(ctx: RunContext, opp: dict[str, Any]) -> list[dict[str, Any]] | None:

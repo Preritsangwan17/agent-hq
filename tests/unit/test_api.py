@@ -35,7 +35,8 @@ NEED_KEYS = {"id", "opportunity_id", "kind", "title", "instructions_md", "answer
 STATS_KEYS = {"found", "verified", "drafted", "applied", "replies", "interviews", "offers", "rejected", "filtered",
               "success_rate", "needs_open", "claude_cost_today_usd", "claude_budget_usd", "claude_calls_today",
               "local_tokens_today", "pay", "by_stage", "sim"}
-SNAPSHOT_KEYS = {"settings", "agents", "opportunities", "events", "stats", "needs", "server_time", "last_event_id"}
+SNAPSHOT_KEYS = {"settings", "agents", "opportunities", "events", "stats", "needs", "server_time", "last_event_id",
+                 "notifications_unacked"}
 
 
 def seed_opp(conn, key: str = "quillfeather-nlp", stage: str = "found", **extra) -> str:

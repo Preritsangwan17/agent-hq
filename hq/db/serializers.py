@@ -374,6 +374,8 @@ def snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         "events": repo.list_events(conn, limit=200),
         "stats": stats(conn, settings),
         "needs": [need_json(n) for n in repo.list_need_rows(conn, status="open")],
+        "notifications_unacked": conn.execute("SELECT COUNT(*) FROM notifications WHERE acknowledged_at IS NULL"
+                                              ).fetchone()[0],
         "server_time": now_iso(),
         "last_event_id": repo.last_event_id(conn),
     }
@@ -381,4 +383,6 @@ def snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
 
 def health(conn: sqlite3.Connection) -> dict[str, Any]:
     alive, hb = worker_alive(conn)
-    return {"ok": True, "worker_alive": alive, "worker_heartbeat_at": hb, "version": __version__}
+    refusal = get_settings(conn).get("worker_refusal")
+    return {"ok": True, "worker_alive": alive, "worker_heartbeat_at": hb, "version": __version__,
+            "worker_refusal": (refusal or {}).get("reason")}

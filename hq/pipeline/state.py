@@ -66,6 +66,8 @@ def next_tasks(stage: str, capability: str, result: dict[str, Any]) -> tuple[str
 
     if capability.startswith("discover."):
         return ("found", [TaskSpec("parse.job")]) if result.get("created") else (stage, [])
+    if result.get("created") and stage == "found":  # e.g. a role found in a job-alert email (inbox.classify)
+        return "found", [TaskSpec("parse.job")]
 
     if capability == "parse.job":
         if stage == "found" and not ok:
@@ -150,6 +152,12 @@ def next_tasks(stage: str, capability: str, result: dict[str, Any]) -> tuple[str
         if stage not in ("applied", "replied"):
             return stage, []
         outcome = result.get("classification")
-        return {"interview": "interview", "rejection": "rejected", "offer": "offer"}.get(outcome, "replied"), []
+        moved = {"interview": "interview", "interview_invite": "interview", "assessment": "interview",
+                 "rejection": "rejected", "offer": "offer"}.get(outcome)
+        if moved:
+            return moved, []
+        if outcome in ("auto_ack", "job_alert", "other", "scam", None):
+            return stage, []  # an automatic acknowledgement is not a reply from a person
+        return "replied", []
 
     return stage, []

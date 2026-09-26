@@ -98,6 +98,13 @@ class Worker:
             from hq.pipeline.discover.fetch import Fetcher
 
             self.services.fetcher = Fetcher(self.conn)
+        self._gmail_injected = self.services.gmail is not None   # tests hand in the fake
+        if not self._gmail_injected:
+            self._rebuild_gmail()
+        self._recovered = False
+        self._last_notify = 0.0
+        self._last_gmail_check = 0.0
+        self._last_recover = 0.0
         self.model_upkeep = model_upkeep
         self.benchmarking: asyncio.Task | None = None
         self._last_discovery = 0.0
@@ -115,7 +122,11 @@ class Worker:
 
     # ── lifecycle ───────────────────────────────────────────────────────────────────────────────────
     def startup(self) -> None:
+        from hq.util import netguard
+
         with tx(self.conn):
+            # the go-live checklist reads this to know HQ really restarted with the new .env
+            set_settings(self.conn, {"worker_env_mode": netguard.current_mode()}, by="worker")
             orphans = queue.recover_orphans(self.conn)
             self.conn.execute("UPDATE agent_live SET now_line=NULL, progress=NULL, current_task_id=NULL, "
                               "opportunity_id=NULL, tok_s=NULL, seq=seq+1, updated_at=?", (now_iso(),))
@@ -180,6 +191,10 @@ class Worker:
 
     # ── the loop ────────────────────────────────────────────────────────────────────────────────────
     async def tick(self) -> None:
+        if not self._recovered:  # resolve sends a crash left behind before anything can send again
+            self._recovered = True
+            self._last_recover = time.monotonic()
+            await self._recover_outbound()
         self._consume_commands()
         self.settings = get_settings(self.conn)
         if self._rescan:
@@ -202,7 +217,94 @@ class Worker:
             self._retention()
         if self.model_upkeep:
             await self._model_upkeep(now)
+        await self._mail_upkeep(now)
         self._update_statuses()
+
+    # ── mail upkeep (phase d): notifications, Gmail health, send recovery ───────────────────────────
+    def _rebuild_gmail(self) -> None:
+        if self._gmail_injected:
+            return
+        from hq.gmail.client import from_env
+
+        self.services.gmail = from_env()
+
+    async def _mail_upkeep(self, now: float) -> None:
+        from hq import notify
+
+        if now - self._last_notify >= 2:
+            self._last_notify = now
+            try:
+                await notify.deliver_pending(self.conn)
+            except Exception as exc:  # noqa: BLE001 — a banner must never kill the loop
+                log.warning("notification delivery failed: %s", exc)
+        if now - self._last_gmail_check >= 3600 or self._last_gmail_check == 0.0:
+            self._last_gmail_check = now
+            await self._gmail_health()
+        if now - self._last_recover >= 300:
+            self._last_recover = now
+            await self._recover_outbound()
+
+    async def _recover_outbound(self) -> None:
+        from hq.pipeline.apply import guard
+
+        try:
+            res = await guard.recover(self.conn, self.services.gmail)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("outbound recovery failed: %s", exc)
+            return
+        if any(res.values()):
+            with tx(self.conn):
+                repo.emit(self.conn, "log", "Send recovery after a restart: " + ", ".join(
+                    f"{n} {k}" for k, n in res.items() if n), level="warn", data=res)
+
+    async def _gmail_health(self) -> None:
+        from hq import notify
+        from hq.gmail import auth
+        from hq.gmail.api import GmailAuthError, GmailError, GmailTransient
+
+        gmail = self.services.gmail
+        prev = get_settings(self.conn).get("gmail_state") or {}
+        if gmail is None:
+            if prev.get("connected"):
+                with tx(self.conn):
+                    set_settings(self.conn, {"gmail_state": {**prev, "connected": False, "healthy": False}},
+                                 by="worker")
+            return
+        state = {**prev, "connected": True, "checked_at": now_iso(),
+                 "scopes": [x.rsplit("/", 1)[-1] for x in auth.granted_scopes()]}
+        try:
+            prof = await gmail.profile()
+            state.update(healthy=True, error=None, email=prof.get("emailAddress"), last_ok_at=now_iso())
+        except GmailAuthError as exc:
+            state.update(healthy=False, error=str(exc))
+            with tx(self.conn):
+                notify.create(self.conn, "warn", "Gmail needs reconnecting", str(exc)[:200], "/settings?tab=gmail",
+                              dedupe_open=True)
+                if not self.conn.execute("SELECT 1 FROM needs_prerit WHERE title='Reconnect Gmail' AND status IN "
+                                         "('open','snoozed')").fetchone():
+                    repo.insert_need(self.conn, {
+                        "kind": "decision", "title": "Reconnect Gmail", "priority": 75, "est_minutes": 2,
+                        "instructions_md": f"HQ can't read Gmail ({exc}). Open **Settings › Gmail** and connect again "
+                                           "(read-only). Replies and follow-ups wait until then.",
+                        "direct_url": "/settings?tab=gmail"})
+        except (GmailTransient, GmailError) as exc:
+            state.update(healthy=False, error=str(exc)[:200])
+        with tx(self.conn):
+            set_settings(self.conn, {"gmail_state": state}, by="worker")
+
+    async def _gmail_self_test(self) -> None:
+        from hq.pipeline.apply import guard
+
+        try:
+            res = await guard.self_test(self.conn, self.services.gmail)
+            st = {"ok": True, "at": now_iso(), "status": res.status, "mode": res.mode}
+        except guard.GuardBlocked as exc:
+            st = {"ok": False, "at": now_iso(), "error": exc.reason, "kind": exc.kind}
+        with tx(self.conn):
+            set_settings(self.conn, {"gmail_self_test": st}, by="worker")
+            repo.emit(self.conn, "log", "Self-test email " + ("sent to Prerit's own address" if st["ok"]
+                                                              else f"failed: {st.get('error')}"),
+                      level="info" if st["ok"] else "warn", data=st)
 
     # ── models / Claude upkeep (phase b) ────────────────────────────────────────────────────────────
     async def _model_upkeep(self, now: float) -> None:
@@ -297,6 +399,12 @@ class Worker:
                 result = {"ok": mgr is not None}
             elif kind == "claude_recheck":
                 self._last_claude_check = 0.0
+            elif kind == "gmail_recheck":
+                self._rebuild_gmail()
+                self._last_gmail_check = 0.0
+            elif kind == "gmail_self_test":
+                asyncio.get_running_loop().create_task(self._gmail_self_test())
+                result = {"ok": True, "started": True}
             elif kind not in ("pause_all", "resume_all", "freeze_outbound", "settings_changed", "roles_changed"):
                 result = {"ok": False, "ignored": kind}
             with tx(self.conn):
