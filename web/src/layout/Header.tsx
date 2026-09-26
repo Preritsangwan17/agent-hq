@@ -1,5 +1,5 @@
 /**
- * Top bar: page title (desktop) / logo (mobile), status cluster (SIM, mode, Claude budget, connection) and the
+ * Top bar: page title (desktop) / logo (mobile), status cluster (SIM, mode, Grok budget, connection) and the
  * PAUSE ALL kill switch, which stays visible at every width. Also exports the paused banner + red vignette.
  */
 import { AnimatePresence, motion } from 'motion/react';

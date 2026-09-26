@@ -55,8 +55,8 @@ export const AgentManagerCard = memo(function AgentManagerCard({
             </span>
             <span className="text-faint">·</span>
             <span className="inline-flex items-center gap-1 font-mono text-muted">
-              {agent.cost_tier === 'claude' ? <Sparkles className="size-3 text-fuchsia-300" aria-hidden /> : <Cpu className="size-3" aria-hidden />}
-              {agent.cost_tier === 'claude' ? 'Claude' : modelLabel(live?.model_id ?? agent.model)}
+              {agent.cost_tier === 'cloud' ? <Sparkles className="size-3 text-fuchsia-300" aria-hidden /> : <Cpu className="size-3" aria-hidden />}
+              {agent.cost_tier === 'cloud' ? `Grok · ${modelLabel(live?.model_id ?? agent.model)}` : modelLabel(live?.model_id ?? agent.model)}
             </span>
             <span className="text-faint">·</span>
             <span className="font-mono text-faint">{agent.adapter}</span>

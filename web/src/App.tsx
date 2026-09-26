@@ -19,6 +19,7 @@ const Inbox = lazy(() => import('@/pages/Inbox'));
 const Needs = lazy(() => import('@/pages/Needs'));
 const Analytics = lazy(() => import('@/pages/Analytics'));
 const Models = lazy(() => import('@/pages/Models'));
+const Usage = lazy(() => import('@/pages/Usage'));
 const Agents = lazy(() => import('@/pages/Agents'));
 const Settings = lazy(() => import('@/pages/Settings'));
 const Login = lazy(() => import('@/pages/Login'));
@@ -64,6 +65,7 @@ const router = createBrowserRouter([
       { path: 'needs', element: <Needs /> },
       { path: 'analytics', element: <Analytics /> },
       { path: 'models', element: <Models /> },
+      { path: 'usage', element: <Usage /> },
       { path: 'agents', element: <Agents /> },
       { path: 'settings', element: <Settings /> },
       { path: '*', element: <NotFound /> },

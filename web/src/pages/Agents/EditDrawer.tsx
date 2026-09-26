@@ -30,7 +30,7 @@ function EditBody({ agent, onClose, titleId }: { agent: Agent; onClose: () => vo
   useEffect(() => setErr(null), [name, avatar, color, model, concurrency, schedule]);
 
   const schedulable = agent.capabilities.some((c) => SCHEDULABLE_FALLBACK.includes(c));
-  const modelOk = model === '' || /^(auto|(mlx|ollama|lmstudio|llamacpp|claude|sim|openai):.+)$/.test(model);
+  const modelOk = model === '' || /^(auto|(mlx|ollama|lmstudio|llamacpp|xai|sim|openai):.+)$/.test(model);
   const preview = { ...agent, name, avatar, color };
 
   const save = async () => {

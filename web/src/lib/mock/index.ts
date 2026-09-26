@@ -152,7 +152,7 @@ async function handle(url: URL, init: RequestInit | undefined): Promise<Response
         group: id.split('.')[0],
         side_effect: RESERVED_SIDE_EFFECTS.includes(id),
       })),
-      adapters: ['sim', 'script', 'openai_compatible', 'claude_code', 'http', 'browser'],
+      adapters: ['sim', 'script', 'openai_compatible', 'cloud', 'http', 'browser'],
       reserved_side_effects: RESERVED_SIDE_EFFECTS,
       palette: [...AGENT_PALETTE],
     });

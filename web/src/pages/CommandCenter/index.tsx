@@ -1,5 +1,5 @@
 /**
- * Command Center: count-up hero stats (pipeline, pay, Claude $ vs local tokens), the live Agent Network graph,
+ * Command Center: count-up hero stats (pipeline, pay, Grok $ vs free local tokens), the live Agent Network graph,
  * agent cards with their typing now-lines, pay highlights, the Needs Prerit queue, the Strategist's latest report
  * and a compact live feed. Everything updates from the zustand store (snapshot + SSE).
  */
@@ -60,12 +60,12 @@ export default function CommandCenter() {
         </GlassPanel>
         <GlassPanel glow="#E879F9" padding="md">
           <StatCounter
-            value={stats?.claude_cost_today_usd}
-            label="Claude today"
+            value={stats?.cloud_cost_today_usd}
+            label="Grok today"
             icon={Sparkles}
             accent="#E879F9"
             format={(n) => formatUSD(n)}
-            sub={`${stats?.claude_calls_today ?? 0} calls · ${formatCompact(stats?.local_tokens_today)} local tok`}
+            sub={`${stats?.cloud_calls_today ?? 0} calls · ${formatCompact(stats?.local_tokens_today)} local tok (free)`}
           />
         </GlassPanel>
       </div>

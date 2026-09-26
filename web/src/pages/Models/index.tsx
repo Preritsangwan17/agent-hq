@@ -1,12 +1,15 @@
 /**
- * /models — the local-model leaderboard: memory pool bar, Claude status, role assignments (ranked, with overrides
- * and the writer ≠ fact-checker rule), a card per usable model with per-task scores, and the broken/unsupported
- * models with their reasons. Rescan and benchmark (quick/full) run in the worker; progress streams back.
+ * /models — the local-model leaderboard: memory pool bar, AI switches + Grok status, recommended models for this
+ * Mac (one-click download through Ollama), role assignments (ranked, with overrides and the writer ≠ fact-checker
+ * rule), a card per usable model with per-task scores and an on/off switch, and the broken/unsupported models with
+ * their reasons. Rescan, benchmark and downloads run in the worker; progress streams back.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle,
   BatteryMedium,
+  CheckCircle2,
+  Download,
   Cpu,
   FlaskConical,
   Gauge,
@@ -25,12 +28,15 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { Badge, Button, EmptyState, GlassPanel, ProgressBar, SectionHeader, Tooltip } from '@/components';
+import { Link } from 'react-router';
+import { Badge, Button, EmptyState, GlassPanel, ProgressBar, SectionHeader, Tooltip, engineOf } from '@/components';
+import { Switch } from '@/pages/Agents/formKit';
+import { useSettings } from '@/lib/store';
 import { ApiError, api } from '@/lib/api';
 import { eventBus } from '@/lib/bus';
 import { cn } from '@/lib/cn';
 import { formatDuration, formatRelative } from '@/lib/format';
-import type { MemoryState, Model, ModelScore, ModelsResponse, RoleAssignment } from '@/lib/types';
+import type { MemoryState, Model, ModelScore, ModelsResponse, RecommendedModel, RoleAssignment } from '@/lib/types';
 import { colors, withAlpha } from '@/theme/tokens';
 import { Code } from '@/pages/Settings/parts';
 
@@ -58,7 +64,10 @@ function useModels() {
   useEffect(
     () =>
       eventBus.on((e) => {
-        if (/^(model\.|benchmark\.|roles\.|claude\.)/.test(e.type)) void qc.invalidateQueries({ queryKey: qk });
+        if (/^(model\.|benchmark\.|roles\.|cloud\.|settings\.)/.test(e.type)) {
+          void qc.invalidateQueries({ queryKey: qk });
+          void qc.invalidateQueries({ queryKey: ['models-recommended'] });
+        }
       }),
     [qc],
   );
@@ -121,8 +130,9 @@ export default function Models() {
           )}
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
             <MemoryPanel mem={data.memory} models={data.models} />
-            <ClaudeCard data={data} />
+            <EnginesCard data={data} />
           </div>
+          <RecommendedPanel />
           <RolesPanel roles={data.roles} models={usable} />
           <section>
             <div className="mb-3 flex items-baseline justify-between">
@@ -135,7 +145,7 @@ export default function Models() {
                   icon={Cpu}
                   color={AMBER}
                   title="No usable local models found"
-                  hint="HQ looks in the Hugging Face cache (MLX), Ollama, LM Studio and GGUF files. Download a model or start a server, then Rescan."
+                  hint="HQ looks in Ollama, the Hugging Face cache (MLX), LM Studio and GGUF files. Download a recommended model above (or run `make models`), then Rescan."
                 />
               </GlassPanel>
             ) : (
@@ -278,48 +288,162 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-// ── Claude ────────────────────────────────────────────────────────────
+// ── AI engines + Grok ─────────────────────────────────────────────────
 
-function ClaudeCard({ data }: { data: ModelsResponse }) {
-  const c = data.claude;
+const ENGINE_TEXT: Record<string, { label: string; color: string; text: string }> = {
+  both: { label: 'Local + Grok', color: '#34D399', text: 'Local models do the work; Grok steps in only when the policy says it adds real value.' },
+  local: { label: 'Local only', color: '#22D3EE', text: 'Nothing is sent to Grok. Steps no local model can do wait.' },
+  grok: { label: 'Grok only', color: '#E879F9', text: 'Every AI step goes to Grok (paid); local models are unloaded.' },
+  none: { label: 'AI off', color: '#8B95A7', text: 'No AI runs. Rules-only steps continue; AI steps wait.' },
+};
+
+function EnginesCard({ data }: { data: ModelsResponse }) {
+  const s = useSettings();
+  const c = data.cloud;
   const qc = useQueryClient();
-  const recheck = useMutation({ mutationFn: api.recheckClaude, onSuccess: () => setTimeout(() => void qc.invalidateQueries({ queryKey: qk }), 3000) });
+  const recheck = useMutation({ mutationFn: api.recheckCloud, onSuccess: () => setTimeout(() => void qc.invalidateQueries({ queryKey: qk }), 3000) });
+  const e = ENGINE_TEXT[engineOf(s)];
+  const grokOn = s.grok_enabled !== false;
   const ok = c.available === true;
   const unknown = c.available == null;
+  const mode = { saver: 'API-saving', balanced: 'Balanced', quality: 'Quality' }[String(s.cloud_mode ?? 'saver')] ?? 'API-saving';
   return (
-    <GlassPanel padding="lg" glow="#E879F9" glowStrength={0.25}>
+    <GlassPanel padding="lg" glow={e.color} glowStrength={0.25}>
       <SectionHeader
-        kicker="Escalation & sign-off"
-        title="Claude"
+        kicker="AI engines"
+        title={e.label}
         icon={Sparkles}
-        color="#E879F9"
-        right={<Badge color={ok ? colors.ok : unknown ? '#8B95A7' : colors.warn}>{ok ? 'available' : unknown ? 'not checked' : 'unavailable'}</Badge>}
+        color={e.color}
+        right={
+          <Link to="/usage" className="text-xs font-medium text-cyan-300 hover:text-cyan-200">
+            Change · usage →
+          </Link>
+        }
       />
       <div className="mt-3 space-y-3 text-[13px] leading-relaxed text-muted">
-        {ok ? (
-          <p>
-            Logged in. Escalations use <b className="text-ink">{c.model}</b>; final sign-off uses <b className="text-ink">{c.signoff_model}</b>. Every call runs with no tools,
-            no hooks and a per-call budget cap.
-          </p>
-        ) : (
-          <div className="rounded-xl border border-amber-300/25 bg-amber-300/[.06] p-3 text-amber-100/90">
-            <div className="flex items-center gap-2 font-medium text-amber-100">
-              <AlertTriangle className="size-4" aria-hidden /> {unknown ? 'Claude has not been checked yet' : 'Not logged in'}
-            </div>
-            <p className="mt-1">
-              Run <Code>claude auth login</Code> in Terminal on this Mac. Local models keep working; sign-off, polish and the Strategist wait.
+        <p>{e.text}{engineOf(s) === 'both' ? ` Mode: ${mode}.` : ''}</p>
+        {grokOn &&
+          (ok ? (
+            <p>
+              Grok is connected. Escalations use <b className="text-ink">{(c.model ?? '').replace('xai:', '')}</b>; important sign-offs use{' '}
+              <b className="text-ink">{(c.strong_model ?? '').replace('xai:', '')}</b>. Prompts are redacted and budget-capped.
             </p>
-            {c.reason && !c.reason.includes('auth login') && <p className="mt-1 text-xs text-amber-100/70">{c.reason}</p>}
-          </div>
-        )}
+          ) : (
+            <div className="rounded-xl border border-amber-300/25 bg-amber-300/[.06] p-3 text-amber-100/90">
+              <div className="flex items-center gap-2 font-medium text-amber-100">
+                <AlertTriangle className="size-4" aria-hidden /> {unknown ? 'Grok has not been checked yet' : 'Grok is not reachable'}
+              </div>
+              <p className="mt-1">
+                Put <Code>HQ_XAI_API_KEY=…</Code> in <Code>.env</Code> on this Mac and restart HQ. Local models keep working meanwhile.
+              </p>
+              {c.reason && <p className="mt-1 text-xs text-amber-100/70">{c.reason}</p>}
+            </div>
+          ))}
         <div className="flex items-center justify-between gap-3">
-          <span className="text-xs text-faint">{c.checked_at ? `checked ${formatRelative(c.checked_at)}` : 'checked every 10 minutes'}</span>
+          <span className="text-xs text-faint">{c.checked_at ? `Grok checked ${formatRelative(c.checked_at)}` : 'Grok is checked every 10 minutes'}</span>
           <Button size="sm" icon={RotateCcw} loading={recheck.isPending} onClick={() => recheck.mutate()}>
             Re-check
           </Button>
         </div>
       </div>
     </GlassPanel>
+  );
+}
+
+// ── recommended models ────────────────────────────────────────────────
+
+function RecommendedPanel() {
+  const qc = useQueryClient();
+  const q = useQuery({
+    queryKey: ['models-recommended'],
+    queryFn: api.recommendedModels,
+    refetchInterval: (query) => {
+      const d = query.state.data as Awaited<ReturnType<typeof api.recommendedModels>> | undefined;
+      return d?.models.some((m) => m.pull && !['success', 'failed'].includes(m.pull.status)) ? 2500 : 30000;
+    },
+  });
+  const pull = useMutation({
+    mutationFn: (name: string) => api.pullModel(name),
+    onSuccess: () => setTimeout(() => void qc.invalidateQueries({ queryKey: ['models-recommended'] }), 1500),
+  });
+  const d = q.data;
+  if (!d) return null;
+  const missingCore = d.models.filter((m) => m.set === 'core' && !m.installed);
+  return (
+    <GlassPanel padding="lg" glow="#A3E635" glowStrength={0.2}>
+      <SectionHeader
+        kicker={`${d.mac.chip} · ${d.mac.memory_gb} GB · ${d.mac.disk_tb} TB`}
+        title="Recommended local models for your Mac"
+        icon={Download}
+        color="#A3E635"
+        right={
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge color={d.ollama_running ? colors.ok : colors.warn}>{d.ollama_running ? 'Ollama running' : 'Ollama not running'}</Badge>
+            {d.disk_free_gb != null && <Badge color="#8B95A7">{d.disk_free_gb.toFixed(0)} GB free</Badge>}
+            {missingCore.length > 0 && d.ollama_running && (
+              <Button size="sm" icon={Download} onClick={() => missingCore.forEach((m) => pull.mutate(m.ollama))}>
+                Download core set (~{d.core_missing_gb.toFixed(0)} GB)
+              </Button>
+            )}
+          </div>
+        }
+      />
+      <p className="mt-1.5 max-w-3xl text-[13px] text-muted">
+        Free, private and fast on Apple silicon. The fact-checker must come from a different model family than the writer, and a second independent
+        checker lets the final sign-off run locally instead of on Grok. HQ benchmarks every new model on your real data and assigns roles automatically.
+      </p>
+      {!d.ollama_running && (
+        <p className="mt-2 text-[13px] text-amber-200/90">
+          Start Ollama (open the Ollama app, or run <Code>{d.install_hint}</Code>), or run <Code>make models</Code> in the agent-hq folder to install
+          everything in one go.
+        </p>
+      )}
+      {pull.error && <p className="mt-2 text-xs text-red-300">{String(pull.error)}</p>}
+      <div className="mt-4 grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
+        {d.models.map((m) => (
+          <RecommendedRow key={m.ollama} m={m} canPull={d.ollama_running} onPull={() => pull.mutate(m.ollama)} />
+        ))}
+      </div>
+    </GlassPanel>
+  );
+}
+
+function RecommendedRow({ m, canPull, onPull }: { m: RecommendedModel; canPull: boolean; onPull: () => void }) {
+  const p = m.pull;
+  const running = p && !['success', 'failed'].includes(p.status);
+  return (
+    <div className="min-w-0 rounded-xl border border-white/[.07] bg-white/[.02] p-3">
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="truncate font-mono text-[13px] text-ink">{m.ollama}</span>
+            <Badge size="xs" color={m.set === 'core' ? '#A3E635' : '#8B95A7'}>{m.set}</Badge>
+            <Badge size="xs" color="#8B95A7">{m.family}</Badge>
+          </div>
+          <div className="mt-0.5 text-[11px] text-faint">
+            ~{m.download_gb} GB download · ~{m.ram_gb} GB while loaded · {m.roles.map((r) => r.replace('_', '-')).join(', ')}
+          </div>
+        </div>
+        {m.installed ? (
+          <Badge color={colors.ok} icon={CheckCircle2}>{m.enabled === false ? 'installed · off' : 'installed'}</Badge>
+        ) : running ? null : (
+          <Button size="sm" variant="secondary" icon={Download} disabled={!canPull} onClick={onPull}>
+            Download
+          </Button>
+        )}
+      </div>
+      <p className="mt-1.5 text-[12px] leading-snug text-muted">{m.why}</p>
+      {running && p && (
+        <div className="mt-2">
+          <div className="flex justify-between text-[11px] text-muted">
+            <span className="truncate">{p.status}</span>
+            <span className="tabular">{Math.round(p.pct)}%</span>
+          </div>
+          <ProgressBar className="mt-1" value={p.pct / 100} color="#A3E635" height={4} />
+        </div>
+      )}
+      {p?.status === 'failed' && <p className="mt-1.5 text-[11.5px] text-red-300">Download failed: {p.error}</p>}
+    </div>
   );
 }
 
@@ -343,7 +467,7 @@ function RolesPanel({ roles, models }: { roles: RoleAssignment[]; models: Model[
       <SectionHeader kicker="Routing" title="Role assignments" icon={Trophy} color="#2DD4BF" />
       <p className="mt-1.5 max-w-3xl text-[13px] text-muted">
         The fact-checker is chosen first and must differ from the writer (and from every model that wrote a document it checks). If a model fails
-        its role, the next-ranked model of a different family takes over, then Claude.
+        its role, the next-ranked model of a different family takes over, then Grok — only when the AI mode allows it.
       </p>
       {err && <p className="mt-2 text-xs text-red-300">{err}</p>}
       <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -357,8 +481,8 @@ function RolesPanel({ roles, models }: { roles: RoleAssignment[]; models: Model[
                 <span className="text-[13px] font-medium text-ink">{r.label}</span>
                 {top?.source === 'override' && <Badge size="xs" color="#FBBF24">override</Badge>}
               </div>
-              {r.needs_claude_signoff && (
-                <p className="mt-1.5 text-[11px] text-amber-200/90">No local model meets the floor — documents need Claude sign-off.</p>
+              {r.needs_cloud_signoff && (
+                <p className="mt-1.5 text-[11px] text-amber-200/90">No local model meets the floor yet — the final sign-off goes to Grok.</p>
               )}
               <ol className="mt-2 space-y-1">
                 {r.ranked.length === 0 && <li className="text-xs text-faint">Nothing assigned yet — run a benchmark.</li>}
@@ -400,13 +524,15 @@ function ModelCard({ m, place }: { m: Model; place: number }) {
   const pin = useMutation({ mutationFn: () => api.pinModel(m.id, !m.pinned), onSuccess: refresh });
   const unload = useMutation({ mutationFn: () => api.unloadModel(m.id), onSuccess: () => setTimeout(refresh, 1500) });
   const bench = useMutation({ mutationFn: () => api.benchmark('quick', m.id), onSuccess: refresh });
+  const toggle = useMutation({ mutationFn: (on: boolean) => api.setModelEnabled(m.id, on), onSuccess: refresh });
+  const enabled = m.enabled !== false;
   const rc = RUNTIME_COLOR[m.runtime] ?? '#8B95A7';
   const toks = Object.values(m.scores).map((s) => s.tok_s_gen).filter((v): v is number => v != null);
   const tokS = toks.length ? toks.reduce((a, b) => a + b, 0) / toks.length : null;
   const jv = Object.values(m.scores).map((s) => s.json_valid_first).filter((v): v is number => v != null);
   const json = jv.length ? jv.reduce((a, b) => a + b, 0) / jv.length : null;
   return (
-    <GlassPanel padding="md" glow={rc} glowStrength={m.status === 'loaded' ? 0.35 : 0.14} className="flex min-w-0 flex-col">
+    <GlassPanel padding="md" glow={rc} glowStrength={m.status === 'loaded' ? 0.35 : 0.14} className={cn('flex min-w-0 flex-col', !enabled && 'opacity-60')}>
       <div className="flex items-start gap-3">
         <span
           className="grid size-9 shrink-0 place-items-center rounded-xl border font-display text-sm font-bold"
@@ -426,8 +552,14 @@ function ModelCard({ m, place }: { m: Model; place: number }) {
             {m.quant && <Badge size="xs" color="#8B95A7">{m.quant}</Badge>}
             {m.status === 'loaded' && <Badge size="xs" color={colors.ok} icon={Power}>loaded</Badge>}
             {m.pinned && <Badge size="xs" color="#FBBF24" icon={Pin}>pinned</Badge>}
+            {!enabled && <Badge size="xs" color="#8B95A7">off</Badge>}
           </div>
         </div>
+        <Tooltip content={enabled ? 'On — HQ may use this model. Switch off to never route to it and free its memory.' : 'Off — HQ never uses this model.'} side="top">
+          <span>
+            <Switch checked={enabled} onChange={(v) => toggle.mutate(v)} label={`Use ${shortName(m.name)}`} color={rc} size="sm" disabled={toggle.isPending} />
+          </span>
+        </Tooltip>
       </div>
 
       <div className="mt-3 grid grid-cols-3 gap-2 text-center">
@@ -494,7 +626,7 @@ function BrokenCard({ models }: { models: Model[] }) {
     <GlassPanel padding="lg" glow="#FB923C" glowStrength={0.18}>
       <SectionHeader kicker="Not usable" title="Broken or incomplete models" icon={HardDrive} color="#FB923C" />
       <p className="mt-1.5 text-[13px] text-muted">
-        HQ never downloads anything on its own. Re-download a model yourself (e.g. <Code>huggingface-cli download &lt;repo&gt;</Code>) and press Rescan.
+        HQ never downloads anything on its own. Re-download a model yourself (e.g. <Code>ollama pull &lt;name&gt;</Code> or <Code>huggingface-cli download &lt;repo&gt;</Code>) and press Rescan.
       </p>
       <ul className="mt-3 divide-y divide-white/[.06]">
         {models.map((m) => (

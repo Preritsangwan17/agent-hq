@@ -16,3 +16,4 @@ export { StageChip, type StageChipProps } from './StageChip';
 export { StatCounter, type StatCounterProps } from './StatCounter';
 export { StatusDot, type StatusDotProps } from './StatusDot';
 export { Tooltip, type TooltipProps } from './Tooltip';
+export { EnginesControl, ModeControl, engineOf, GROK, LOCAL } from './AIEngines';

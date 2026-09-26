@@ -10,8 +10,8 @@ type Open<T extends string> = T | (string & {});
 
 // ── agents ────────────────────────────────────────────────────────────
 export type AgentStatus = 'idle' | 'working' | 'paused' | 'error' | 'stuck' | 'offline' | 'disabled';
-export type CostTier = 'local' | 'claude' | 'external';
-export type AdapterKind = Open<'sim' | 'script' | 'openai_compatible' | 'claude_code' | 'http' | 'browser'>;
+export type CostTier = 'local' | 'cloud' | 'external';
+export type AdapterKind = Open<'sim' | 'script' | 'openai_compatible' | 'cloud' | 'http' | 'browser'>;
 export type ScheduleMode = 'on_demand' | 'interval' | 'cron';
 
 export interface AgentSchedule {
@@ -434,7 +434,7 @@ export interface OppDetail extends OppSummary {
   apply_url?: string | null;
   automation?: string | null;
   posted_at?: ISODate | null;
-  fit_breakdown?: Record<string, number>;
+  fit_breakdown?: MatchBreakdown | Record<string, number>;
   benefits?: Record<string, unknown>;
   eligibility_confidence?: number | null;
   parse?: Record<string, unknown>;
@@ -558,9 +558,10 @@ export interface Stats {
   filtered: number;
   success_rate: number | null;
   needs_open: number;
-  claude_cost_today_usd: number;
-  claude_budget_usd: number;
-  claude_calls_today: number;
+  /** Grok (xAI) spend today — the only paid model */
+  cloud_cost_today_usd: number;
+  cloud_budget_usd: number;
+  cloud_calls_today: number;
   local_tokens_today: number;
   pay: PayStats;
   by_stage: Record<string, number>;
@@ -591,8 +592,16 @@ export interface Settings {
   fit_draft_threshold: number;
   fit_polish_threshold: number;
   daily_draft_cap: number;
-  claude_daily_budget_usd: number;
-  claude_daily_call_cap: number;
+  cloud_daily_budget_usd: number;
+  cloud_daily_call_cap: number;
+  /** on/off switches: local models on this Mac, Grok via xAI */
+  local_ai_enabled?: boolean;
+  grok_enabled?: boolean;
+  /** saver = API-saving mode */
+  cloud_mode?: CloudMode;
+  important_score_threshold?: number;
+  grok_credit_usd?: number | null;
+  grok_credit_at?: ISODate | null;
   email_daily_cap: number;
   quiet_hours: QuietHours;
   unknown_pay_policy: Open<'decision' | 'reject' | 'accept'>;
@@ -871,6 +880,8 @@ export interface Model {
   measured_ram_gb: number | null;
   status: 'available' | 'loaded' | 'broken' | 'unsupported' | (string & {});
   pinned: boolean;
+  /** Prerit's on/off switch for this model */
+  enabled?: boolean;
   model_type: string | null;
   roles: string[];
   ranked_in: Record<string, number>;
@@ -884,7 +895,7 @@ export interface RoleAssignment {
   role: string;
   label: string;
   ranked: { model_id: string; score: number | null; source: 'auto' | 'override'; reason: string | null }[];
-  needs_claude_signoff?: boolean;
+  needs_cloud_signoff?: boolean;
 }
 
 export interface MemoryState {
@@ -911,12 +922,27 @@ export interface BenchState {
   error?: string;
 }
 
-export interface ClaudeState {
+export type CloudMode = 'saver' | 'balanced' | 'quality';
+export type Engines = 'both' | 'local' | 'grok' | 'none';
+
+export interface AIPolicy {
+  engines: Engines;
+  local_ai_enabled: boolean;
+  grok_enabled: boolean;
+  mode: CloudMode;
+  fast_model: string;
+  strong_model: string;
+  important_score_threshold: number;
+}
+
+/** Grok (xAI) reachability as the worker last saw it. */
+export interface CloudState {
   available: boolean | null;
-  logged_in: boolean;
   reason?: string | null;
+  key_present?: boolean;
   model?: string;
-  signoff_model?: string;
+  strong_model?: string;
+  models?: string[];
   checked_at?: ISODate;
 }
 
@@ -926,7 +952,131 @@ export interface ModelsResponse {
   servers: { model_id: string; pid: number; port: number; started_at: ISODate; footprint_gb: number | null; status: string }[];
   memory: MemoryState;
   benchmark: BenchState;
-  claude: ClaudeState;
+  cloud: CloudState;
+  policy: AIPolicy;
+}
+
+export interface RecommendedModel {
+  ollama: string;
+  family: string;
+  set: 'core' | 'optional';
+  download_gb: number;
+  ram_gb: number;
+  roles: string[];
+  why: string;
+  installed: boolean;
+  model_id: string | null;
+  enabled: boolean | null;
+  pull?: { status: string; pct: number; error: string | null; at: ISODate } | null;
+}
+
+export interface RecommendedModels {
+  mac: { chip: string; memory_gb: number; disk_tb: number };
+  pool_budget_gb: number;
+  disk_free_gb: number | null;
+  ollama_running: boolean;
+  models: RecommendedModel[];
+  core_missing_gb: number;
+  install_hint: string;
+}
+
+export interface UsageAgg {
+  spent_usd: number;
+  calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  /** share of the spend whose cost xAI reported exactly (the rest is estimated from the price table) */
+  reported_share: number | null;
+}
+
+export interface GrokUsage {
+  generated_at: ISODate;
+  policy: AIPolicy;
+  key: {
+    present: boolean;
+    fingerprint: string | null;
+    available: boolean | null;
+    reason: string | null;
+    checked_at: ISODate | null;
+    info: Record<string, unknown>;
+    info_source: string;
+  };
+  today: UsageAgg;
+  budget: {
+    daily_usd: number;
+    call_cap: number;
+    spent_today_usd: number;
+    reserved_usd: number;
+    calls_today: number;
+    remaining_today_usd: number;
+    calls_left_today: number;
+    resets_at: ISODate;
+    is_estimate: false;
+    note: string;
+  };
+  month: UsageAgg & { month: string };
+  last_days: UsageAgg & { days: number };
+  all_time: UsageAgg;
+  credit: {
+    entered_usd: number;
+    entered_at: ISODate;
+    spent_since_usd: number;
+    estimated_remaining_usd: number;
+    is_estimate: true;
+    note: string;
+  } | null;
+  daily: { date: string; spent_usd: number; calls: number }[];
+  by_model: { model: string; calls: number; spent_usd: number; input_tokens: number; output_tokens: number }[];
+  by_task: { task_type: string; calls: number; spent_usd: number }[];
+  cost_sources: { reported: number; estimated: number };
+  rate_limits: { headers: Record<string, string>; at: ISODate | null; note: string };
+  local: {
+    calls: number;
+    input_tokens: number;
+    output_tokens: number;
+    grok_calls: number;
+    local_share: number | null;
+    est_saved_usd: number;
+    saved_note: string;
+  };
+  recent: {
+    at: ISODate;
+    task_type: string | null;
+    model: string | null;
+    cost_usd: number | null;
+    cost_source: 'reported' | 'estimated';
+    input_tokens: number | null;
+    output_tokens: number | null;
+    result: string | null;
+  }[];
+}
+
+export interface MatchFactor {
+  key: string;
+  label: string;
+  score: number;
+  weight: number;
+  points: number;
+  why: string;
+}
+
+/** Transparent match score (version 2) stored on every scored opportunity. */
+export interface MatchBreakdown {
+  version: 2;
+  total: number;
+  verdict: 'apply' | 'consider' | 'skip';
+  verdict_why: string;
+  track: 'core' | 'stepping_stone' | 'other' | (string & {});
+  track_label: string;
+  stepping_stone_why?: string | null;
+  region: { tier?: number | null; label?: string | null; country?: string | null; work_mode?: string };
+  exception: string | null;
+  factors: MatchFactor[];
+  skills_matched: string[];
+  skill_gaps: string[];
+  highlights: string[];
+  concerns: string[];
+  simulated?: boolean;
 }
 
 export interface BudgetState {
@@ -938,12 +1088,11 @@ export interface BudgetState {
   call_cap: number;
   by_task: Record<string, { calls: number; spent_usd: number }>;
   deferred_tasks: number;
-  claude_available: boolean | null;
+  cloud_available: boolean | null;
   last_error: string | null;
   resets_at: ISODate;
-  /** active cloud provider (`cloud_llm` auto → xai when HQ_XAI_API_KEY is set) */
-  provider?: 'claude' | 'xai';
+  provider?: 'xai';
   cloud_model?: string | null;
   cloud_reason?: string | null;
-  xai?: { available: boolean; reason: string | null; key_present: boolean; models: string[]; checked: boolean } | null;
+  key_present?: boolean | null;
 }

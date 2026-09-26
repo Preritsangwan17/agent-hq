@@ -45,12 +45,12 @@ export const AGENT_PRESETS: readonly AgentPreset[] = [
   { id: 'verifier', name: 'Verifier', color: '#2DD4BF', emoji: '🔎' },
   { id: 'writer', name: 'Writer', color: '#A78BFA', emoji: '✍️' },
   { id: 'factchecker', name: 'Fact-Checker', color: '#F59E0B', emoji: '🧪' },
-  { id: 'reviewer', name: 'Reviewer (Claude)', color: '#FB7185', emoji: '🧠' },
+  { id: 'reviewer', name: 'Reviewer', color: '#FB7185', emoji: '🧠' },
   { id: 'resume', name: 'Résumé Builder', color: '#60A5FA', emoji: '📄' },
   { id: 'applicant', name: 'Applicant', color: '#F472B6', emoji: '🚀' },
   { id: 'inbox', name: 'Inbox Watcher', color: '#A3E635', emoji: '📬' },
   { id: 'followup', name: 'Follow-up', color: '#FB923C', emoji: '⏰' },
-  { id: 'strategist', name: 'Strategist (Claude)', color: '#E879F9', emoji: '🧭' },
+  { id: 'strategist', name: 'Strategist', color: '#E879F9', emoji: '🧭' },
 ];
 
 export const AGENT_COLORS: Readonly<Record<string, string>> = Object.fromEntries(

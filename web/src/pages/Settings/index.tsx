@@ -1,5 +1,5 @@
 /**
- * /settings — Autonomy & Mode, Rules, Sources, Budget, Schedules, Simulation, Profile & Facts, Security.
+ * /settings — Autonomy & Mode, Rules, Sources, AI & budget, Schedules, Simulation, Profile & Facts, Security.
  * Every editable value is PATCHed to /api/settings optimistically (see saver.tsx); the active tab lives in
  * `?tab=` so it survives reloads and can be linked.
  */
@@ -49,7 +49,7 @@ const TABS: readonly TabDef[] = [
   { id: 'rules', label: 'Rules', icon: SlidersHorizontal, color: '#2DD4BF', blurb: 'Gates, pay floor, fit, daily caps', Component: RulesTab },
   { id: 'sources', label: 'Sources', icon: Radar, color: '#22D3EE', blurb: 'Job boards, programme pages, paste a link', Component: SourcesTab },
   { id: 'gmail', label: 'Gmail', icon: Mail, color: '#60A5FA', blurb: 'Connect read-only, replies, notifications', Component: GmailTab },
-  { id: 'budget', label: 'Budget', icon: Gauge, color: '#E879F9', blurb: 'Claude spend and call cap', Component: BudgetTab },
+  { id: 'budget', label: 'AI & budget', short: 'AI', icon: Gauge, color: '#E879F9', blurb: 'Local/Grok switches, API-saving mode, Grok limits', Component: BudgetTab },
   { id: 'schedules', label: 'Schedules', icon: MoonStar, color: '#818CF8', blurb: 'Quiet hours, keep awake', Component: SchedulesTab },
   { id: 'simulation', label: 'Simulation', icon: FlaskConical, color: '#38BDF8', blurb: 'Sim on/off, speed, reset', Component: SimulationTab },
   { id: 'profile', label: 'Profile & Facts', short: 'Profile', icon: UserRound, color: '#60A5FA', blurb: 'Fields needed before go-live', Component: ProfileTab },

@@ -44,7 +44,7 @@ const AgentCard = memo(function AgentCard({ agent }: { agent: Agent }) {
   const meta = STATE_META[state];
   const working = state === 'working';
   const model = live?.model_id ?? agent.model;
-  const claude = agent.cost_tier === 'claude';
+  const cloud = agent.cost_tier === 'cloud';
   const line = working ? live?.now_line ?? 'Starting…' : agent.last_error && state === 'error' ? agent.last_error : null;
 
   return (
@@ -72,8 +72,8 @@ const AgentCard = memo(function AgentCard({ agent }: { agent: Agent }) {
             </span>
           </div>
           <div className="mt-0.5 flex items-center gap-1.5 truncate font-mono text-[10.5px] text-faint">
-            {claude ? <Sparkles className="size-3 shrink-0 text-fuchsia-300/80" aria-hidden /> : <Cpu className="size-3 shrink-0" aria-hidden />}
-            <span className="truncate">{claude ? 'Claude' : modelLabel(model)}</span>
+            {cloud ? <Sparkles className="size-3 shrink-0 text-fuchsia-300/80" aria-hidden /> : <Cpu className="size-3 shrink-0" aria-hidden />}
+            <span className="truncate">{modelLabel(model)}</span>
             <span aria-hidden>·</span>
             <span className="shrink-0">{agent.adapter}</span>
           </div>

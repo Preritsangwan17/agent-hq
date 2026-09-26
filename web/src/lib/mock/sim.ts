@@ -129,8 +129,11 @@ export const DEFAULT_MOCK_SETTINGS: Settings = {
   fit_draft_threshold: 60,
   fit_polish_threshold: 75,
   daily_draft_cap: 20,
-  claude_daily_budget_usd: 5,
-  claude_daily_call_cap: 40,
+  cloud_daily_budget_usd: 2,
+  cloud_daily_call_cap: 40,
+  local_ai_enabled: true,
+  grok_enabled: true,
+  cloud_mode: 'saver',
   email_daily_cap: 10,
   quiet_hours: { enabled: false, start: '23:00', end: '07:00' },
   unknown_pay_policy: 'decision',
@@ -155,8 +158,8 @@ export class Simulator {
   private nextInboxAt = 0;
   private nextStrategistAt = 0;
   private nextHeartbeatAt = 0;
-  private claudeCost = 0;
-  private claudeCalls = 0;
+  private grokCost = 0;
+  private grokCalls = 0;
   private localTokens = 0;
 
   constructor() {
@@ -440,9 +443,9 @@ export class Simulator {
     actions.sort((a, b) => a.t - b.t);
     for (const a of actions) a.fn();
 
-    // seeded Claude/token usage for the day
-    this.claudeCost = 0.84;
-    this.claudeCalls = 14;
+    // seeded Grok/token usage for the day
+    this.grokCost = 0.06;
+    this.grokCalls = 3;
     this.localTokens = 1_240_000;
 
     // continue the flow for anything mid-pipeline
@@ -506,7 +509,7 @@ export class Simulator {
         task('factchecker', 'factcheck.sentence');
         handoff('factchecker', 'reviewer', 'factcheck.signoff');
         task('reviewer', 'factcheck.signoff');
-        this.setStage(id, 'checked', 'All gates passed · Claude sign-off', t, 'reviewer');
+        this.setStage(id, 'checked', 'All gates passed · local sign-off', t, 'reviewer');
         handoff('reviewer', 'resume', 'build.resume');
         break;
       case 'applied': {
@@ -687,7 +690,7 @@ export class Simulator {
   };
 
   private startJob(agent: Agent, task: SimTask, now: number, speed: number): void {
-    const dur = (rand(2000, 8000) / speed) * (agent.cost_tier === 'claude' ? 1.3 : 1);
+    const dur = (rand(2000, 8000) / speed) * (agent.cost_tier === 'cloud' ? 1.3 : 1);
     const steps = randInt(3, 6);
     const p = task.oppId ? this.meta.get(task.oppId)?.pool ?? null : null;
     const lines = (NOW_LINES[task.capability] ?? [`Working on ${task.capability}…`]).map((l) => fill(l, p));
@@ -889,9 +892,9 @@ export class Simulator {
       case 'factcheck.signoff': {
         if (!o) break;
         const cost = rand(0.03, 0.09);
-        this.claudeCost += cost;
-        this.claudeCalls += 1;
-        this.setStage(o.id, 'checked', `All gates passed · Claude sign-off $${cost.toFixed(2)}`, now, agentId);
+        this.grokCost += cost;
+        this.grokCalls += 1;
+        this.setStage(o.id, 'checked', `All gates passed · Grok sign-off $${cost.toFixed(2)}`, now, agentId);
         this.enqueue('build.resume', o.id, now, agentId);
         break;
       }
@@ -959,8 +962,8 @@ export class Simulator {
       }
       case 'strategy.daily_review': {
         const cost = rand(0.12, 0.25);
-        this.claudeCost += cost;
-        this.claudeCalls += 1;
+        this.grokCost += cost;
+        this.grokCalls += 1;
         const verified = [...this.opps.values()].filter((x) => (this.meta.get(x.id)?.reached ?? 0) >= 1).length;
         this.emit('log', 'info', `Strategist: daily review — ${verified} verified today · top source Greenhouse · 2 proposals ($${cost.toFixed(2)})`, {
           agent_id: agentId, data: { proposals: ['Add ATS slug: pixelwise', 'Raise fit_draft_threshold to 62'] },
@@ -1108,9 +1111,9 @@ export class Simulator {
       filtered: by_stage.filtered,
       success_rate: applied ? interviews / applied : null,
       needs_open: [...this.needs.values()].filter((n) => n.status === 'open').length,
-      claude_cost_today_usd: Math.round(this.claudeCost * 100) / 100,
-      claude_budget_usd: this.settings.claude_daily_budget_usd,
-      claude_calls_today: this.claudeCalls,
+      cloud_cost_today_usd: Math.round(this.grokCost * 100) / 100,
+      cloud_budget_usd: this.settings.cloud_daily_budget_usd,
+      cloud_calls_today: this.grokCalls,
       local_tokens_today: this.localTokens,
       pay: {
         pipeline_median_inr: median(pipe),

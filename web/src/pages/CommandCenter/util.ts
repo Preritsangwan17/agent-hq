@@ -29,14 +29,14 @@ export function stateLabel(agent: Agent | undefined, state: VisualState): string
   return STATE_META[state].label;
 }
 
-/** "Reviewer (Claude)" → "Reviewer" (the model line already says Claude). */
+/** "Scout (local)" → "Scout" (the model line already names the model). */
 export function shortName(name: string): string {
   return name.replace(/\s*\([^)]*\)\s*$/, '') || name;
 }
 
 /**
  * Compact model label: "mlx:mlx-community/Qwen3-4B-Instruct-2507-4bit" → "Qwen3-4B",
- * "claude:sonnet" → "Claude Sonnet", null → "no LLM".
+ * "xai:grok-4-fast" → "Grok 4 Fast", null → "no LLM".
  */
 export function modelLabel(model: string | null | undefined): string {
   if (!model) return 'no LLM';
@@ -44,11 +44,20 @@ export function modelLabel(model: string | null | undefined): string {
   const i = model.indexOf(':');
   const provider = i > 0 ? model.slice(0, i) : '';
   const rest = i > 0 ? model.slice(i + 1) : model;
-  if (provider === 'claude') return `Claude ${rest.charAt(0).toUpperCase()}${rest.slice(1)}`;
+  if (provider === 'xai') return grokLabel(rest);
   const name = (rest.split('/').pop() ?? rest)
     .replace(/-(\d+bit|bf16|fp16|mxfp4|q\d\w*)$/i, '')
     .replace(/-(instruct|chat|it)\b.*$/i, '');
   return name || rest;
+}
+
+/** "grok-4-fast" → "Grok 4 Fast" */
+export function grokLabel(name: string): string {
+  return name
+    .replace(/^xai:/, '')
+    .split('-')
+    .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : w))
+    .join(' ');
 }
 
 export function eventAgentColor(e: HQEvent, colorOf: (id: string) => string | undefined): string {

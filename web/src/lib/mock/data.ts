@@ -72,11 +72,11 @@ const AGENT_SEEDS: Record<string, AgentSeed> = {
   reviewer: {
     role: 'reviewer',
     capabilities: ['factcheck.signoff'],
-    cost_tier: 'claude',
+    cost_tier: 'local',
     schedule: { mode: 'on_demand' },
-    model: 'claude:sonnet',
-    description: 'Claude sign-off on letters that passed the local gates (budgeted).',
-    tokS: null,
+    model: 'ollama:gemma3:12b',
+    description: 'Independent final sign-off: a second local model when one qualifies, Grok only when needed.',
+    tokS: [90, 140],
   },
   resume: {
     role: 'resume',
@@ -118,9 +118,9 @@ const AGENT_SEEDS: Record<string, AgentSeed> = {
   strategist: {
     role: 'strategist',
     capabilities: ['strategy.daily_review'],
-    cost_tier: 'claude',
+    cost_tier: 'cloud',
     schedule: { mode: 'cron', cron: '0 7 * * *' },
-    model: 'claude:sonnet',
+    model: 'xai:grok-4-fast',
     description: 'Daily review of what worked: sources, keywords and thresholds (proposals only).',
     tokS: null,
   },
@@ -407,9 +407,9 @@ export const NOW_LINES: Record<string, string[]> = {
     'Quality gate: specificity rubric, clichés…',
   ],
   'factcheck.signoff': [
-    'Claude sign-off: reading letter + fact sheet…',
-    'Claude sign-off: checking claims against citations…',
-    'Claude sign-off: verdict + notes…',
+    'Sign-off: reading letter + fact sheet…',
+    'Sign-off: checking claims against citations…',
+    'Sign-off: verdict + notes…',
   ],
   'build.resume': [
     'Selecting approved bullets for {company}…',

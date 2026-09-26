@@ -18,9 +18,9 @@ const MAX_BACKOFF_MS = 30_000;
  */
 const EXTRA_EVENT_TYPES = [
   'task.cancelled', 'task.deferred', 'agent.invalid', 'agent.error', 'budget.deferred',
-  // phase (b): models, benchmarks, roles, Claude budget
+  // phase (b): models, benchmarks, roles, Grok budget
   'model.discovered', 'model.status', 'benchmark.started', 'benchmark.progress', 'benchmark.done', 'roles.updated',
-  'budget.updated', 'budget.capped', 'claude.status',
+  'budget.updated', 'budget.capped', 'cloud.status', 'model.pull',
   // settings / pipeline / inbox / strategist (phases c–e)
   'profile.updated', 'source.updated', 'fetch.error', 'gate.result', 'document.created', 'application.updated',
   'mail.received', 'mail.classified', 'thread.locked', 'thread.unlocked', 'followup.scheduled', 'strategy.report',

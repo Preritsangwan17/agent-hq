@@ -7,6 +7,7 @@
  * In mock mode (VITE_MOCK=1) `window.fetch` is patched by src/lib/mock, so this module is unchanged.
  */
 import type {
+  AIPolicy,
   Agent,
   AgentConfig,
   AgentPatch,
@@ -16,10 +17,12 @@ import type {
   AuditEntry,
   AuthStatus,
   BudgetState,
+  Engines,
   EventsQuery,
   FetchLogResponse,
   GmailInfo,
   GoLiveState,
+  GrokUsage,
   InboxList,
   InboxThreadDetail,
   NotificationRow,
@@ -36,6 +39,7 @@ import type {
   Profile,
   ProfileFact,
   ProfileField,
+  RecommendedModels,
   SecurityInfo,
   Source,
   SourcesResponse,
@@ -242,7 +246,13 @@ export const api = {
   pinModel: (id: string, pinned: boolean) => http.post<Model>(`/api/models/${id}/pin`, { pinned }),
   unloadModel: (id: string) => http.post<{ ok: boolean }>(`/api/models/${id}/unload`),
   budget: () => http.get<BudgetState>('/api/budget'),
-  recheckClaude: () => http.post<{ queued: boolean }>('/api/claude/recheck'),
+  recheckCloud: () => http.post<{ queued: boolean }>('/api/cloud/recheck'),
+  usage: (days = 30) => http.get<GrokUsage>('/api/usage', { days }),
+  setEngines: (engines: Engines) => http.post<{ policy: AIPolicy; settings: Settings }>('/api/ai/engines', { engines }),
+  setModelEnabled: (id: string, enabled: boolean) => http.post<Model>(`/api/models/${id}/enabled`, { enabled }),
+  recommendedModels: () => http.get<RecommendedModels>('/api/models/recommended'),
+  pullModel: (name: string) => http.post<{ queued: boolean; name: string }>('/api/models/pull', { name }),
+  applyAnyway: (id: string) => http.post<{ queued: boolean }>(`/api/opportunities/${enc(id)}/apply-anyway`),
   changePasscode: (current: string, next: string) =>
     http.post<{ ok: boolean }>('/api/auth/change-passcode', { current, new: next }),
   simReset: () => http.post<{ ok?: boolean; purged?: number }>('/api/sim/reset'),

@@ -10,6 +10,7 @@ import {
   Settings,
   SquareKanban,
   SquareTerminal,
+  Sparkles,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -35,6 +36,7 @@ export const NAV: readonly NavItem[] = [
   { to: '/activity', label: 'Activity', icon: SquareTerminal, group: 'Observe', mobile: 'tab', color: '#A3E635' },
   { to: '/inbox', label: 'Inbox', icon: Inbox, group: 'Observe', mobile: 'more', color: '#60A5FA' },
   { to: '/analytics', label: 'Analytics', icon: ChartColumn, group: 'Observe', mobile: 'more', color: '#F472B6' },
+  { to: '/usage', label: 'AI & Grok usage', short: 'AI usage', icon: Sparkles, group: 'System', mobile: 'more', color: '#E879F9' },
   { to: '/models', label: 'Models', icon: Cpu, group: 'System', mobile: 'more', color: '#F59E0B' },
   { to: '/agents', label: 'Agents', icon: Bot, group: 'System', mobile: 'more', color: '#E879F9' },
   { to: '/settings', label: 'Settings', icon: Settings, group: 'System', mobile: 'more', color: '#8B95A7' },

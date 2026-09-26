@@ -1,4 +1,4 @@
-/** Header status widgets: mode badge, SIM indicator, Claude budget gauge, worker/SSE connection dot. */
+/** Header status widgets: mode badge, SIM indicator, Grok budget gauge, worker/SSE connection dot. */
 import { FlaskConical, ShieldCheck, Snowflake, UserCheck } from 'lucide-react';
 import { Badge } from '@/components/Badge';
 import { StatusDot } from '@/components/StatusDot';
@@ -56,10 +56,11 @@ export function SimIndicator() {
 
 export function BudgetGauge({ compact }: { compact?: boolean }) {
   const stats = useHQ((s) => s.stats);
-  const cap = useHQ((s) => s.settings.claude_daily_call_cap);
-  const settingsBudget = useHQ((s) => s.settings.claude_daily_budget_usd);
-  const spent = stats?.claude_cost_today_usd ?? 0;
-  const budget = stats?.claude_budget_usd || settingsBudget || 5;
+  const cap = useHQ((s) => s.settings.cloud_daily_call_cap);
+  const settingsBudget = useHQ((s) => s.settings.cloud_daily_budget_usd);
+  const grokOn = useHQ((s) => s.settings.grok_enabled !== false);
+  const spent = stats?.cloud_cost_today_usd ?? 0;
+  const budget = stats?.cloud_budget_usd || settingsBudget || 2;
   const frac = Math.max(0, Math.min(1, spent / budget));
   const color = frac >= 0.85 ? colors.warn : '#E879F9';
   const r = 9;
@@ -69,14 +70,14 @@ export function BudgetGauge({ compact }: { compact?: boolean }) {
       side="bottom"
       content={
         <div className="space-y-0.5">
-          <div className="font-medium">Claude today</div>
+          <div className="font-medium">Grok today{grokOn ? '' : ' (switched off)'}</div>
           <div>
             {formatUSD(spent)} of {formatUSD(budget)} budget ({Math.round(frac * 100)}%)
           </div>
           <div className="text-muted">
-            {stats?.claude_calls_today ?? 0} of {cap} calls · local tokens {formatCompact(stats?.local_tokens_today ?? 0)}
+            {stats?.cloud_calls_today ?? 0} of {cap} calls · local tokens {formatCompact(stats?.local_tokens_today ?? 0)} (free)
           </div>
-          <div className="text-muted">Over budget → Claude tasks defer to midnight IST; local work continues.</div>
+          <div className="text-muted">Over budget → Grok tasks wait until midnight IST; local work continues.</div>
         </div>
       }
     >
@@ -101,7 +102,7 @@ export function BudgetGauge({ compact }: { compact?: boolean }) {
               {formatUSD(spent)}
               <span className="font-normal text-muted"> / {formatUSD(budget, 0)}</span>
             </span>
-            <span className="block text-[10px] uppercase tracking-[0.12em] text-muted">Claude today</span>
+            <span className="block text-[10px] uppercase tracking-[0.12em] text-muted">Grok today</span>
           </span>
         )}
       </span>

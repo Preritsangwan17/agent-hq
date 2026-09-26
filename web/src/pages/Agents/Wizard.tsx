@@ -45,7 +45,7 @@ interface AdapterDef {
 
 const ADAPTERS: AdapterDef[] = [
   { id: 'openai_compatible', title: 'Local model', icon: Cpu, tier: 'local', blurb: 'An MLX, Ollama, LM Studio or llama.cpp model on this Mac (OpenAI-compatible API).' },
-  { id: 'claude_code', title: 'Claude', icon: Sparkles, tier: 'claude', blurb: 'Headless Claude Code with no tools and no hooks; draws from the daily budget.' },
+  { id: 'cloud', title: 'Grok (paid)', icon: Sparkles, tier: 'cloud', blurb: 'Grok through the xAI API, no tools; redacted prompts; draws from the daily Grok budget.' },
   { id: 'http', title: 'HTTP endpoint', icon: Globe2, tier: 'external', blurb: 'POST /run on a localhost or allowlisted service; payloads are redacted.' },
   { id: 'script', title: 'Script', icon: Code2, tier: 'local', blurb: 'A subprocess speaking JSON over stdio with no secrets. Only from this Mac.' },
   { id: 'sim', title: 'Simulated', icon: FlaskConical, tier: 'local', blurb: 'Plausible fake work for trying the dashboard. Clearly tagged.' },
@@ -438,23 +438,19 @@ function ConfigStep({ d, set }: { d: Draft; set: (p: Partial<Draft>) => void }) 
           </div>
         </>
       )}
-      {d.adapter === 'claude_code' && (
+      {d.adapter === 'cloud' && (
         <>
-          <Field label="Claude model">
+          <Field label="Grok model">
             <Segmented
-              label="Claude model"
-              value={d.model || 'claude:sonnet'}
+              label="Grok model"
+              value={d.model || 'xai:grok-4-fast'}
               onChange={(v) => set({ model: v })}
               color="#E879F9"
               options={[
-                { value: 'claude:haiku', label: 'Haiku' },
-                { value: 'claude:sonnet', label: 'Sonnet' },
-                { value: 'claude:opus', label: 'Opus' },
+                { value: 'xai:grok-4-fast', label: 'Grok 4 Fast (cheap)' },
+                { value: 'xai:grok-4', label: 'Grok 4 (strong)' },
               ]}
             />
-          </Field>
-          <Field label="Per-call cap (USD)" htmlFor="wz-cap" hint="Passed as --max-budget-usd; the daily budget still applies.">
-            <TextInput id="wz-cap" mono inputMode="decimal" value={c.per_call_cap_usd ?? '0.5'} onChange={(e) => setC('per_call_cap_usd', e.target.value)} />
           </Field>
           <Field label="System prompt file" htmlFor="wz-cprompt">
             <TextInput id="wz-cprompt" mono value={c.prompt ?? ''} onChange={(e) => setC('prompt', e.target.value)} placeholder="prompts/custom.md" />
