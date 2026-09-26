@@ -21,7 +21,7 @@ def base(**kw):
 
 def test_starting_team_is_valid_and_matches_contract():
     expected = {
-        "scout": ("#22D3EE", ["discover.ats", "discover.program_page", "parse.job"]),
+        "scout": ("#22D3EE", ["discover.ats", "discover.feed", "discover.program_page", "parse.job"]),
         "verifier": ("#2DD4BF", ["verify.link", "verify.deadline", "verify.eligibility", "verify.pay", "verify.scam",
                                  "score.fit"]),
         "writer": ("#A78BFA", ["draft.cover_letter", "polish.final"]),

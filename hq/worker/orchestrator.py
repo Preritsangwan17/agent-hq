@@ -915,6 +915,16 @@ class Worker:
             self.conn.execute("DELETE FROM events WHERE ts < ?", (to_iso(utcnow() - timedelta(days=60)),))
             self.conn.execute("DELETE FROM commands WHERE consumed_at IS NOT NULL AND consumed_at < ?",
                               (to_iso(utcnow() - timedelta(days=2)),))
+        from hq.util import backup
+
+        try:
+            did = backup.housekeeping(self.conn)
+        except (sqlite3.Error, OSError) as exc:  # a failed backup must never stop the worker
+            log.warning("housekeeping failed: %s", exc)
+            did = [f"backup failed: {exc}"]
+        if did:
+            with tx(self.conn):
+                repo.emit(self.conn, "log", "Housekeeping: " + ", ".join(did), level="debug")
 
     def _update_statuses(self) -> None:
         running = Counter(self._running_counts())

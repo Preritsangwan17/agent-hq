@@ -16,6 +16,7 @@ from hq.llm.prompts import load_prompt, load_schema
 from hq.pipeline.agents.common import has_role_model, label, load_opp, posting_text, sim_or_none
 from hq.pipeline.discover import sources as src_mod
 from hq.pipeline.discover.ats import read_board
+from hq.pipeline.discover.feeds import read_feed
 from hq.pipeline.discover.dedupe import find_duplicate
 from hq.pipeline.discover.fetch import FetchBlocked
 from hq.pipeline.discover.parse import job_quotes, merge_llm, rules_parse
@@ -63,7 +64,7 @@ async def _llm_titles(ctx: RunContext, postings: list[RawPosting]) -> set[str]:
 
 async def discover(task: dict[str, Any], ctx: RunContext) -> RunResult:
     cap = task["capability"]
-    kinds = src_mod.ATS_KINDS if cap == "discover.ats" else ("program_page",)
+    kinds = src_mod.ATS_KINDS if cap == "discover.ats" else ("feed",) if cap == "discover.feed" else ("program_page",)
     fetcher = ctx.services.fetcher
     effects: list[dict[str, Any]] = []
     opp_results: list[tuple[str, dict[str, Any]]] = []
@@ -74,14 +75,17 @@ async def discover(task: dict[str, Any], ctx: RunContext) -> RunResult:
         ctx.check_cancel()
         ctx.progress((i + 0.2) / max(1, len(due)), f"Reading {source['name']}…")
         try:
+            skipped = 0
             if source["kind"] == "program_page":
                 res = await fetcher.get(source["config"]["url"], kind="html", source_id=source["id"])
                 if res.status != 200:
                     raise LookupError(f"HTTP {res.status}")
                 postings = parse_program_page(res.text, source)
+            elif source["kind"] == "feed":
+                postings, skipped = await read_feed(fetcher, source)
             else:
                 postings = await read_board(fetcher, source)
-        except (FetchBlocked, LookupError, TransientError, ValueError) as exc:
+        except (FetchBlocked, LookupError, TransientError, ValueError, SyntaxError) as exc:
             with tx(ctx.conn):
                 src_mod.record_poll(ctx.conn, source["id"], ok=False, error=str(exc)[:200])
             lines.append(f"{source['name']}: {exc}")
@@ -114,7 +118,8 @@ async def discover(task: dict[str, Any], ctx: RunContext) -> RunResult:
             new_here += 1
         with tx(ctx.conn):
             src_mod.record_poll(ctx.conn, source["id"], ok=True, found=new_here)
-        lines.append(f"{source['name']}: {len(postings)} postings, {len(kept)} targets, {new_here} new")
+        lines.append(f"{source['name']}: {len(postings)} postings, {len(kept)} targets, {new_here} new"
+                     + (f", {skipped} skipped (location excludes India)" if skipped else ""))
     summary = "; ".join(lines) if lines else "No sources due"
     output: dict[str, Any] = {"ok": True, "created": created, "sources": len(due)}
     sim = None

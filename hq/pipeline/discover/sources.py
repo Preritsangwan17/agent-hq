@@ -57,6 +57,15 @@ def seed_sources(conn: sqlite3.Connection) -> int:
             (f"greenhouse:{mock['slug']}", dumps({"slug": mock["slug"], "base": mock["base"],
                                                   "tos_note": "Local test server (python -m mock_ats)."}), now, now))
         added += cur.rowcount
+    for feed_id, spec in (cfg.get("feeds") or {}).items():
+        cur = conn.execute(
+            "INSERT OR IGNORE INTO sources(id, name, kind, config_json, automation, tos_status, tos_url, "
+            "tos_reviewed_at, poll_interval_min, enabled, added_by, created_at) "
+            "VALUES (?,?, 'feed', ?, 'discover_only', 'allowed', ?, ?, ?, ?, 'config', ?)",
+            (f"feed:{feed_id}", spec["name"], dumps({"feed": feed_id, "tos_note": spec.get("tos_note")}),
+             spec.get("tos_url"), now, int(spec.get("poll_interval_min", default_interval)),
+             int(bool(spec.get("enabled", True))), now))
+        added += cur.rowcount
     for prog in cfg.get("programs") or []:
         cur = conn.execute(
             "INSERT OR IGNORE INTO sources(id, name, kind, config_json, automation, tos_status, tos_url, "

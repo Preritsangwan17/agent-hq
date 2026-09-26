@@ -21,6 +21,13 @@ wait_gone() {  # wait_gone <pid> <seconds>
   ! alive "$1"
 }
 
+# Installed as a LaunchAgent (make install-launchd)? Unload it, or launchd would restart the supervisor right away.
+LABEL="com.prerit.agenthq"
+if [ "$(uname)" = "Darwin" ] && launchctl print "gui/$(id -u)/$LABEL" >/dev/null 2>&1; then
+  echo "unloading the LaunchAgent $LABEL (it starts again at your next login, or with make up)…"
+  launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
+fi
+
 reaped=0
 reap_children() {
   local name pidfile pid cmd

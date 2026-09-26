@@ -1,7 +1,7 @@
 # Agent HQ — common tasks. `make up` / `make down` wrap start.sh / stop.sh.
 PY := .venv/bin/python
 
-.PHONY: up down dev test bench bench-full screens fmt mock-ats audit
+.PHONY: up down dev test bench bench-full screens fmt mock-ats audit backup install-launchd uninstall-launchd
 
 up:
 	./start.sh
@@ -30,6 +30,17 @@ mock-ats:
 # Export the first 20 eligibility / pay verdicts to data/audit/verdicts.csv for a manual accuracy check.
 audit:
 	$(PY) -m hq.pipeline.audit
+
+# Copy the database to data/backups now (the worker also does this nightly and keeps 14).
+backup:
+	$(PY) -m hq.util.backup
+
+# Start Agent HQ automatically after login (LaunchAgent) / remove that again.
+install-launchd:
+	./scripts/install_launchd.sh
+
+uninstall-launchd:
+	./scripts/uninstall_launchd.sh
 
 screens:
 	npm --prefix web run screens --if-present

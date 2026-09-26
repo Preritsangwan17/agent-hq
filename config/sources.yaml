@@ -23,6 +23,35 @@ ats:
     slugs: [snowflake, openai, perplexity, harvey, cohere, notion, thoughtworks, sierra, sarvam, mercor,
             lilt-production, weaviate, modal, elevenlabs, decagon]
 
+# Remote job feeds (CONTRACT_E §3): public APIs/RSS published for reuse with attribution + a link back to the
+# original posting (HQ shows the feed name as the source and links the posting). Polling stays under their limits.
+feeds:
+  remotive:
+    name: Remotive (remote jobs)
+    tos_url: https://github.com/remotive-com/remote-jobs-api
+    tos_note: Public API; link back to the Remotive URL and mention Remotive as the source; max 4 calls/day.
+    poll_interval_min: 360
+  arbeitnow:
+    name: Arbeitnow (visa sponsorship)
+    tos_url: https://www.arbeitnow.com/blog/job-board-api
+    tos_note: Free job board API; only roles with visa sponsorship.
+    poll_interval_min: 360
+  himalayas:
+    name: Himalayas (remote jobs)
+    tos_url: https://himalayas.app/api
+    tos_note: Public jobs API; attribute Himalayas and link to the job page.
+    poll_interval_min: 360
+  jobicy:
+    name: Jobicy (remote internships)
+    tos_url: https://jobicy.com/jobs-rss-feed
+    tos_note: Public API; at most one request per hour; link back to Jobicy.
+    poll_interval_min: 120
+  wwr:
+    name: We Work Remotely (programming RSS)
+    tos_url: https://weworkremotely.com/remote-job-rss-feed
+    tos_note: Public RSS feed; link back to the listing.
+    poll_interval_min: 360
+
 # Local mock ATS for development (`make mock-ats`); the only site the browser adapter fills in v1. Off by default.
 mock_ats:
   base: http://127.0.0.1:8799
