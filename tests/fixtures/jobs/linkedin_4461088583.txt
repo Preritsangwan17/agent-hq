@@ -1,0 +1,30 @@
+TITLE: Research Intern - AI
+COMPANY: GE HealthCare
+LOCATION: Bengaluru, Karnataka, India
+
+Job Description Summary
+ As a Research intern – AI, you will collaboratively execute technology programs in development and research of AI algorithms for improving medical workflows. You will interact with technologists and engineers to develop and deliver novel solutions for complex, multi-disciplinary problems for GE Healthcare.
+GE HealthCare is a leading global medical technology and digital solutions innovator. Our purpose is to create a world where healthcare has no limits. Unlock your ambition, turn ideas into world-changing realities, and join an organization where every voice makes a difference, and every difference builds a healthier world.
+ Job Description
+ Roles and Responsibilities
+Specific areas of required expertise are: Image analytics, Deep Learning, Inverse problems in Imaging, Clinical decisioning, super resolution reconstruction.
+ Expertise in Deep Learning and Computer Vision/ Image processing, TensorFlow, Pytorch and Keras is required.
+Experience with Generative AI techniques including diffusion models, GANs, foundation vision models, multimodal models, and large language models (LLMs). 
+Experience applying generative AI to medical imaging use cases such as image synthesis, image reconstruction, report generation, data augmentation, segmentation, and clinical workflow automation. 
+Familiarity with vision-language models (VLMs), retrieval-augmented generation (RAG), and multimodal AI systems for healthcare applications.
+ Required Qualification
+Currently pursuing a PhD in Computer Science / Data Sciences / AI from a reputed institute
+Understanding of building large scale AI such as generative AI models, large vision/language models, and multi-modal AI models for problems related to segmentation, detection, quantification, measurements, classification, etc.
+Implementation experience with a variety of high-level languages (e.g. Python, C++)
+Staying current on published state-of-the-art algorithms and competing technologies.
+Experience and demonstrated capability to handle challenges with vague or abstract problem definition.
+Experience with frameworks and tools such as Keras, HuggingFace, Vector databases, PyTorch, Tensorflow etc.
+Experience working with large scale AI training.
+An in-depth understanding of machine learning algorithms and modeling (e.g., semi-supervised or weakly supervised learning, generative models, transfer learning, optimization, large language models, etc.)
+Ability to work independently and as a team player
+ Inclusion and Diversity
+ GE Healthcare is an Equal Opportunity Employer where inclusion matters. Employment decisions are made without regard to race, color, religion, national or ethnic origin, sex, sexual orientation, gender identity or expression, age, disability, protected veteran status or other characteristics protected by law.
+We expect all employees to live and breathe our behaviors: to act with humility and build trust; lead with transparency; deliver with focus, and drive ownership – always with unyielding integrity.
+Our total rewards are designed to unlock your ambition by giving you the boost and flexibility you need to turn your ideas into world-changing realities. Our salary and benefits are everything you’d expect from an organization with global strength and scale, and you’ll be surrounded by career opportunities in a culture that fosters care, collaboration and support.
+ Additional Information
+ Relocation Assistance Provided: Yes

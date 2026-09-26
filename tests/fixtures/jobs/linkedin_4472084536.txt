@@ -1,0 +1,43 @@
+TITLE: Artificial Intelligence Intern
+COMPANY: eTeam
+LOCATION: Noida, Uttar Pradesh, India
+
+AI Intern (Generative AI) – Remote Internship
+ Location: Remote (Work From Home)
+ Internship Duration: 6 Months
+ Employment Type: Full-Time Internship
+ Working Hours: 3:00 PM – 11:00 PM (IST)
+ Internship Overview
+ Work on live AI/ML projects involving LLMs, RAG, Prompt Engineering, AI Agents, APIs,
+ Automation, and modern AI development tools.
+ Stipend & Growth
+ • First 3 Months: ₹10,000/month
+ • Next 3 Months (Performance-Based):
+ - Good Performer: ₹20,000/month
+ - Outstanding Performer: ₹30,000/month (Senior AI Intern)
+ • PPO Opportunity upon successful completion.
+ • Expected CTC after PPO: ₹4.20–6.00 LPA
+ Key Responsibilities
+ • Design and implement AI workflows using LLMs.
+ • Work on Prompt Engineering and RAG.
+ • Build workflows using Dify.ai.
+ • Prototype using Cursor/Windsurf.
+ • Research AI models and frameworks.
+ • Develop AI agents and automation.
+ • Collaborate with cross-functional teams.
+ • Document processes and learnings.
+ Eligibility
+ • 2026/2027 graduates in CS, AI, Data Science or related fields.
+ • 2027 graduates require College NOC.
+ Required Skills
+ • Strong Python or other programming language.
+ • Independent coding ability.
+ • Knowledge of LLMs, RAG, Prompt Engineering, Vector Databases, APIs.
+ Preferred Skills
+ OpenAI, Claude, Mistral, Groq, LangChain, LlamaIndex, Hugging Face, OpenRouter, MCP,
+ Flowise, ChromaDB, CrewAI, AutoGen, Docker, Kubernetes, CI/CD.
+ Who Can Apply?
+ • Available for a 6-month remote internship.
+ • Comfortable with 3 PM–11 PM shift.
+ • Own laptop and stable internet.
+ • Immediate joiners preferred.

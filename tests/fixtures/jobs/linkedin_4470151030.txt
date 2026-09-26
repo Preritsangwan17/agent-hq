@@ -1,0 +1,46 @@
+TITLE: Artificial Intelligence Intern
+COMPANY: Linde
+LOCATION: Kolkata, West Bengal, India
+
+Location: Kolkata | Mumbai
+ Duration: 6 Months
+ The AI Intern will work with Department Heads and business teams to identify business challenges and develop practical AI, data and automation solutions. This is an execution-focused role, with an expectation to deliver at least one demonstrable solution during the internship.
+ Key Responsibilities
+Identify and priorities AI/automation use cases with business stakeholders.
+Convert business problems into practical AI solution concepts.
+Build proof-of-concepts using Python, SQL, ML libraries and LLM APIs.
+Work on use cases such as predictive analytics, anomaly detection, document processing, summarization and Generative AI.
+Extract, clean and analyze data and develop dashboards/visualisations.
+Test solutions with users, incorporate feedback and improve prototypes.
+Document solutions and conduct demonstrations/knowledge-sharing sessions.
+Contribute reusable code, prompts and learnings to the AI knowledge repository.
+Follow data privacy, information security and Responsible AI guidelines.
+ Skills & Competencies:
+Strong Python skills.
+Working knowledge of SQL and Power BI.
+Understanding of Machine Learning, Deep Learning and Generative AI.
+Hands-on experience with Pandas, NumPy and Scikit-learn.
+Exposure to LLMs and prompt engineering.
+Knowledge of Git, Jupyter and Excel.
+Strong analytical and problem-solving skills.
+ Preferred:
+TensorFlow/PyTorch.
+RAG, vector databases, LangChain or AI agent frameworks.
+Tableau/Power BI.
+Azure, AWS or GCP.
+Flask, FastAPI or Streamlit.
+ Eligibility:
+Currently enrolled in 7th semester of B.Tech.
+Minimum aggregate: [Insert CGPA / Percentage].
+No active backlogs.
+Available for an uninterrupted 6-month internship.
+Institutional approval where required.
+ What We Look For:
+ Students who combine strong technical skills with business curiosity and enjoy building practical AI solutions. Projects in AI/ML, GenAI, Data Analytics, NLP, Computer Vision or Business Intelligence will be an advantage.
+ How to Apply:
+ Please share:
+Updated résumé
+Links to relevant projects/GitHub repositories
+A maximum 200-word note describing one AI use case that could add value to any business function.
+ Apply To: Nainy.philip@linde.com
+ Subject: AI Intern – [Your Name] – [College] – [Specialization]

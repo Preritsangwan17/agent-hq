@@ -1,0 +1,29 @@
+TITLE: Product Engineer Intern – AI Agentic Systems
+COMPANY: Readyly
+LOCATION: India
+
+About the Role 
+ We are looking for a passionate and curious Product Engineer Intern to join our team building next-generation AI agentic systems. The ideal candidate will help design and ship intelligent, autonomous product features while gaining hands-on experience with LLMs, agent frameworks, and modern cloud infrastructure. 
+ Responsibilities 
+Design, build, and iterate on AI agent workflows and product features powered by LLMs.
+Develop high-quality, maintainable full-stack applications that integrate agentic capabilities into the product.
+Prototype and test agent behaviors — tool use, memory, multi-step reasoning, and orchestration.
+Collaborate with product, design, and engineering teams to define, design, and ship new AI-driven features.
+Analyze agent performance, identify failure modes, and improve reliability, latency, and cost efficiency.
+Identify, troubleshoot, and resolve issues across the application and agent pipeline.
+Contribute to evaluation frameworks and testing strategies for agentic systems.
+ Qualifications 
+Bachelor's degree (or pursuing) in Computer Science, Information Technology, or a related field.
+Strong understanding of data structures, algorithms, and software design principles.
+Hands-on experience in one or more of the following:
+React.js, Node.js, Python
+LLM APIs / agent frameworks (e.g., LangChain, LlamaIndex, OpenAI/Anthropic SDKs, or similar)
+AWS Lambda and serverless architectures
+Genuine interest in AI agents, product thinking, and building user-facing intelligent systems.
+Prior exposure to prompt engineering, RAG, or vector databases is a plus.
+AWS Certification is a plus.
+ Stipend and Work Hours 
+₹25,000 per month
+Duration: 6 months
+20 hours per week (part-time)
+Exceptional interns may be offered a full-time Product Engineer / SDE role upon successful completion of the internship, with a competitive annual salary package.

@@ -1,0 +1,36 @@
+TITLE: Data Science Intern
+COMPANY: Houlihan Lokey
+LOCATION: Gurugram, Haryana, India
+
+Business Unit:
+ Financial And Valuation Advisory
+ Industry:
+ Transaction Advisory Services
+ Overview
+ Houlihan Lokey, Inc. (NYSE:HLI) is a leading global investment bank recognized for delivering independent strategic and financial advice to corporations, financial sponsors, and governments. With uniquely deep industry expertise, broad international reach, and a partnership approach rooted in trust, the firm provides innovative, integrated solutions across mergers and acquisitions, capital solutions, financial restructuring, and financial and valuation advisory. Our unmatched transaction volumes provide differentiated, data-driven perspectives that help our clients achieve their most critical goals. To learn more about Houlihan Lokey, please visit HL.com.
+ Financial and Valuation Advisory
+ Over the past 50+ years, Houlihan Lokey has established one of the largest worldwide financial and valuation advisory practices. Our transaction expertise and leadership in the field of valuation inspire confidence in the financial executives, boards of directors, special committees, investors, and business owners we serve. In 2025, LSEG ranked us the No. 1 global M&A fairness opinion advisor over the past 25 years. Our stability, integrity, technical leadership, and global capabilities make us a trusted advisor for clients worldwide, across a wide range of services, including the Transaction Opinions, Fund Opinions, Transaction Advisory Services, Corporate Valuation Advisory Services, Portfolio Valuation, Real Estate Valuation and Advisory Services, and Dispute Resolution Consulting practices.
+Houlihan Lokey (NYSE:HLI) is a global investment bank with expertise in valuation, mergers and acquisitions, capital markets, financial restructuring, and strategic consulting. The firm serves corporations, institutions, and governments worldwide with offices in the United States, Europe, the Middle East, and the Asia-Pacific region. Independent advice and intellectual rigor are hallmarks of the firm’s commitment to client success across its advisory services. Houlihan Lokey is ranked as the No. 1 global M&A fairness opinion advisor over the past 20 years according to Refinitiv.
+ Data Science Intern 
+ The Financial Advisory Services team has multiple Data Science Internships for up to 1 year at our Gurgaon office. The internship is an excellent opportunity to use your data related skills and learn data science as applicable in investment banking and financial services. You will work with New York and London based senior Data Scientists and develop products and processes, which will address the latest needs of the global financial markets.
+You will have the opportunity to gain valuable on-the-job training throughout your internship, with similar levels of exposure as a first-year analyst. Depending on both your performance and Houlihan Lokey’s hiring needs, the internship may translate to a full-time offer.
+ Key Responsibilities:
+Data Collection: Collect and Process data from multiple financial databases that HL has access
+Excel-based Analysis: Analyze data using advanced Excel functions such as PivotTables, VLOOKUP, INDEX/MATCH, and complex formulas.
+Data Extraction and Transformation using Python and tools like Dataiku
+Data Warehousing in Snowflake
+Data Visualization: Assist in creating visually appealing and insightful charts, graphs, and dashboards that convey data trends and insights clearly using Power BI or Tableau
+Documentation: Document and share best practices for Excel-based processes
+ Qualifications / Requirements
+You must either be in you final year of study or a recent graduate available to work on a full-time basis
+You have or will receive a Bachelor of Engineering, Bachelor of Technology, Bachelor of Science in Mathematics or Statistics or Data Science) from a reputed academic institution
+You will have a strong academic track record
+Strong quantitative and analytical skills with knowledge of Excel.
+Basic knowledge of SQL and Python programming language
+Excellent verbal and written communication skills in English are essential
+A demonstrated interest in Data Science
+Previous internship experience within Data Analysis or Data Science is essential
+You must be motivated and have the ability to work cooperatively with all levels of staff in a rapidly changing, demanding, but ultimately rewarding environment
+Houlihan Lokey aims to attract talented graduates who share our passion for excellence and commitment.
+ Equal Opportunity Employer M/F/D/V
+ We are an equal opportunity employer and all qualified applicants will receive consideration for employment without regard to race, color, religion, sex, national origin, disability, gender identity, sexual orientation, protected veteran status, or any other characteristic protected by law.

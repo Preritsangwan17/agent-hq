@@ -1,0 +1,57 @@
+TITLE: AI & Machine Learning Intern
+COMPANY: pharma&
+LOCATION: Hyderabad, Telangana, India
+
+Location: Hyderabad, India
+ Work arrangement: On-site
+ Duration: 6 months
+ Type: Full-time Internship
+ Stipend : ₹15000 per month
+ pharma& is looking for a talented AI & Machine Learning Intern to join our team in Hyderabad.
+ This internship is designed for candidates with a strong technical foundation in artificial intelligence and machine learning who are looking to apply their skills to real-world business problems.
+ We are particularly interested in candidates who can demonstrate practical experience through academic, personal, open-source or professional AI/ML projects.
+What you will work on As part of the team, you will have the opportunity to contribute to AI, machine learning and data-driven initiatives, potentially including:
+Developing and evaluating machine learning models
+Exploring Generative AI and Large Language Model applications
+Working with structured and unstructured data
+Supporting proof-of-concepts and AI prototypes
+Data preparation, exploratory analysis and feature engineering
+Experimenting with LLM APIs, open-source models and AI development frameworks
+Exploring Retrieval-Augmented Generation, semantic search and vector databases
+Supporting the development of scalable AI and analytics solutions
+Working alongside colleagues across data, analytics, digital and business functions
+Qualifications Candidates should have:
+A Bachelor's or Master's degree, or currently be studying towards a degree, in Artificial Intelligence, Machine Learning, Data Science, Computer Science, Mathematics, Statistics, Engineering, or a closely related quantitative field
+Strong Python programming skills
+Hands-on experience with Pandas, NumPy and Scikit-learn 
+Hands-on experience with at least one deep learning framework such as PyTorch or TensorFlow 
+Good understanding of data structures, algorithms, probability, statistics and mathematical concepts relevant to machine learning 
+Demonstrated experience building, training and evaluating machine learning models
+Ability to select and interpret appropriate evaluation metrics such as accuracy, precision, recall, F1-score, ROC-AUC, RMSE or similar
+Understanding of data preparation, feature engineering, exploratory data analysis, model validation and model optimisation
+Working knowledge of Git and GitHub 
+Understanding of Large Language Model concepts, including tokenisation, embeddings, encoder/decoder architectures, prompting, context windows, pre-training and fine-tuning 
+Hands-on experience using an LLM API, open-source LLM or AI development framework 
+Familiarity with prompting and in-context learning 
+Strong analytical and problem-solving skills
+Ability to work independently and take ownership of technical problems
+Strong communication skills and the ability to explain technical work clearly
+Demonstrable AI/ML project required Applicants must have at least one AI, machine learning or data science project that they can demonstrate and explain in detail during the interview .
+ Please include a link to your GitHub repository, portfolio, notebook or project/demo as part of your application.
+ Applications without evidence of a technical project may not be progressed.
+Experience with any of the following would be an advantage 
+Retrieval-Augmented Generation (RAG)
+Vector databases and semantic search
+Hugging Face / Transformers
+LangChain, LangGraph, LlamaIndex or Semantic Kernel
+Natural Language Processing
+Time-series modelling and forecasting
+SQL
+APIs and data pipelines
+Azure or other cloud platforms
+Docker
+MLOps and model deployment concepts
+Microsoft Fabric or Power BI
+Open-source contributions or publicly available technical projects
+Internship requirements Candidates must be able to work full-time and on-site from our Hyderabad office for the full six-month internship .
+ We are looking for candidates who are technically curious, enjoy solving complex problems and can demonstrate that they have already started building and experimenting with AI and machine learning technologies.

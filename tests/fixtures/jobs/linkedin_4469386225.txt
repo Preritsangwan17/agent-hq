@@ -1,0 +1,44 @@
+TITLE: Artificial Intelligence Intern
+COMPANY: Meril
+LOCATION: Bengaluru, Karnataka, India
+
+Machine Learning Intern 
+ Location: Bangalore
+ Employment Type: Internship
+ Full-Time Opportunity: Based on performance
+ About the Role 
+ We are looking for a highly motivated and analytical AI/ML & Strategy Exploration Intern to join our team. The role involves working with data, supporting Machine Learning activities, exploring data-driven strategies, and solving analytical problems.
+ The ideal candidate should have strong problem-solving skills, fundamental knowledge of Machine Learning, and a good foundation in Mathematics and Statistics .
+ Key Responsibilities 
+Prepare, clean, organize, and analyze datasets for AI/ML and strategy-related projects.
+Perform data preprocessing and basic statistical analysis.
+Assist with manual evaluation and validation of ML model outputs.
+Explore datasets to identify patterns, trends, relationships, and potential signals.
+Support the exploration and evaluation of data-driven strategies.
+Apply fundamental Mathematics, Statistics, and Machine Learning concepts to practical problems.
+Assist in testing and validating models, strategies, and analytical results.
+Identify data-quality issues, inconsistencies, and meaningful insights.
+Document findings, observations, and analysis clearly.
+Work closely with the AI/ML and research teams on ongoing projects.
+Take ownership of assigned problems and approach them with structured and logical thinking.
+ Requirements 
+ Education: B.Tech/B.E. in Computer Science, Artificial Intelligence, Machine Learning, Data Science, Mathematics, Statistics, or a related field.
+ Graduation Year: 2026 pass-out candidates only. 
+Strong problem-solving and analytical skills.
+Good understanding of fundamental Machine Learning concepts .
+Strong foundation in Mathematics and Statistics .
+Good logical and quantitative reasoning ability.
+Basic knowledge of Python.
+Familiarity with NumPy, Pandas, or similar data-processing tools is preferred.
+Ability to analyze data and interpret results.
+Curiosity and willingness to learn and work on challenging problems.
+ Good to Have 
+Exposure to Machine Learning, Data Science, Quantitative Research, or Financial Markets.
+Experience with academic, personal, or internship projects involving ML, statistics, mathematics, or data analysis.
+ Eligibility 
+ B.Tech/B.E. – 2026 batch graduates. 
+Candidates from Computer Science, AI/ML, Data Science, Mathematics, Statistics, Engineering, or related disciplines.
+Candidates with strong mathematical, analytical, and problem-solving skills are encouraged to
+ apply.
+ Full-Time Opportunity 
+ Candidates who demonstrate strong performance, technical ability, problem-solving skills, and meaningful contribution during the internship may be considered for a full-time opportunity based on performance and business requirements .

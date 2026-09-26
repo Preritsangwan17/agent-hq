@@ -1,0 +1,66 @@
+TITLE: GenAI Intern
+COMPANY: Coding Ninjas
+LOCATION: Gurugram, Haryana, India
+
+A little bit about us 
+ Coding Ninjas is one of the largest online coding EdTech companies in India, founded in 2016.
+ Founded by Ankush Singla, Kannu Mittal, and Dhawal Parate, with IIT and Stanford backgrounds
+ and experience working at Amazon, Facebook, Cars24, and other top startups in India. As
+ pioneers in EdTech, Coding Ninjas is on its path to becoming the de facto coding education
+ company in India for college students. With a focus on teaching programming courses to
+ college students.
+ With our exhaustive learning programs, 1:1 mentor support for effective doubt resolution and
+ over 400+ doubts being resolved per hour, our focus lies on crafting learning experiences that
+ equip candidates with learning, application, and demonstration of capabilities in the software
+ development domain.
+ At Coding Ninjas, our focus is on creating industry-relevant programs and crafting learning
+ experiences that help candidates learn, apply, and demonstrate capabilities in the software
+ development areas.
+ About the Role 
+ We’re looking for an AI / GenAI who is genuinely curious about how modern AI systems work and enjoys experimenting with LLMs, AI tools, agents, and automation workflows .
+ You’ll work closely with the GenAI course and content team, helping turn AI concepts and industry practices into practical, learner-friendly content and experiences .
+ This is a hands-on role for someone who likes building, experimenting, researching, and figuring things out , rather than someone who only knows AI concepts theoretically.
+ Key Responsibilities 
+Explore and work with LLMs, AI models, AI tools, and emerging GenAI technologies 
+Experiment with AI agents, tool calling, workflows, orchestration, and multi-agent systems 
+Research and understand emerging GenAI tools, frameworks, platforms, and industry use cases 
+Build and experiment with AI-powered workflows, prototypes, and automations 
+Explore concepts such as RAG, APIs, function/tool calling, agents, memory, evaluation, and LLM application development 
+Use AI tools to research, create, review, and improve technical learning content 
+Assist in creating session documents, assignments, coding exercises, quizzes, assessments, and learner resources 
+Review AI/technical content for accuracy, clarity, practical relevance, and consistency 
+Convert technical concepts and experiments into simple, structured explanations and learning material 
+ AI / Technical Exposure 
+ You should be comfortable with or actively exploring areas such as:
+ Generative AI: LLMs, prompting, context windows, embeddings, RAG, multimodal AI
+ AI Agents: Agents, tool/function calling, agent workflows, memory, planning, multi-agent systems
+ AI Development: Python, APIs, SDKs, LLM application development, basic backend concepts
+ AI Tools & Platforms: ChatGPT, Claude, Gemini, Claude Code, Cursor, Codex, or similar AI development tools
+ Knowledge of frameworks such as LangChain, LangGraph, LlamaIndex, CrewAI, AutoGen , or similar technologies is a plus.
+ Who Should Apply? 
+ We’re looking for someone who:
+Has a strong interest in Generative AI and emerging AI technologies 
+Has a foundational understanding of LLMs, AI agents, tools, and orchestration 
+Has experimented with AI tools, APIs, agents, or AI-powered applications 
+Is comfortable learning new AI tools and technologies quickly
+Has good Python programming skills 
+Understands how to work with APIs and is interested in building AI-powered applications
+Enjoys hands-on experimentation and prototyping 
+Can research unfamiliar AI concepts and understand how they work
+Has strong analytical and problem-solving skills
+Is comfortable working in an environment where tools, technologies, and requirements evolve rapidly 
+ Good to Have 
+Personal AI/GenAI projects or prototypes
+GitHub projects involving LLMs, agents, RAG, APIs, or AI automation 
+Experience with agentic frameworks or orchestration tools
+Experience building AI-powered applications
+Understanding of LLM evaluation, observability, or production AI workflows 
+ Why Join Us? 
+Work hands-on with modern GenAI technologies and AI development workflows 
+Get exposure to LLMs, agents, orchestration, RAG, APIs, and AI tools 
+Work on real-world AI curriculum, projects, experiments, and learning experiences 
+Experiment with emerging AI tools and frameworks
+Learn how AI concepts are translated into practical, industry-relevant learning experiences 
+Work closely with AI instructors, SMEs, and content developers 
+Opportunity to contribute to broader AI, technical content, and product initiatives 
+Opportunity for extension based on performance and business requirements

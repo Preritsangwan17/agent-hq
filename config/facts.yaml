@@ -1,0 +1,50 @@
+# Prerit's verified facts — the ONLY claims agents may make about him.
+# Every outbound sentence that states something about Prerit must cite one or more of these IDs.
+# Evidence = GitHub permalink at a fixed commit, or "stated by Prerit" (his own words in chat, 2026-09-26).
+# status: verified | pending (never shown to the Writer until Prerit confirms) | retired
+# Correction 2026-09-26: the code keeps users with value_counts() > 200, i.e. "more than 200 ratings" — never "200+".
+
+repos:
+  book: {url: https://github.com/Preritsangwan17/End-to-End-Book-Recommendation-System, sha: 2a5c9e3913d16bbb462827701c3db363761e08d3}
+  churn: {url: https://github.com/Preritsangwan17/Churn-ml-model-project, sha: e1da8025f4d8646ee22163eb4a54554113ee348e}
+  drinks: {url: https://github.com/Preritsangwan17/Drinks-Quality-Prediction-System-, sha: 3562998598795cd5fe15ce48a89fd883590062fc, note: empty scaffold (0-byte files) - not a project to cite}
+  mobility: {url: https://github.com/Preritsangwan17/Global-Mobility-Application-Analyser, sha: fa5f2d07ee5c36d153fb26a116934d6f4bf483d0, note: empty scaffold (0-byte files) - not a project to cite}
+
+facts:
+  # identity & contact
+  - {id: F-NAME, category: contact, text: "Name: Prerit Sangwan.", evidence: stated by Prerit}
+  - {id: F-EMAIL, category: contact, text: "Email: sangwanprerit40@gmail.com.", evidence: stated by Prerit}
+  - {id: F-LINKEDIN, category: contact, text: "LinkedIn: https://www.linkedin.com/in/prerit-sangwan-1b7572304", evidence: stated by Prerit}
+  - {id: F-GITHUB, category: contact, text: "GitHub: https://github.com/Preritsangwan17", evidence: stated by Prerit}
+  - {id: F-CITIZEN, category: citizenship, text: "Indian citizen; needs visa sponsorship for on-site roles outside India.", evidence: stated by Prerit}
+  # education & experience
+  - {id: F-EDU-YEAR2, category: edu, text: "2nd-year B.Tech student in Computer Science and Engineering (AI/ML specialisation) at Bennett University, India.", evidence: stated by Prerit}
+  - {id: F-EDU-NODEGREE, category: edu, text: "Has not completed a degree yet.", evidence: stated by Prerit}
+  - {id: F-NO-INTERNSHIP, category: edu, text: "Has no prior internship or job experience.", evidence: stated by Prerit (none mentioned; none on GitHub)}
+  - {id: F-RELOCATE, category: preference, text: "Willing to relocate; open to remote, India or abroad.", evidence: stated by Prerit}
+  - {id: F-LEARN, category: preference, text: "Open to learning on the job.", evidence: stated by Prerit ("I'll learn on the job")}
+  # book recommender
+  - {id: F-BOOK-NAME, category: project, project: book, text: "Built the End-to-End Book Recommendation System (June 2026): https://github.com/Preritsangwan17/End-to-End-Book-Recommendation-System", evidence: "repo commit history 2026-06-04..05"}
+  - {id: F-BOOK-CF, category: project, project: book, text: "The recommender uses item-based collaborative filtering.", evidence: "book_recommender_system/components/stage_02_data_transformation.py (title x user pivot) + stage_03_model_trainer.py"}
+  - {id: F-BOOK-DATA, category: project, project: book, text: "It uses the Book-Crossing dataset: about 1.15 million ratings and about 271,000 books.", evidence: "notebook/BX-Book-Ratings.csv (1,149,780 rows), notebook/BX-Books.csv (271,360 rows)"}
+  - {id: F-BOOK-FILTER, category: project, project: book, text: "Kept users with more than 200 ratings and books with at least 50 ratings.", evidence: "stage_01_data_validation.py: value_counts() > 200; num_of_rating >= 50", phrasings: ["more than 200 ratings", "over 200 ratings", "at least 50 ratings", "50 or more ratings", "50+ ratings"]}
+  - {id: F-BOOK-MATRIX, category: project, project: book, text: "The filtering produced a 742-book by 888-user rating matrix.", evidence: "computed by running the repo's filtering code on its bundled data (2026-09-26)"}
+  - {id: F-BOOK-DEDUP, category: project, project: book, text: "Merged the ratings and books tables and removed duplicate user-title pairs.", evidence: "stage_01_data_validation.py: ratings.merge(books, on='ISBN'); drop_duplicates(['user_id','title'])"}
+  - {id: F-BOOK-KNN, category: project, project: book, text: "Trained a k-nearest-neighbours model (scikit-learn NearestNeighbors) on a SciPy sparse CSR matrix that returns the 5 most similar books.", evidence: "stage_03_model_trainer.py (NearestNeighbors(algorithm='brute'), csr_matrix); app.py (n_neighbors=6 incl. the query book)"}
+  - {id: F-BOOK-PIPELINE, category: project, project: book, text: "Structured the code as a four-stage pipeline (ingestion, validation, transformation, training) driven by a YAML config.", evidence: "pipeline/training_pipeline.py; config/config.yaml; config/configuration.py"}
+  - {id: F-BOOK-LOGGING, category: project, project: book, text: "The pipeline has custom logging and exception handling.", evidence: "logger/log.py; exception/exception_handler.py"}
+  - {id: F-BOOK-FALLBACK, category: project, project: book, text: "Ingestion falls back to local data if the download fails.", evidence: "stage_00_data_ingestion.py: _use_local_notebook_data()"}
+  - {id: F-BOOK-STREAMLIT, category: project, project: book, text: "Built a Streamlit app (run locally) that retrains the model and shows 5 recommendations with cover images.", evidence: "app.py", note: "never say deployed/production/hosted"}
+  - {id: F-BOOK-COSINE, category: project, project: book, text: "Prototyped a cosine-similarity version in a Jupyter notebook first.", evidence: "notebook/research.ipynb"}
+  # churn
+  - {id: F-CHURN-NAME, category: project, project: churn, text: "Built the Telco Customer Churn Prediction project (January 2026): https://github.com/Preritsangwan17/Churn-ml-model-project", evidence: "repo commit 2026-01-18"}
+  - {id: F-CHURN-DATA, category: project, project: churn, text: "Used the IBM Telco Customer Churn dataset: 7,043 customers, cleaned to 7,032 rows.", evidence: "WA_Fn-UseC_-Telco-Customer-Churn.csv (7,043 rows); tel_churn.csv (7,032 rows)"}
+  - {id: F-CHURN-FEATURES, category: project, project: churn, text: "One-hot encoded the categorical fields and binned tenure into 12-month groups, giving 50 features.", evidence: "tel_churn.csv columns (tenure_group_1 - 12 ... 61 - 72; 50 features + Churn)"}
+  - {id: F-CHURN-RF, category: project, project: churn, text: "Trained a Random Forest classifier (100 trees) to predict churn and saved the model.", evidence: "model.sav (sklearn RandomForestClassifier, n_estimators=100)"}
+  - {id: F-CHURN-ARTIFACTS, category: project, project: churn, text: "The churn repo contains the data files and the saved model, not the training code.", evidence: "repo file list"}
+  # skills (only what code shows)
+  - {id: F-SKILLS, category: skill, text: "Skills shown in code: Python, pandas, NumPy, scikit-learn, SciPy sparse matrices, Streamlit, Jupyter, Git and GitHub, YAML configuration.", evidence: "both repos"}
+  # things he has NOT done (usable only in negated/aspirational form: "haven't yet used X", "keen to learn X")
+  - {id: F-NOTUSED, category: not_used, text: "Has not used SQL, PyTorch, TensorFlow, LLM APIs, agent frameworks, cloud platforms, Docker or knowledge graphs in a project.", evidence: "repos (Dockerfiles are empty; requirements lists in empty scaffolds do not count)"}
+  - {id: F-NO-METRICS, category: not_used, text: "No accuracy or performance numbers exist for either model.", evidence: "repos contain no evaluation output"}
+  - {id: F-SOLO, category: project, text: "Both projects were built on his own (single-contributor repos); he has not yet worked in a shared codebase with code review.", evidence: "GitHub contributors for both repos = Preritsangwan17 only"}

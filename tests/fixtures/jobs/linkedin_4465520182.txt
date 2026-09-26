@@ -1,0 +1,143 @@
+TITLE: Software Engineer Intern (AI/ML & Agentic AI) - Global AI-Native Talent Intelligence Platform (Fully Remote)
+COMPANY: SkillsCapital
+LOCATION: India
+
+Are you passionate about AI, LLMs, and intelligent systems? Do you want to work on production-grade AI products instead of classroom projects and toy models? Do you want to Build Enterprise AI Systems That Power the Future of Global Hiring?At SkillsCapital , you'll build AI that is used by real customers across the U.S., U.K., Europe, and the Middle East—helping companies identify, evaluate, and hire the world's best technology talent.This isn't another internship where you'll spend months cleaning datasets or building isolated models.You'll work alongside experienced architects and product leaders to build the next generation of Agentic AI Recruiters , Talent Intelligence Systems , Custom LLMs , Semantic Search Engines , and AI-powered Decision Intelligence Platforms .If you're looking for a place where your code ships to production, your ideas matter, and your learning curve is exponential, we'd love to meet you.
+About SkillsCapitalSkillsCapital is building one of the world's most advanced AI-Native Talent Intelligence Platforms for specialist technology hiring.We help technology consulting firms, staffing companies, and enterprises build world-class engineering capabilities by combining: 
+AI-Native Talent Intelligence
+Agentic AI Recruiters & Talent Partners
+Custom Domain LLMs
+Deep Semantic Matching
+Delivery Readiness Intelligence
+Precision Candidate Evaluation
+Enterprise Talent Cloud
+ Our platform powers hiring across some of the world's most specialized technology domains, including: 
+SAP
+Salesforce
+Microsoft
+Oracle
+Cloud & DevOps
+Data & AI
+Cybersecurity
+Software Engineering
+Enterprise Architecture
+ Today, our AI platform has been trained on 20,000+ specialist consultant profiles and operates across an 11,800+ deeply vetted, deployment-ready technology talent cloud , continuously learning from real hiring outcomes and enterprise delivery data.We're building much more than recruitment software—we're creating the intelligence layer that helps organizations make faster, smarter, and more confident talent decisions.
+Why This Internship Is DifferentUnlike traditional AI internships, you'll work on products that solve complex, real-world enterprise problems.You'll contribute to building systems such as: 
+Agentic AI Recruiters
+Talent Intelligence Engines
+Semantic Search & Retrieval Systems
+Multi-dimensional Candidate Matching
+AI-powered Resume Intelligence
+LLM-driven Candidate Evaluation
+Delivery Readiness Intelligence
+AI Interviewing & Assessment
+Recommendation & Ranking Engines
+Enterprise Knowledge Graphs
+AI Copilots for Recruiters and Hiring Managers
+ Your work won't sit in a notebook.It will be deployed into production and used by global customers.
+What You'll BuildDepending on your interests and strengths, you'll contribute across multiple AI initiatives.Agentic AI 
+Multi-agent workflows
+Autonomous reasoning systems
+AI planning and orchestration
+Intelligent workflow automation
+ LLM Engineering 
+Prompt engineering
+RAG pipelines
+Vector search
+Domain-specific LLM tuning
+AI evaluation frameworks
+Structured AI outputs
+ Machine Learning 
+Semantic similarity models
+Recommendation systems
+Ranking algorithms
+Talent scoring models
+Search relevance optimization
+Classification models
+ Data & Intelligence 
+Resume intelligence
+Job description intelligence
+Entity extraction
+Knowledge graphs
+Embeddings
+Feature engineering
+ Platform Engineering 
+Python services
+APIs
+AI microservices
+Data pipelines
+Model deployment
+Performance optimization
+ Technologies You'll Work WithYou'll gain hands-on experience with modern AI engineering tools, including: 
+Python
+FastAPI
+PyTorch
+Scikit-learn
+Pandas
+NumPy
+Hugging Face
+LangChain
+OpenAI APIs
+Vector Databases
+Elasticsearch
+PostgreSQL
+Redis
+Docker
+Git
+AWS
+Azure
+ What We're Looking ForWe're looking for builders, not just students.You should ideally have: 
+Final-year student or recent graduate in Computer Science, AI/ML, Data Science, or a related discipline
+Strong programming skills in Python
+Good understanding of machine learning fundamentals
+Curiosity around LLMs, Generative AI, NLP, and Agentic AI
+Ability to learn independently and solve problems
+Strong analytical thinking
+Passion for building products rather than academic prototypes
+ Bonus if you've worked with: 
+Hugging Face
+LangChain
+RAG
+Vector Databases
+FastAPI
+Docker
+GitHub Projects
+Kaggle
+Open-source AI projects
+ What You'll LearnOver the course of your internship, you'll gain practical experience in: 
+Production AI Engineering
+Enterprise LLM Systems
+Agentic AI Architecture
+Search & Recommendation Systems
+AI Product Development
+Model Evaluation
+MLOps Fundamentals
+Scalable Backend Engineering
+Product Thinking
+Startup Execution
+ Few internships provide exposure to such a broad AI stack while working on a live enterprise product.
+Why Join SkillsCapital?You'll be joining a high-growth AI-first startup building products at the intersection of AI, enterprise software, and the future of work.You'll get: 
+Work on production systems from Day 1
+Build AI used by real customers globally
+Direct mentorship from experienced founders, architects, and product leaders
+High ownership with minimal bureaucracy
+Flexible remote-first culture
+Fast learning and continuous feedback
+Exposure to startup scaling from product-market fit to global expansion
+Opportunity to convert into a freelance, contract, or full-time Software Engineer role based on performance
+ Who Should Apply?This role is ideal if you: 
+Love building real software
+Are excited by AI beyond the hype
+Enjoy solving difficult engineering problems
+Want to understand how enterprise AI products are actually built
+Prefer shipping products over writing assignments
+Want your internship to become the foundation of an exceptional engineering career
+ Internship Details Duration: 3–6 months Mode: Remote (India) Engagement: Full-time preferred (substantial part-time may be considered) Stipend: Monthly Fixed Stipend + Additional Performance-based Incentives
+How to ApplySend your application to careers@skillscapital.io with: 
+Your resume
+GitHub profile
+Portfolio or personal projects
+Expected internship start date
+Availability (hours/week)
+A short note explaining why this opportunity excites you and what you've built that you're most proud of
+ If you've built something interesting using LLMs, AI agents, RAG, search, recommendation systems, or machine learning—even as a side project, we'd love to see it.We care far more about curiosity, problem-solving, and the ability to build than perfect grades.

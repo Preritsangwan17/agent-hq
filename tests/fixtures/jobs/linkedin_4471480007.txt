@@ -1,0 +1,39 @@
+TITLE: Intern Data Analytics
+COMPANY: CNH
+LOCATION: Gurgaon, Haryana, India
+
+About Us
+ Innovation. Sustainability. Productivity. This is how we are Breaking New Ground in our mission to sustainably advance the noble work of farmers and builders everywhere. With a growing global population and increased demands on resources, our products are instrumental to feeding and sheltering the world.
+From developing products that run on alternative power to productivity-enhancing precision tech, we are delivering solutions that benefit people – and they are possible thanks to people like you. If the opportunity to build your skills as part of a collaborative, global team excites you, you’re in the right place.
+ Grow a Career. Build a Future!
+ Be part of this company at the forefront of agriculture and construction, that passionately innovates to drive customer efficiency and success. And we know innovation can’t happen without collaboration. So, everything we do at CNH Industrial is about reaching new heights as one team, always delivering for the good of our customers.
+ Job Purpose
+ The Intern Data Analytics role is responsible for working on large-scale engineering, warranty, telematics, product, and operational data into actionable insights that improve product quality, business performance, and customer satisfaction. The role focuses on learning and establishing and developing real-time reporting capabilities, executing AI and Machine Learning initiatives, building scalable data architectures, and delivering dashboards that enable strategic and operational decision-making across global Agricultural (AG) product lines. The position also supports digital product development through Power Apps, Databricks, Python, Generative AI, and advanced analytics solutions.
+ Key Responsibilities
+Collect, integrate, validate, and analyze warranty, telematics, bill of material, engineering, and operational datasets from multiple enterprise data sources.
+Develop and maintain real-time dashboards, KPI scorecards, and analytics platforms to support leadership visibility and decision-making.
+Perform trend analysis, Pareto analysis, root-cause investigations, predictive analytics, and performance benchmarking to identify quality and productivity improvement opportunities.
+Develop and maintain Power Apps, automated workflows, and low-code solutions to streamline business operations and reduce manual effort.
+Collaborate with Engineering, Manufacturing, Finance, Product Management, and Quality teams to align metrics, priorities, and improvement initiatives.
+Establish standardized KPI definitions, reporting templates, governance processes, and best practices to improve reporting consistency and accuracy.
+ Experience Required
+Experience in Advanced Analytics, Data Engineering, and Business Intelligence Solutions.
+Experience working with Python, Databricks, SQL, Power BI, Power Query, Excel, Power Apps, and Qlik Sense.
+Strong understanding of KPI management, dashboard development, reporting automation, and data visualization techniques.
+Experience in working on data like telematics, warranty, engineering performance, bill of material or quality.
+Knowledge of Azure DevOps, Microsoft 365, Microsoft Azure databrick, and enterprise reporting ecosystems is preferred.
+Strong written and verbal communication skills with the ability to influence cross-functional stakeholders.
+ Preferred Qualifications
+ Bachelor’s degree or post graduation in engineering (Mechanical / Electrical / Computer Science) or similar
+ What We Offer
+ We offer dynamic career opportunities across an international landscape. As an equal opportunity employer, we are committed to delivering value for all our employees and fostering a culture of respect.
+ Benefits
+ At CNH, we understand that the best solutions come from the diverse experiences and skills of our people. Here, you will be empowered to grow your career, to follow your passion, and help build a better future. To support our employees, we offer regional comprehensive benefits, including:
+Flexible work arrangements
+Savings & Retirement benefits
+Tuition reimbursement
+Parental leave
+Adoption assistance
+Fertility & Family building support
+Employee Assistance Programs 
+Charitable contribution matching and Volunteer Time Off
