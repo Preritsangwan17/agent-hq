@@ -69,7 +69,7 @@ export function BudgetGauge({ compact }: { compact?: boolean }) {
       side="bottom"
       content={
         <div className="space-y-0.5">
-          <div className="font-medium">Claude today</div>
+          <div className="font-medium">Cloud today</div>
           <div>
             {formatUSD(spent)} of {formatUSD(budget)} budget ({Math.round(frac * 100)}%)
           </div>
@@ -101,7 +101,7 @@ export function BudgetGauge({ compact }: { compact?: boolean }) {
               {formatUSD(spent)}
               <span className="font-normal text-muted"> / {formatUSD(budget, 0)}</span>
             </span>
-            <span className="block text-[10px] uppercase tracking-[0.12em] text-muted">Claude today</span>
+            <span className="block text-[10px] uppercase tracking-[0.12em] text-muted">Cloud today</span>
           </span>
         )}
       </span>

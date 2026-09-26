@@ -40,12 +40,13 @@ def api_key() -> str | None:
 
 @lru_cache(maxsize=2)
 def _prices(path: str, mtime: float) -> dict[str, Any]:
-    return (yaml.safe_load(Path(path).read_text()) or {}).get("xai", {})
+    return yaml.safe_load(Path(path).read_text()) or {}
 
 
-def price_for(model: str) -> tuple[float, float]:
+def price_for(model: str, section: str = "xai") -> tuple[float, float]:
+    """USD per million input/output tokens from config/cloud_prices.yaml (`xai`, or `openai` for the Codex CLI)."""
     p = paths.CONFIG_DIR / "cloud_prices.yaml"
-    table = _prices(str(p), p.stat().st_mtime) if p.exists() else {}
+    table = (_prices(str(p), p.stat().st_mtime) if p.exists() else {}).get(section) or {}
     best_name, best = "", table.get("default") or {"input": 3.0, "output": 15.0}
     for name, v in table.items():  # longest matching prefix wins (grok-4-fast-reasoning → grok-4-fast)
         if name != "default" and model.startswith(name) and len(name) > len(best_name):

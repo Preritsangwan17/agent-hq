@@ -1,7 +1,8 @@
-/** Budget: cloud $/day and call cap with a live gauge (spend today vs the budget being edited), the cloud provider
- * (Claude CLI or xAI) and which models it uses. */
+/** Models & Budget: an on/off switch per model source (local, Claude CLI, xAI, ChatGPT via the Codex CLI) and the
+ * preferred cloud provider; cloud $/day and call cap with a live gauge (spend today vs the budget being edited); which
+ * models each provider uses. */
 import { useQuery } from '@tanstack/react-query';
-import { BadgeCheck, CalendarClock, Cloud, Cpu, DollarSign, Hash, HandHelping, KeyRound, Moon, Sparkles, Wand2, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, BadgeCheck, Bot, CalendarClock, Cloud, Cpu, DollarSign, Hash, HandHelping, KeyRound, Moon, Power, Sparkles, Wand2, Zap, type LucideIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Badge } from '@/components/Badge';
 import { TextInput } from '@/pages/Agents/formKit';
@@ -11,13 +12,16 @@ import { ProgressBar } from '@/components/ProgressBar';
 import { SectionHeader } from '@/components/SectionHeader';
 import { api } from '@/lib/api';
 import { formatCompact, formatDateTimeIST, formatUSD } from '@/lib/format';
+import type { CloudProvider, ProviderState } from '@/lib/types';
 import { useSettings, useStats } from '@/lib/store';
 import { colors, withAlpha } from '@/theme/tokens';
 import { NumberField, Segmented, SettingRow, Slider, Toggle } from '../controls';
-import { Callout, Section } from '../parts';
+import { Callout, Code, Section } from '../parts';
 import { useSaver } from '../saver';
 
 const CLAUDE = '#E879F9';
+const CHATGPT = '#10A37F';
+const LABEL: Record<CloudProvider, string> = { claude: 'Claude', xai: 'xAI', codex: 'ChatGPT' };
 
 export function BudgetTab() {
   const s = useSettings();
@@ -34,10 +38,12 @@ export function BudgetTab() {
 
   return (
     <div className="space-y-5">
+      <SourcesSection live={live} />
+
       <GlassPanel padding="lg" glow={CLAUDE} accentTop>
         <SectionHeader
           kicker="Today · resets at midnight IST"
-          title={live?.provider === 'xai' ? 'Cloud spend · xAI' : 'Cloud spend · Claude'}
+          title={`Cloud spend · ${live?.using ? LABEL[live.using] : live?.provider ? LABEL[live.provider] : 'all off'}`}
           icon={Sparkles}
           color={CLAUDE}
         />
@@ -134,8 +140,6 @@ export function BudgetTab() {
         />
       </Section>
 
-      <ProviderSection live={live} />
-
       <Section kicker="Models" title="Which Claude, and when" icon={Wand2} color={CLAUDE}>
         <SettingRow
           title="Escalation & polish model"
@@ -174,10 +178,10 @@ export function BudgetTab() {
           }
         />
         <SettingRow
-          title="Require Claude sign-off"
+          title="Require cloud sign-off"
           htmlFor="signoff"
-          description="Nothing is submitted without Claude's sign-off. Turning this off leaves the deterministic rules and the local checker."
-          control={<Toggle id="signoff" label="Require Claude sign-off" checked={s.require_claude_signoff !== false} onChange={(v) => save({ require_claude_signoff: v })} color={CLAUDE} size="lg" />}
+          description="Nothing is submitted without a cloud sign-off (Claude, xAI or ChatGPT, whichever is on and didn't write the text). Turning this off leaves the deterministic rules and the local checker."
+          control={<Toggle id="signoff" label="Require cloud sign-off" checked={s.require_claude_signoff !== false} onChange={(v) => save({ require_claude_signoff: v })} color={CLAUDE} size="lg" />}
         />
         <SettingRow
           title="Cap per call"
@@ -199,6 +203,8 @@ export function BudgetTab() {
           }
         />
       </Section>
+
+      <ProviderDetails live={live} />
 
       <div className="grid gap-3 md:grid-cols-2">
         <Callout icon={Moon} color="#818CF8" title="Over budget">
@@ -286,9 +292,117 @@ function RingGauge({ frac, color, spent, budget }: { frac: number; color: string
   );
 }
 
-function ProviderSection({ live }: { live: Awaited<ReturnType<typeof api.budget>> | undefined }) {
+type Live = Awaited<ReturnType<typeof api.budget>> | undefined;
+type Status = { text: string; color: string };
+
+const OFF: Status = { text: 'off', color: '#5B6577' };
+const SOURCES = [
+  { key: 'llm_local_enabled', id: 'local', title: 'Local models', icon: Cpu, color: '#22D3EE',
+    description: 'Ollama, LM Studio and MLX models on this Mac. Free. Off: nothing is loaded and running ones are unloaded. Steps that only use local models (title filter, parsing, local fact check) then use their built-in rules; they never move to the cloud.' },
+  { key: 'llm_claude_enabled', id: 'claude', title: 'Claude CLI', icon: Sparkles, color: CLAUDE,
+    description: 'Claude Code on this Mac (claude auth login in Terminal). Runs with no tools and a per-call cap.' },
+  { key: 'llm_xai_enabled', id: 'xai', title: 'xAI · Grok', icon: Zap, color: '#A5B4FC',
+    description: 'Grok via the API key in .env (HQ_XAI_API_KEY). Only api.x.ai is reachable, prompts are redacted.' },
+  { key: 'llm_codex_enabled', id: 'codex', title: 'ChatGPT · Codex CLI', icon: Bot, color: CHATGPT,
+    description: 'The Codex CLI signed in with your ChatGPT account (codex login in Terminal). Read-only sandbox, shell and browser tools off, no session files.' },
+] as const;
+
+function providerStatus(id: CloudProvider, p: ProviderState | null | undefined): Status {
+  if (!p || !p.checked) return { text: 'not checked yet', color: '#8B95A7' };
+  if (p.resting) return { text: 'resting (usage limit)', color: colors.warn };
+  if (p.available) return { text: id === 'xai' ? 'connected' : 'logged in', color: '#34D399' };
+  if (id === 'xai' && !p.key_present) return { text: 'no key in .env', color: colors.warn };
+  if (id === 'codex' && p.installed === false) return { text: 'not installed', color: colors.warn };
+  return { text: id === 'xai' ? 'unavailable' : 'not logged in', color: colors.warn };
+}
+
+/** The on/off switch per model source, the preferred cloud provider and what HQ is using right now. */
+function SourcesSection({ live }: { live: Live }) {
   const s = useSettings();
   const { save } = useSaver();
+  const on = (key: string) => s[key] !== false;
+  const cloudOn = (['claude', 'xai', 'codex'] as const).filter((id) => on(`llm_${id}_enabled`));
+  const pref = String(s.cloud_llm ?? 'auto');
+  const using = live?.using;
+  const signoff = s.require_claude_signoff !== false;
+  return (
+    <Section kicker="Sources" title="Models on/off" icon={Power} color={CLAUDE}>
+      {SOURCES.map((src) => {
+        const enabled = on(src.key);
+        const st = !enabled ? OFF : src.id === 'local' ? { text: 'on', color: '#34D399' } : providerStatus(src.id, live?.[src.id]);
+        const reason = enabled && src.id !== 'local' && st.text !== 'no key in .env' ? live?.[src.id]?.reason : null;
+        return (
+          <SettingRow
+            key={src.key}
+            icon={src.icon}
+            color={enabled ? src.color : '#5B6577'}
+            title={src.title}
+            htmlFor={src.key}
+            description={
+              <>
+                {src.description}
+                {reason && st.color !== '#34D399' && <span className="mt-1 block text-xs text-amber-200/80">{reason}</span>}
+              </>
+            }
+            control={
+              <div className="flex items-center gap-3">
+                <Badge color={st.color}>{st.text}</Badge>
+                <Toggle id={src.key} label={`Use ${src.title}`} checked={enabled} onChange={(v) => save({ [src.key]: v })} color={src.color} />
+              </div>
+            }
+          />
+        );
+      })}
+      <SettingRow
+        icon={Cloud}
+        color={CLAUDE}
+        title="Preferred cloud"
+        description="Tried first for escalations, polish, sign-off and the Strategist. If it can't be reached (not logged in, no key, or resting after hitting its usage limit) the next switched-on one is used. Auto: xAI when its key is in .env, else Claude, then ChatGPT. Status checks are free: they never call a model."
+        control={
+          <Segmented
+            aria-label="Preferred cloud provider"
+            value={pref}
+            onChange={(v) => save({ cloud_llm: v })}
+            color={CLAUDE}
+            size="sm"
+            options={[
+              { value: 'auto', label: 'Auto' },
+              { value: 'claude', label: 'Claude', disabled: !on('llm_claude_enabled') },
+              { value: 'xai', label: 'xAI', disabled: !on('llm_xai_enabled') },
+              { value: 'codex', label: 'ChatGPT', disabled: !on('llm_codex_enabled') },
+            ]}
+          />
+        }
+      >
+        <p className="text-xs text-muted">
+          {cloudOn.length === 0
+            ? 'No cloud model is on.'
+            : using
+              ? `Using ${LABEL[using]} right now${live?.provider && live.provider !== using ? ` (${LABEL[live.provider]} can't be reached)` : ''}.`
+              : 'None of the switched-on cloud models can be reached yet. Tasks that need one wait; nothing is spent.'}
+        </p>
+      </SettingRow>
+      {cloudOn.length === 0 && (
+        <Callout icon={AlertTriangle} color={colors.warn} title="Every cloud model is off">
+          {signoff
+            ? 'Letters wait at sign-off until you switch one on, or turn off Require sign-off below (then only the rules and the local checker decide).'
+            : 'Sign-off is off, so letters are decided by the rules and the local checker only.'}
+          {!on('llm_local_enabled') && ' Local models are off too, so nothing can be drafted.'}
+        </Callout>
+      )}
+      <p className="pt-3 text-xs text-faint">
+        Limits are never spent twice: a provider that reports a usage or rate limit gets no calls for an hour while the others carry on,
+        and every cloud call counts against the daily budget and call cap below.
+      </p>
+    </Section>
+  );
+}
+
+function ProviderDetails({ live }: { live: Live }) {
+  const s = useSettings();
+  const xaiOn = s.llm_xai_enabled !== false;
+  const codexOn = s.llm_codex_enabled !== false;
+  if (!xaiOn && !codexOn) return null;
   const xai = live?.xai;
   const models = xai?.models ?? [];
   const status = !xai?.key_present
@@ -296,42 +410,51 @@ function ProviderSection({ live }: { live: Awaited<ReturnType<typeof api.budget>
     : xai.available
       ? { text: 'connected', color: '#34D399' }
       : { text: xai.reason ?? (xai.checked ? 'unavailable' : 'not checked yet'), color: colors.warn };
+  const codex = live?.codex;
   return (
-    <Section kicker="Provider" title="Cloud model" icon={Cloud} color={CLAUDE}>
-      <SettingRow
-        title="Use"
-        description="Escalations, polish, sign-off and the Strategist go to this provider (same budget and caps). Auto picks xAI when HQ_XAI_API_KEY is in .env, otherwise the Claude CLI. Sign-off can fall back to the other provider when the first wrote part of the text."
-        control={
-          <Segmented
-            aria-label="Cloud provider"
-            value={String(s.cloud_llm ?? 'auto')}
-            onChange={(v) => save({ cloud_llm: v })}
-            color={CLAUDE}
-            options={[
-              { value: 'auto', label: 'Auto' },
-              { value: 'claude', label: 'Claude CLI' },
-              { value: 'xai', label: 'xAI' },
-            ]}
+    <Section kicker="Providers" title="xAI and ChatGPT models" icon={Cloud} color={CLAUDE}>
+      {xaiOn && (
+        <>
+          <SettingRow
+            icon={KeyRound}
+            color={status.color}
+            title="xAI API key"
+            description="Put it in .env on this Mac as HQ_XAI_API_KEY=… and restart HQ. The UI never shows it; prompts are redacted before they leave, and only api.x.ai is allowed."
+            control={<Badge color={status.color}>{status.text}</Badge>}
           />
-        }
-      />
-      <SettingRow
-        icon={KeyRound}
-        color={status.color}
-        title="xAI API key"
-        description="Put it in .env on this Mac as HQ_XAI_API_KEY=… and restart HQ. The UI never shows it; prompts are redacted before they leave, and only api.x.ai is allowed."
-        control={<Badge color={status.color}>{status.text}</Badge>}
-      />
-      <ModelField label="xAI model" settingKey="xai_model" fallback="grok-4-fast" models={models}
-        description="Escalations and polish. If the exact name isn't listed by xAI, the closest listed model is used." />
-      <ModelField label="xAI sign-off model" settingKey="xai_signoff_model" fallback="grok-4" models={models}
-        description="Should differ from the model above, so a polished letter can still be checked independently." />
+          <ModelField label="xAI model" settingKey="xai_model" fallback="grok-4-fast" models={models}
+            description="Escalations and polish. If the exact name isn't listed by xAI, the closest listed model is used." />
+          <ModelField label="xAI sign-off model" settingKey="xai_signoff_model" fallback="grok-4" models={models}
+            description="Should differ from the model above, so a polished letter can still be checked independently." />
+        </>
+      )}
+      {codexOn && (
+        <>
+          <SettingRow
+            icon={Bot}
+            color={CHATGPT}
+            title="ChatGPT sign-in"
+            description={
+              <>
+                In Terminal on this Mac: <Code>npm install -g @openai/codex</Code> (once), then <Code>codex login</Code> and sign in with ChatGPT.
+                Calls use your ChatGPT plan's Codex allowance; spend here is an estimate from token counts.
+                {codex?.version ? ` Codex ${codex.version}.` : ''}
+              </>
+            }
+            control={<Badge color={providerStatus('codex', codex).color}>{providerStatus('codex', codex).text}</Badge>}
+          />
+          <ModelField label="ChatGPT model" settingKey="codex_model" fallback="default" models={[]}
+            description="“default” uses Codex's own default model. Any model name your plan offers in Codex works." />
+          <ModelField label="ChatGPT sign-off model" settingKey="codex_signoff_model" fallback="default" models={[]}
+            description="A letter ChatGPT polished can only be signed off by a different model: set another name here, or another provider signs it off." />
+        </>
+      )}
     </Section>
   );
 }
 
 function ModelField({ label, settingKey, fallback, models, description }: {
-  label: string; settingKey: 'xai_model' | 'xai_signoff_model'; fallback: string; models: string[]; description: string;
+  label: string; settingKey: 'xai_model' | 'xai_signoff_model' | 'codex_model' | 'codex_signoff_model'; fallback: string; models: string[]; description: string;
 }) {
   const s = useSettings();
   const { save } = useSaver();

@@ -127,6 +127,19 @@ def revive_deferred(conn: sqlite3.Connection) -> int:
                         "AND not_before <= ?", (now_iso(), now_iso())).rowcount
 
 
+def cloud_provider(s: dict[str, Any]) -> str | None:
+    """From the settings as they are now (the worker's provider snapshot can be up to one loop old)."""
+    from hq.llm import cloud
+
+    return cloud.provider(s)
+
+
+def _still_on(s: dict[str, Any], claude: dict[str, Any] | None) -> str | None:
+    """The provider the worker last found usable, unless it has been switched off since."""
+    using = (claude or {}).get("using")
+    return using if using and s.get(f"llm_{using}_enabled", True) is not False else None
+
+
 def budget_state(conn: sqlite3.Connection, settings: dict[str, Any] | None = None,
                  claude: dict[str, Any] | None = None) -> dict[str, Any]:
     s = settings or get_settings(conn)
@@ -136,7 +149,10 @@ def budget_state(conn: sqlite3.Connection, settings: dict[str, Any] | None = Non
                             "ORDER BY created_at DESC LIMIT 1").fetchone()
     return {**u, "budget_usd": float(s.get("claude_daily_budget_usd", 5.0)),
             "call_cap": int(s.get("claude_daily_call_cap", 40)), "deferred_tasks": deferred,
-            "claude_available": (claude or {}).get("available"), "provider": (claude or {}).get("provider", "claude"),
+            "claude_available": (claude or {}).get("available"), "provider": cloud_provider(s),
             "cloud_model": (claude or {}).get("model"), "cloud_reason": (claude or {}).get("reason"),
-            "xai": ((claude or {}).get("providers") or {}).get("xai"), "last_error": last_err[0] if last_err else None,
+            "xai": ((claude or {}).get("providers") or {}).get("xai"),
+            "codex": ((claude or {}).get("providers") or {}).get("codex"),
+            "claude": ((claude or {}).get("providers") or {}).get("claude"), "using": _still_on(s, claude),
+            "last_error": last_err[0] if last_err else None,
             "resets_at": to_iso(next_midnight_ist())}

@@ -217,7 +217,13 @@ class ModelManager:
                 sv.last_used = self.clock()
                 self._touch(sv)
 
+    def local_off(self, s: dict[str, Any] | None = None) -> bool:
+        """Settings › Budget › Models on/off: with local models off nothing is loaded and running servers stop."""
+        return (s or self.settings()).get("llm_local_enabled", True) is False
+
     async def ensure(self, model_id: str) -> Endpoint:
+        if self.local_off():
+            raise ModelBroken("local models are switched off in Settings")
         m = self._model(model_id)
         meta = m["meta"]
         if m["runtime"] in ("ollama", "lmstudio"):
@@ -377,6 +383,11 @@ class ModelManager:
         if not force and now - self._last_health < HEALTH_EVERY_S:
             return
         self._last_health = now
+        if self.local_off():
+            for sv in list(self.servers.values()):
+                if sv.in_use == 0:
+                    await self._stop(sv, reason="local models switched off")
+            return
         budget = self.pool_budget_gb()
         for sv in list(self.servers.values()):
             alive = sv.proc.poll() is None if sv.proc is not None else _pid_alive(sv.pid)

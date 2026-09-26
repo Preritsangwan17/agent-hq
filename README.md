@@ -54,22 +54,30 @@ Day to day: `make up` starts, `make down` stops (it also unloads the LaunchAgent
 
 ## The models it uses
 
-HQ works with whatever you give it:
+HQ works with whatever you give it, and **every source has an on/off switch** in Settings › Models & Budget ›
+Models on/off. A source that is off is never called (not even for a login check):
 
-1. **xAI (Grok)** — add your key to `.env` (never paste it into chat or code):
+1. **Local models** (free): Ollama or LM Studio running, or MLX models in the Hugging Face cache. HQ finds them
+   (Models page), benchmarks them and assigns roles. Rescan from the Models page. Off: nothing is loaded and running
+   models are unloaded; steps that only use local models fall back to their built-in rules. They never move to the
+   cloud, so switching local off doesn't spend your cloud limits.
+2. **Claude CLI**: `claude auth login` in Terminal.
+3. **xAI (Grok)**: add your key to `.env` (never paste it into chat or code):
    ```
    HQ_XAI_API_KEY=xai-…
    ```
-   Keep credit on the account (console.x.ai). No restart needed. With the key present, cloud work (sign-off,
-   polish, escalations when no local model can do a task) goes to xAI. Settings › Budget › Cloud model lets you
-   pick Auto / Claude CLI / xAI and the model names, and shows whether the key works. If the account runs out of
-   credit you get one Needs item, not failing tasks.
-2. **Claude CLI** (optional): `claude auth login` in Terminal.
-3. **Local models** (optional, free): Ollama or LM Studio running, or MLX models in the Hugging Face cache. HQ
-   finds them (Models page), benchmarks them and assigns roles. Rescan from the Models page.
+   Keep credit on the account (console.x.ai). No restart needed.
+4. **ChatGPT (Codex CLI)**: `npm install -g @openai/codex`, then `codex login` and sign in with your ChatGPT account.
+   Calls use your plan's Codex allowance. HQ runs it read-only, with shell and browser tools off and no session files.
 
-Spending is capped per day (Settings › Budget, default $5) and per call; over the cap, cloud tasks wait until
-midnight IST.
+**Preferred cloud** (Auto / Claude / xAI / ChatGPT) picks which switched-on provider is tried first for sign-off,
+polish and escalations. If it can't be reached, the next switched-on one is used. Auto means xAI when its key is in
+`.env`, else Claude, then ChatGPT. Provider checks are free: they read the login or key status and never call a model.
+A provider that reports a usage or rate limit gets no calls for an hour while the others carry on, so limits aren't
+spent on retries. If an account runs out, you get one Needs item, not failing tasks.
+
+Spending is capped per day (Settings › Models & Budget, default $5) and per call, across all cloud providers
+together; over the cap, cloud tasks wait until midnight IST.
 
 ## Connect Gmail (read-only)
 
@@ -123,7 +131,7 @@ refuses to start and a red banner says why.
 
 | Path | What |
 |---|---|
-| `.env` | Passcode hash, session secret, Gmail client + token, xAI key. Private (mode 600), never committed. |
+| `.env` | Passcode hash, session secret, Gmail client + token, xAI key. Private (mode 600), never committed. Claude and ChatGPT keep their own logins (`claude auth login`, `codex login`). |
 | `data/hq.db` | The database. `data/backups/` holds nightly copies (14 kept); `make backup` makes one now. |
 | `data/logs/` | `api.log`, `worker.log`, `supervisor.log`, `launchd.*.log`. |
 | `data/artifacts/` | Résumés and letters per application. `data/mail/` holds stored email bodies. |
@@ -136,8 +144,9 @@ To restore a backup: `make down`, copy `data/backups/hq-YYYY-MM-DD.db` over `dat
 
 - **Page won't load**: `make up` and read its output; logs are in `data/logs/`. Port busy → `HQ_PORT=8766` in `.env`.
 - **"Worker down"** in the header: `tail -50 data/logs/worker.log`. A red banner means a safety refusal (see Go live).
-- **Nothing gets drafted**: no model available — add the xAI key or start Ollama/LM Studio; check Models and
-  Settings › Budget (tasks wait when the daily cap is used up).
+- **Nothing gets drafted**: no model available or all switched off — check Settings › Models & Budget › Models
+  on/off, log in (`claude auth login` / `codex login`), add the xAI key or start Ollama/LM Studio (tasks also wait
+  when the daily cap is used up).
 - **Gmail says reconnect**: Settings › Gmail › Disconnect, then Connect again.
 - **No macOS banners**: System Settings › Notifications › allow Script Editor (or terminal-notifier).
 - **Forgot the passcode**: `make down`, delete the `HQ_PASSCODE_HASH=` line from `.env`, `make up`, set a new one.
