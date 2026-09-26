@@ -48,6 +48,17 @@ def seed_sources(conn: sqlite3.Connection) -> int:
                 (sid, f"{ATS_LABEL.get(kind, kind)} · {slug}", kind, dumps({"slug": slug, "tos_note": spec.get("tos_note")}),
                  spec.get("tos_url"), now, default_interval, now))
             added += cur.rowcount
+    for kind, slugs in (cfg.get("suggested") or {}).items():
+        spec = (cfg.get("ats") or {}).get(kind) or {}
+        for slug in slugs or []:
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO sources(id, name, kind, config_json, automation, tos_status, tos_url, "
+                "tos_reviewed_at, poll_interval_min, enabled, added_by, created_at) "
+                "VALUES (?,?,?,?, 'discover_only', 'allowed', ?, ?, ?, 0, 'suggested', ?)",
+                (f"{kind}:{slug}", f"{ATS_LABEL.get(kind, kind)} · {slug} (suggested, unverified)", kind,
+                 dumps({"slug": slug, "tos_note": spec.get("tos_note"), "suggested": True}), spec.get("tos_url"), now,
+                 default_interval, now))
+            added += cur.rowcount
     mock = cfg.get("mock_ats")
     if mock:
         cur = conn.execute(

@@ -23,6 +23,14 @@ ats:
     slugs: [snowflake, openai, perplexity, harvey, cohere, notion, thoughtworks, sierra, sarvam, mercor,
             lilt-production, weaviate, modal, elevenlabs, decagon]
 
+# Suggested boards for the career plan's priority regions (Europe, Canada, Australia). NOT verified: HQ couldn't
+# reach these boards when they were added, so they start SWITCHED OFF. Enable one in Settings › Sources; if the
+# slug is wrong the source shows fetch errors and backs off — nothing else happens. Same public ATS APIs as above.
+suggested:
+  greenhouse: [deepmind, isomorphiclabs, getyourguide, helsing, polyai, stabilityai, celonis, wayve]
+  lever: [mistral, spotify, canva]
+  ashby: [synthesia, n8n]
+
 # Remote job feeds (CONTRACT_E §3): public APIs/RSS published for reuse with attribution + a link back to the
 # original posting (HQ shows the feed name as the source and links the posting). Polling stays under their limits.
 feeds:
