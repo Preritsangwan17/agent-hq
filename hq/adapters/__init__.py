@@ -1,4 +1,4 @@
-"""Adapter registry: sim, openai_compatible, claude_code, script, http (browser arrives with the mock ATS)."""
+"""Adapter registry: sim, openai_compatible, cloud (Grok), script, http (browser arrives with the mock ATS)."""
 from __future__ import annotations
 
 from typing import Any
@@ -24,7 +24,7 @@ class UnavailableAdapter:
 
 
 def build_adapters(**sim_kwargs: Any) -> dict[str, Any]:
-    from hq.adapters.claude_code import ClaudeCodeAdapter
+    from hq.adapters.cloud import CloudAdapter
     from hq.adapters.http import HttpAdapter
     from hq.adapters.openai_compatible import OpenAICompatibleAdapter
     from hq.adapters.script import ScriptAdapter
@@ -33,7 +33,7 @@ def build_adapters(**sim_kwargs: Any) -> dict[str, Any]:
     return {
         "sim": SimAdapter(**sim_kwargs),
         "openai_compatible": OpenAICompatibleAdapter(),
-        "claude_code": ClaudeCodeAdapter(),
+        "cloud": CloudAdapter(),
         "script": ScriptAdapter(),
         "http": HttpAdapter(),
         "browser": UnavailableAdapter("browser", "c"),

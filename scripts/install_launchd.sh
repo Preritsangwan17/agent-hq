@@ -68,7 +68,7 @@ for _ in range(40):
     time.sleep(0.5)
 print("✓ macOS notifications work" if state == 1 else
       "! macOS notification not shown — allow notifications for 'Script Editor' / terminal-notifier in System Settings › Notifications")
-cloud = get_setting(conn, "claude_state") or {}
-print(f"✓ cloud model reachable ({cloud.get('provider')})" if cloud.get("available") else
-      f"! cloud model not reachable yet: {cloud.get('reason') or 'not checked yet'} (add HQ_XAI_API_KEY to .env or run `claude auth login`)")
+cloud = get_setting(conn, "cloud_state") or {}
+print("✓ Grok reachable" if cloud.get("available") else
+      f"! Grok not reachable yet: {cloud.get('reason') or 'not checked yet'} (add HQ_XAI_API_KEY to .env — local models work without it)")
 PY

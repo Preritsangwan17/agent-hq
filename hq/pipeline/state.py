@@ -42,7 +42,7 @@ class TaskSpec:
 
 
 def _redraft(stage: str, result: dict[str, Any]) -> tuple[str, list[TaskSpec]]:
-    """Failed check → targeted rewrite (all layers re-run). After 3 loops: one Claude polish when the real pipeline
+    """Failed check → targeted rewrite (all layers re-run). After 3 loops: one Grok polish when the real pipeline
     allows it (`polish_allowed`), then a review item in Needs Prerit (raised by the checking agent)."""
     version = int(result.get("version") or 1)
     loop = int(result.get("loop") or version)

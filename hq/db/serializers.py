@@ -116,7 +116,7 @@ def document_json(d: dict[str, Any]) -> dict[str, Any]:
 
 
 def document_sentences(conn: sqlite3.Connection, doc_id: str) -> list[dict[str, Any]]:
-    """Sentences with every fact-check verdict on them (deterministic / local checker / Claude sign-off)."""
+    """Sentences with every fact-check verdict on them (deterministic / local checker / final sign-off)."""
     checks: dict[str | None, list[dict[str, Any]]] = {}
     for r in conn.execute("SELECT * FROM fact_checks WHERE document_id=? ORDER BY created_at", (doc_id,)):
         checks.setdefault(r["sentence_id"], []).append(
@@ -315,15 +315,15 @@ def stats(conn: sqlite3.Connection, settings: dict[str, Any] | None = None) -> d
     interviews = by_stage.get("interview", 0)
     offers = by_stage.get("offer", 0)
     since = ist_midnight_utc_iso()
-    claude = conn.execute(
+    grok = conn.execute(
         "SELECT COALESCE(SUM(CASE WHEN subtype NOT IN ('reserved','released') THEN cost_usd_est END),0) AS cost, "
-        "COUNT(CASE WHEN subtype!='released' THEN 1 END) AS n FROM claude_usage WHERE date_local=?",
+        "COUNT(CASE WHEN subtype!='released' THEN 1 END) AS n FROM cloud_usage WHERE date_local=?",
         (today_ist().isoformat(),)).fetchone()
-    # top-level runs only (router escalation rows are children) and never Claude's tokens
+    # top-level runs only (router escalation rows are children) and never Grok's tokens
     local = conn.execute(
         "SELECT COALESCE(SUM(COALESCE(prompt_tokens,0)+COALESCE(completion_tokens,0)),0) AS t FROM agent_runs "
-        "WHERE started_at >= ? AND parent_run_id IS NULL AND COALESCE(model_id,'') NOT LIKE 'claude:%' "
-        "AND COALESCE(model_id,'') NOT LIKE 'xai:%'",
+        "WHERE started_at >= ? AND parent_run_id IS NULL AND COALESCE(model_id,'') NOT LIKE 'xai:%' "
+        "AND COALESCE(model_id,'') NOT LIKE 'sim:%'",
         (since,)).fetchone()
 
     def mids(stages: tuple[str, ...]) -> list[float]:
@@ -350,9 +350,9 @@ def stats(conn: sqlite3.Connection, settings: dict[str, Any] | None = None) -> d
         "filtered": by_stage.get("filtered", 0),
         "success_rate": round((interviews + offers) / applied, 4) if applied else None,
         "needs_open": needs_open,
-        "claude_cost_today_usd": round(float(claude["cost"]), 4),
-        "claude_budget_usd": float(settings.get("claude_daily_budget_usd", 5.0)),
-        "claude_calls_today": int(claude["n"]),
+        "cloud_cost_today_usd": round(float(grok["cost"]), 4),
+        "cloud_budget_usd": float(settings.get("cloud_daily_budget_usd", 2.0)),
+        "cloud_calls_today": int(grok["n"]),
         "local_tokens_today": int(local["t"]),
         "pay": {
             "pipeline_median_inr": _median(mids(PIPELINE_STAGES)),

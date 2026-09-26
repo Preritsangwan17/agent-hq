@@ -1,7 +1,7 @@
-"""xAI (Grok) API runner — the second cloud provider next to the Claude CLI.
+"""xAI (Grok) API runner — HQ's only paid cloud model. Local models do everything they can first (hq.llm.policy).
 
-Same contract as ClaudeRunner: `available()` (cached 10 min) and `run(prompt, schema, system_prompt, model,
-max_budget_usd)` → ClaudeResult with structured output validated against the schema. Plain chat completions: no
+`available()` (cached 10 min) and `run(prompt, schema, system_prompt, model, max_budget_usd)` → CloudResult with
+structured output validated against the schema. Plain chat completions: no
 tools, no web search, nothing but the redacted prompt leaves the Mac, and only to api.x.ai (the net guard allows
 nothing else). The key lives in .env as HQ_XAI_API_KEY and is never logged or sent anywhere but that host.
 An empty account (no credit) or a rejected key becomes one Needs Prerit item instead of retries.
@@ -18,8 +18,8 @@ import httpx
 import yaml
 
 from hq import settings as paths
-from hq.llm.claude import ClaudeBadOutput, ClaudeBudgetExceeded, ClaudeError, ClaudeRateLimited, ClaudeResult, \
-    ClaudeUnavailable
+from hq.llm.errors import CloudBadOutput, CloudBudgetExceeded, CloudError, CloudRateLimited, CloudResult, \
+    CloudUnavailable
 from hq.llm.json_utils import parse_and_validate, repair_message
 from hq.util import netguard
 from hq.util.redact import redact
@@ -29,7 +29,7 @@ KEY_ENV = "HQ_XAI_API_KEY"
 AVAILABILITY_TTL_S = 600
 TIMEOUT_S = 120
 MAX_OUTPUT_TOKENS = 2000
-NEED_TITLE = "Fix xAI API access"
+NEED_TITLE = "Fix Grok (xAI) API access"
 CREDIT_WORDS = ("credit", "billing", "balance", "spending limit", "insufficient", "payment", "exhausted")
 
 
@@ -54,11 +54,20 @@ def price_for(model: str) -> tuple[float, float]:
 
 
 def cost_of(model: str, usage: dict[str, Any]) -> float:
+    return cost_with_source(model, usage)[0]
+
+
+def cost_with_source(model: str, usage: dict[str, Any]) -> tuple[float, str]:
+    """(cost, "reported") when xAI returned the exact cost of the call, else (price-table estimate, "estimated")."""
     ticks = usage.get("cost_in_usd_ticks")
     if isinstance(ticks, (int, float)) and ticks >= 0:
-        return round(ticks / 1e10, 8)
+        return round(ticks / 1e10, 8), "reported"
     pin, pout = price_for(model)
-    return round((usage.get("prompt_tokens") or 0) * pin / 1e6 + (usage.get("completion_tokens") or 0) * pout / 1e6, 6)
+    return round((usage.get("prompt_tokens") or 0) * pin / 1e6 + (usage.get("completion_tokens") or 0) * pout / 1e6,
+                 6), "estimated"
+
+
+KEY_INFO_FIELDS = ("name", "redacted_api_key", "api_key_blocked", "api_key_disabled", "team_blocked", "create_time")
 
 
 def ensure_need(conn: sqlite3.Connection, reason: str) -> str | None:
@@ -75,7 +84,7 @@ def ensure_need(conn: sqlite3.Connection, reason: str) -> str | None:
     with tx(conn):
         need_id = repo.insert_need(conn, {
             "kind": "decision", "title": NEED_TITLE, "priority": 60, "est_minutes": 2,
-            "instructions_md": f"xAI is unavailable ({reason}). Cloud sign-off, polish and escalations wait; local "
+            "instructions_md": f"Grok (xAI) is unavailable ({reason}). Grok sign-off, polish and escalations wait; local "
                                f"models keep working.\n\n{steps}\n\nHQ re-checks every 10 minutes.",
             "direct_url": "https://console.x.ai"})
         need = serializers.need_json(repo.get_need_row(conn, need_id))
@@ -94,6 +103,9 @@ class XaiRunner:
         self.reason: str | None = None
         self.models: list[str] = []
         self.nag = True
+        self.key_info: dict[str, Any] = {}         # from GET /v1/api-key (name, blocked/disabled flags)
+        self.rate_limits: dict[str, str] = {}      # x-ratelimit-* headers of the last response, when xAI sends them
+        self.rate_limits_at: float | None = None
 
     def _client(self, timeout: float) -> httpx.AsyncClient:
         return netguard.guarded_client(base_url=BASE_URL, timeout=httpx.Timeout(timeout, connect=10.0),
@@ -129,8 +141,25 @@ class XaiRunner:
             self.models = sorted(m["id"] for m in r.json().get("data", []) if isinstance(m, dict) and m.get("id"))
         except (ValueError, AttributeError):
             self.models = []
+        await self._refresh_key_info()
         self._available, self.reason = True, None
         return True
+
+    async def _refresh_key_info(self) -> None:
+        """Best effort, free: what xAI says about this key. It does NOT include a credit balance."""
+        try:
+            async with self._client(10) as c:
+                r = await c.get("/api-key")
+            if r.status_code == 200 and isinstance(r.json(), dict):
+                data = r.json()
+                self.key_info = {k: data[k] for k in KEY_INFO_FIELDS if k in data}
+        except (httpx.HTTPError, netguard.NetGuardError, ValueError):
+            pass
+
+    def _note_headers(self, r: httpx.Response) -> None:
+        limits = {k.lower(): v for k, v in r.headers.items() if k.lower().startswith("x-ratelimit")}
+        if limits:
+            self.rate_limits, self.rate_limits_at = limits, time.time()
 
     def resolve(self, name: str) -> str:
         """Configured names may drift (grok-4-fast → grok-4-fast-reasoning): pick the closest listed model."""
@@ -144,22 +173,23 @@ class XaiRunner:
         return name
 
     async def run(self, prompt: str, *, schema: dict[str, Any], system_prompt: str, model: str = "grok-4",
-                  max_budget_usd: float = 0.5, timeout_s: float = TIMEOUT_S, **_: Any) -> ClaudeResult:
+                  max_budget_usd: float = 0.5, timeout_s: float = TIMEOUT_S, **_: Any) -> CloudResult:
         if not api_key():
-            raise ClaudeUnavailable(f"no {KEY_ENV} in .env")
+            raise CloudUnavailable(f"no {KEY_ENV} in .env")
         model = self.resolve(model.removeprefix("xai:"))
         system, user = redact(system_prompt, self.conn), redact(prompt, self.conn)
         pin, pout = price_for(model)
         est_in = (len(system) + len(user)) / 3.2
         room = (max_budget_usd - est_in * pin / 1e6) * 1e6 / pout
         if room < 200:
-            raise ClaudeBudgetExceeded(f"prompt alone would exceed the ${max_budget_usd:.2f} per-call cap")
+            raise CloudBudgetExceeded(f"prompt alone would exceed the ${max_budget_usd:.2f} per-call cap")
         max_tokens = int(min(MAX_OUTPUT_TOKENS, room))
         messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
         fmt: dict[str, Any] | None = {"type": "json_schema",
                                       "json_schema": {"name": "hq_output", "schema": schema, "strict": False}}
         t0 = time.monotonic()
-        total_cost, tin, tout = 0.0, 0, 0
+        total_cost, tin, tout, cached = 0.0, 0, 0, 0
+        sources: set[str] = set()
         errors: list[str] = []
         async with self._client(timeout_s) as c:
             for attempt in range(3):
@@ -170,9 +200,10 @@ class XaiRunner:
                 try:
                     r = await c.post("/chat/completions", json=body)
                 except httpx.TimeoutException:
-                    raise ClaudeError(f"xAI timed out after {timeout_s:.0f} s") from None
+                    raise CloudError(f"xAI timed out after {timeout_s:.0f} s") from None
                 except httpx.HTTPError as exc:
-                    raise ClaudeError(f"xAI request failed ({type(exc).__name__})") from None
+                    raise CloudError(f"xAI request failed ({type(exc).__name__})") from None
+                self._note_headers(r)
                 if r.status_code == 400 and fmt and "response_format" in r.text:
                     fmt = None  # model without structured outputs: fall back to prompt-only JSON + validation
                     continue
@@ -180,34 +211,41 @@ class XaiRunner:
                     reason = _http_reason(r)
                     if r.status_code in (401, 403) or any(w in r.text.lower() for w in CREDIT_WORDS):
                         self.mark_unavailable(reason)
-                        raise ClaudeUnavailable(reason)
+                        raise CloudUnavailable(reason)
                     if r.status_code == 429:
-                        raise ClaudeRateLimited(reason)
-                    raise ClaudeError(reason)
+                        raise CloudRateLimited(reason)
+                    raise CloudError(reason)
                 data = r.json()
                 usage = data.get("usage") or {}
-                total_cost += cost_of(model, usage)
+                cost, source = cost_with_source(model, usage)
+                total_cost += cost
+                sources.add(source)
                 tin += usage.get("prompt_tokens") or 0
                 tout += usage.get("completion_tokens") or 0
+                cached += ((usage.get("prompt_tokens_details") or {}).get("cached_tokens") or 0)
                 text = ((data.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
                 value, errors = parse_and_validate(text, schema)
                 if not errors:
-                    return ClaudeResult(output=value, cost_usd=round(total_cost, 8), input_tokens=tin,
-                                        output_tokens=tout, cache_read_tokens=None,
-                                        duration_ms=(time.monotonic() - t0) * 1000, model=f"xai:{model}",
-                                        subtype="success", raw={"id": data.get("id")})
+                    return CloudResult(output=value, cost_usd=round(total_cost, 8), input_tokens=tin,
+                                       output_tokens=tout, cache_read_tokens=cached or None,
+                                       duration_ms=(time.monotonic() - t0) * 1000, model=f"xai:{model}",
+                                       subtype="success", raw={"id": data.get("id")},
+                                       cost_source="reported" if sources == {"reported"} else "estimated")
                 if total_cost >= max_budget_usd:
                     break
                 messages = messages + [{"role": "assistant", "content": text[:4000]},
                                        {"role": "user", "content": repair_message(errors, schema)}]
-        bad = ClaudeBadOutput("xAI output invalid: " + "; ".join(errors[:3]))
-        bad.cost_usd = round(total_cost, 8)  # type: ignore[attr-defined]
+        bad = CloudBadOutput("Grok output invalid: " + "; ".join(errors[:3]))
+        bad.cost_usd = round(total_cost, 8)
         raise bad
 
     def state(self, settings: dict[str, Any]) -> dict[str, Any]:
         return {"available": bool(self._available), "reason": self.reason, "key_present": api_key() is not None,
                 "model": settings.get("xai_model"), "signoff_model": settings.get("xai_signoff_model"),
-                "models": self.models[:40], "checked": self._available is not None}
+                "models": self.models[:40], "checked": self._available is not None, "key_info": self.key_info,
+                "rate_limits": self.rate_limits,
+                "rate_limits_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(self.rate_limits_at))
+                if self.rate_limits_at else None}
 
 
 def _http_reason(r: httpx.Response) -> str:

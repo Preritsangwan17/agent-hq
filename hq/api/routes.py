@@ -412,6 +412,8 @@ def patch_settings(body: dict[str, Any], request: Request, conn: sqlite3.Connect
         cleaned = validate_patch(body)
     except SettingError as exc:
         raise ApiError(400, str(exc)) from None
+    if "grok_credit_usd" in cleaned:  # the remaining-credit estimate counts spend from this moment on
+        cleaned["grok_credit_at"] = now_iso() if cleaned["grok_credit_usd"] is not None else None
     with tx(conn):
         before = get_settings(conn)
         set_settings(conn, cleaned, by="prerit")

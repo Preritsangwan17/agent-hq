@@ -1,5 +1,5 @@
-"""Models, roles and budget routes (CONTRACT_B §3). The worker owns model servers, benchmarks and the Claude
-runner; these routes read what it publishes and queue commands for it."""
+"""Models, roles and budget routes (CONTRACT_B §3). The worker owns model servers, benchmarks, model downloads and
+the Grok runner; these routes read what it publishes and queue commands for it."""
 from __future__ import annotations
 
 import sqlite3
@@ -13,8 +13,10 @@ from hq.api.auth import ApiError
 from hq.api.routes import Conn, _addr
 from hq.db import repo
 from hq.db.conn import tx
-from hq.db.seed import get_settings
+from hq.db.seed import get_settings, set_settings
+from hq.llm import policy
 from hq.db.serializers import _loads
+from hq.models import catalog
 from hq.models import memory as mem
 from hq.models import roles as roles_mod
 from hq.util.timeutil import parse_iso, utcnow
@@ -36,6 +38,18 @@ class RoleBody(BaseModel):
 
 class PinBody(BaseModel):
     pinned: bool
+
+
+class EnabledBody(BaseModel):
+    enabled: bool
+
+
+class EnginesBody(BaseModel):
+    engines: str
+
+
+class PullBody(BaseModel):
+    name: str
 
 
 def _latest_bench(conn: sqlite3.Connection) -> dict[str, dict[str, dict[str, Any]]]:
@@ -61,6 +75,7 @@ def model_json(row: dict[str, Any], bench: dict[str, dict[str, Any]], role_map: 
         "size_gb": round(row["size_bytes"] / 1e9, 2) if row["size_bytes"] else None, "params_b": row["params_b"],
         "quant": row["quant"], "ctx_len": row["ctx_len"], "est_ram_gb": row["est_ram_gb"],
         "measured_ram_gb": row["measured_ram_gb"], "status": row["status"], "pinned": bool(row["pinned"]),
+        "enabled": bool(row.get("enabled", 1)),
         "model_type": row["model_type"], "path": row["path"],
         "roles": [r for r, rank in role_map.get(row["id"], []) if rank == 0],
         "ranked_in": {r: rank for r, rank in role_map.get(row["id"], [])},
@@ -97,15 +112,16 @@ def models(conn: sqlite3.Connection = Conn) -> dict[str, Any]:
     servers = [dict(r) for r in conn.execute(
         "SELECT model_id, pid, port, started_at, last_used_at, footprint_gb, status FROM model_servers "
         "WHERE status IN ('starting','running') ORDER BY started_at")]
-    claude = s.get("claude_state") or {"available": None, "logged_in": False, "reason": "not checked yet",
-                                       "model": s.get("claude_model"), "signoff_model": s.get("claude_signoff_model")}
+    cloud_state = s.get("cloud_state") or {"available": None, "reason": "not checked yet",
+                                           "model": s.get("xai_model"), "strong_model": s.get("xai_signoff_model")}
     return {
         "models": [model_json(r, bench.get(r["id"], {}), role_map, scores.get(r["id"], {})) for r in rows],
         "roles": roles_mod.roles_json(conn),
         "servers": servers,
         "memory": memory_state(conn, s),
         "benchmark": s.get("benchmark_state") or {"running": False},
-        "claude": claude,
+        "cloud": cloud_state,
+        "policy": policy.describe(s),
     }
 
 
@@ -175,11 +191,66 @@ def unload(model_id: str, request: Request, conn: sqlite3.Connection = Conn) -> 
 @router.get("/budget")
 def budget(conn: sqlite3.Connection = Conn) -> dict[str, Any]:
     s = get_settings(conn)
-    return budget_mod.budget_state(conn, s, s.get("claude_state") or {})
+    return budget_mod.budget_state(conn, s, s.get("cloud_state") or {})
 
 
-@router.post("/claude/recheck")
-def claude_recheck(conn: sqlite3.Connection = Conn) -> dict[str, Any]:
+@router.post("/cloud/recheck")
+def cloud_recheck(conn: sqlite3.Connection = Conn) -> dict[str, Any]:
     with tx(conn):
-        repo.add_command(conn, "claude_recheck", {})
+        repo.add_command(conn, "cloud_recheck", {})
     return {"queued": True}
+
+
+@router.post("/models/{model_id:path}/enabled")
+def set_enabled(model_id: str, body: EnabledBody, request: Request, conn: sqlite3.Connection = Conn) -> dict[str, Any]:
+    """Prerit's on/off switch for one local model. Off: never routed to, and unloaded by the worker."""
+    with tx(conn):
+        cur = conn.execute("UPDATE models SET enabled=? WHERE id=?", (int(body.enabled), model_id))
+        if not cur.rowcount:
+            raise ApiError(404, "unknown model")
+        if not body.enabled:
+            repo.add_command(conn, "model_unload", {"model_id": model_id})
+        repo.add_command(conn, "roles_changed", {"model_id": model_id})
+        repo.audit(conn, "prerit", "models.enabled", model_id, after={"enabled": body.enabled},
+                   remote_addr=_addr(request))
+        repo.emit(conn, "model.status", f"{model_id} switched {'on' if body.enabled else 'off'}",
+                  data={"model_id": model_id, "enabled": body.enabled})
+    return next(m for m in models(conn)["models"] if m["id"] == model_id)
+
+
+@router.post("/ai/engines")
+def set_engines(body: EnginesBody, request: Request, conn: sqlite3.Connection = Conn) -> dict[str, Any]:
+    """Both / Local only / Grok only / None in one call (the two switches `local_ai_enabled`, `grok_enabled`)."""
+    try:
+        patch = policy.engines_patch(body.engines)
+    except ValueError as exc:
+        raise ApiError(400, str(exc)) from None
+    with tx(conn):
+        before = get_settings(conn)
+        set_settings(conn, patch, by="prerit")
+        after = get_settings(conn)
+        repo.add_command(conn, "settings_changed", {"keys": sorted(patch)})
+        repo.audit(conn, "prerit", "settings.update", ",".join(sorted(patch)),
+                   before={k: before.get(k) for k in patch}, after=patch, remote_addr=_addr(request))
+        label = {"both": "local models + Grok", "local": "local models only", "grok": "Grok only",
+                 "none": "no AI (rules-only steps keep running)"}[body.engines]
+        repo.emit(conn, "settings.updated", f"AI engines: {label}", data={"settings": after, "changed": sorted(patch)})
+    return {"policy": policy.describe(after), "settings": after}
+
+
+@router.get("/models/recommended")
+def recommended(conn: sqlite3.Connection = Conn) -> dict[str, Any]:
+    s = get_settings(conn)
+    return catalog.recommended_json(conn, s)
+
+
+@router.post("/models/pull")
+def pull(body: PullBody, request: Request, conn: sqlite3.Connection = Conn) -> dict[str, Any]:
+    """Download a model from the recommended list through the local Ollama (Prerit clicks; agents never do)."""
+    entry = catalog.entry(body.name)
+    if entry is None:
+        raise ApiError(400, "only models from the recommended list can be downloaded from here")
+    with tx(conn):
+        repo.add_command(conn, "model_pull", {"name": entry["ollama"]})
+        repo.audit(conn, "prerit", "models.pull", entry["ollama"], remote_addr=_addr(request))
+    return {"queued": True, "name": entry["ollama"]}

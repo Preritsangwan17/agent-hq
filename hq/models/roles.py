@@ -116,8 +116,10 @@ def current(conn: sqlite3.Connection) -> dict[str, list[dict[str, Any]]]:
 
 
 def ranked(conn: sqlite3.Connection, role: str) -> list[str]:
+    """Models for a role, best first — without the ones Prerit switched off on the Models page."""
     return [r["model_id"] for r in conn.execute(
-        "SELECT model_id FROM role_assignments WHERE role=? ORDER BY rank", (role,))]
+        "SELECT r.model_id FROM role_assignments r LEFT JOIN models m ON m.id=r.model_id "
+        "WHERE r.role=? AND COALESCE(m.enabled, 1)=1 ORDER BY r.rank", (role,))]
 
 
 def assign(conn: sqlite3.Connection, pool_gb: float = 30.0) -> dict[str, list[dict[str, Any]]]:
@@ -149,9 +151,9 @@ def assign(conn: sqlite3.Connection, pool_gb: float = 30.0) -> dict[str, list[di
         below.sort(key=lambda x: -x[1])
         rows = [(mid, s, "auto", None) for mid, s, _, _ in passing]
         if not passing and below:
-            # nobody meets the floor: keep them ranked as a pre-screen (the fact gate then needs Claude sign-off;
+            # nobody meets the floor: keep them ranked as a pre-screen (the fact gate then needs a Grok sign-off;
             # inbox locks still come from the deterministic rules)
-            suffix = "; needs_claude_signoff" if role == "fact_checker" else ""
+            suffix = "; needs_cloud_signoff" if role == "fact_checker" else ""
             rows = [(mid, s, "auto", f"below floor: {why}{suffix}") for mid, s, _, why in below]
         if role in overrides and overrides[role] in models:
             ov = overrides[role]
@@ -203,13 +205,13 @@ def reset_override(conn: sqlite3.Connection, role: str, pool_gb: float = 30.0) -
 
 
 def checker_allowed(checker_model: str, lineage_models: Iterable[str]) -> bool:
-    """The checker must differ from every model that authored any version of the document (incl. Claude)."""
+    """The checker must differ from every model that authored any version of the document (incl. Grok)."""
     return checker_model not in {m for m in lineage_models if m}
 
 
-def needs_claude_signoff(conn: sqlite3.Connection) -> bool:
+def needs_cloud_signoff(conn: sqlite3.Connection) -> bool:
     row = conn.execute("SELECT reason FROM role_assignments WHERE role='fact_checker' AND rank=0").fetchone()
-    return row is None or bool(row["reason"] and "needs_claude_signoff" in row["reason"])
+    return row is None or bool(row["reason"] and "needs_cloud_signoff" in row["reason"])
 
 
 def roles_json(conn: sqlite3.Connection) -> list[dict[str, Any]]:
@@ -220,6 +222,6 @@ def roles_json(conn: sqlite3.Connection) -> list[dict[str, Any]]:
         out.append({"role": role, "label": ROLE_LABEL[role],
                     "ranked": [{"model_id": r["model_id"], "score": r["score"], "source": r["source"],
                                 "reason": r["reason"]} for r in rows],
-                    "needs_claude_signoff": role == "fact_checker" and (not rows or bool(
-                        rows[0]["reason"] and "needs_claude_signoff" in rows[0]["reason"]))})
+                    "needs_cloud_signoff": role == "fact_checker" and (not rows or bool(
+                        rows[0]["reason"] and "needs_cloud_signoff" in rows[0]["reason"]))})
     return out

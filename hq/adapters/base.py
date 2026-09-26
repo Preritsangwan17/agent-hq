@@ -29,7 +29,7 @@ class TransientError(Exception):
 
 
 class Deferred(Exception):
-    """The task can't run now and should wait without burning an attempt: over the Claude budget
+    """The task can't run now and should wait without burning an attempt: over the Grok budget
     (status deferred_budget until midnight IST), waiting for memory (waiting_memory) or rate-limited (queued)."""
 
     def __init__(self, status: str, until_iso: str, reason: str):
@@ -41,7 +41,7 @@ class Deferred(Exception):
 class Services:
     """Worker-owned LLM plumbing handed to adapters through the RunContext."""
     router: Any = None      # hq.llm.router.Router
-    claude: Any = None      # hq.llm.cloud.CloudRunner (Claude CLI + xAI)
+    cloud: Any = None       # hq.llm.cloud.CloudRunner (Grok via xAI's API)
     manager: Any = None     # hq.models.manager.ModelManager
     sim: Any = None         # hq.adapters.sim.SimAdapter (simulated opportunities)
     fetcher: Any = None     # hq.pipeline.discover.fetch.Fetcher (polite GETs)
@@ -143,7 +143,8 @@ class RunContext:
     # ── LLM helpers (phase b) ─────────────────────────────────────────────────────────────────────────
     async def llm(self, role: str, messages: list[dict[str, str]], schema: dict[str, Any] | None, *,
                   now_line: str | None = None, **kw: Any) -> Any:
-        """Route to the role's model (escalating local → local → Claude). Updates the live row with model + tok/s."""
+        """Route to the role's model (local → a different local model → Grok when hq.llm.policy allows it).
+        Updates the live row with model + tok/s."""
         router = self.services.router
         if router is None:
             raise TransientError("no model router in this worker")
@@ -162,43 +163,46 @@ class RunContext:
         self.check_cancel()
         return res
 
-    async def claude(self, task_type: str, prompt: str, schema: dict[str, Any], *, system_prompt: str,
-                     model: str | None = None) -> Any:
-        """One budgeted cloud call (Claude CLI or xAI, by the model id; default = the `cloud_llm` provider).
-        Over budget → Deferred(deferred_budget); unavailable → Deferred for 10 min."""
-        from hq.llm import cloud
-        from hq.llm.claude import ClaudeError, ClaudeRateLimited, ClaudeUnavailable
+    async def cloud(self, task_type: str, prompt: str, schema: dict[str, Any], *, system_prompt: str,
+                    model: str | None = None) -> Any:
+        """One budgeted Grok call (default: the fast model). Grok switched off, unavailable → Deferred;
+        over budget → Deferred(deferred_budget) until midnight IST."""
+        from hq.llm import cloud, policy
+        from hq.llm.errors import CloudError, CloudRateLimited, CloudUnavailable
         from hq.util.timeutil import iso_in
         from hq.worker import budget
 
         s = self.settings
-        m = model or cloud.main_model(s)
-        runner = self.services.claude
+        if not policy.grok_on(s):
+            raise Deferred("queued", iso_in(3600), "Grok is switched off (Settings › AI & budget)")
+        m = model or cloud.fast_model(s)
+        runner = self.services.cloud
         if runner is None or not await cloud.is_available(runner, m):
             raise Deferred("queued", iso_in(600),
-                           f"{cloud.label(m)} unavailable ({getattr(runner, 'reason', 'no runner')})")
+                           f"Grok unavailable ({getattr(runner, 'reason', None) or 'no API key in .env'})")
         r = budget.reserve(self.conn, task_type, s, run_id=self.run_id)
         if r is None:
             raise Deferred("deferred_budget", budget.to_iso(budget.next_midnight_ist()),
-                           "Cloud daily budget or call cap reached")
-        self.progress(None, f"Asking {cloud.label(m)} ({m.split(':')[-1]})…", model_id=cloud.tag(m))
+                           "Grok daily budget or call cap reached")
+        self.progress(None, f"Asking Grok ({m.split(':')[-1]})…", model_id=cloud.tag(m))
         try:
             res = await runner.run(prompt, schema=schema, system_prompt=system_prompt, model=m,
-                                   max_budget_usd=float(s.get("claude_per_call_cap_usd", 0.5)))
-        except ClaudeError as exc:
+                                   max_budget_usd=float(s.get("cloud_per_call_cap_usd", 0.5)))
+        except CloudError as exc:
             cost = getattr(exc, "cost_usd", None)
             if cost is not None:
                 budget.commit(self.conn, r, cost_usd=cost, model=m, subtype=exc.kind)
                 self.cost_usd += cost
             else:
                 budget.release(self.conn, r)
-            if isinstance(exc, ClaudeRateLimited):
+            if isinstance(exc, CloudRateLimited):
                 raise Deferred("queued", iso_in(3600), str(exc)) from exc
-            if isinstance(exc, ClaudeUnavailable):
+            if isinstance(exc, CloudUnavailable):
                 raise Deferred("queued", iso_in(600), str(exc)) from exc
             raise
         budget.commit(self.conn, r, cost_usd=res.cost_usd, model=m, input_tokens=res.input_tokens,
-                      output_tokens=res.output_tokens, cache_read_tokens=res.cache_read_tokens)
+                      output_tokens=res.output_tokens, cache_read_tokens=res.cache_read_tokens,
+                      cost_source=getattr(res, "cost_source", None))
         self.model_id = cloud.tag(m)
         self.cost_usd += res.cost_usd or 0.0
         return res

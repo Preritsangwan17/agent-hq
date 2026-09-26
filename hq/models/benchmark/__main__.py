@@ -54,7 +54,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{mid}: {cols}")
     for r in roles.roles_json(conn):
         top = r["ranked"][0]["model_id"] if r["ranked"] else "—"
-        print(f"  {r['label']:<18} {top}{'  (needs Claude sign-off)' if r['needs_claude_signoff'] else ''}")
+        print(f"  {r['label']:<18} {top}{'  (needs a Grok sign-off)' if r['needs_cloud_signoff'] else ''}")
     return 0
 
 

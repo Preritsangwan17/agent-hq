@@ -1,14 +1,14 @@
 id: reviewer
-name: Reviewer (Claude)
+name: Reviewer
 avatar: "🧠"
 color: "#FB7185"
 role: reviewer
-description: Final Claude sign-off on every outbound text before anything is applied.
+description: Final independent sign-off on every outbound text — a second local model when one qualifies, Grok only when needed.
 adapter: script
-adapter_config: {module: hq.pipeline.agents.checks, sim_model: claude}
+adapter_config: {module: hq.pipeline.agents.checks, sim_model: qwen2.5-7b}
 model: null
 capabilities: [factcheck.signoff]
-cost_tier: claude
+cost_tier: local
 concurrency: 1
 schedule: {mode: on_demand}
 enabled: true

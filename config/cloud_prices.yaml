@@ -1,7 +1,21 @@
-# Cloud model prices in USD per million tokens, used to estimate and record spend against the daily budget.
-# HQ prefers the cost the API itself reports (xAI returns usage.cost_in_usd_ticks, 1 tick = 1e-10 USD) and falls
-# back to this table. Defaults are deliberately on the high side; check https://docs.x.ai/docs/models and edit.
+# Grok (xAI) prices in USD per million tokens, used to estimate spend against the daily budget.
+# HQ prefers the cost the API itself reports (xAI returns usage.cost_in_usd_ticks, 1 tick = 1e-10 USD — shown as
+# "reported by xAI" on the Usage page) and falls back to this table ("estimated"). Defaults are deliberately on the
+# high side; check https://docs.x.ai/docs/models and edit.
 xai:
   default: {input: 3.0, output: 15.0}
   grok-4-fast: {input: 0.2, output: 0.5}
   grok-3-mini: {input: 0.3, output: 0.5}
+
+# Seed cost estimates (USD) per task type for the budget's reservation (an EMA, alpha 0.3). Real per-call costs
+# replace these as calls complete.
+estimates:
+  default: 0.02
+  task_types:
+    factcheck.signoff: 0.04
+    polish.final: 0.01
+    verify.eligibility_hard: 0.005
+    strategy.daily_review: 0.05
+    check.quality: 0.005
+    escalation: 0.01
+    benchmark: 0.01

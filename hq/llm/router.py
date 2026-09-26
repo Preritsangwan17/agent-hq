@@ -3,7 +3,7 @@
 `await router.route(role, messages, schema, …)` tries, in order:
   level 0 — the highest-ranked model assigned to the role (not excluded, not in the document lineage),
   level 1 — the next-ranked DIFFERENT local model (a different family when one exists),
-  level 2 — Claude, when allowed, logged in and within today's budget,
+  level 2 — Grok (the paid cloud model), only when the caller's policy allows it and within today's budget,
 and raises EscalationExhausted otherwise. A level fails on invalid JSON after one repair turn, or when the output
 carries a `confidence` below the threshold. Every attempt is an `agent_runs` row linked by `escalated_from_run_id`.
 """
@@ -20,9 +20,8 @@ from hq.db import repo
 from hq.db.conn import dumps, tx
 from hq.db.seed import get_settings
 from hq.llm import client as llm_client
-from hq.llm import cloud
-from hq.llm.claude import ClaudeBadOutput, ClaudeBudgetExceeded, ClaudeError, ClaudeRateLimited, ClaudeRunner, \
-    ClaudeUnavailable
+from hq.llm import cloud, policy
+from hq.llm.errors import CloudBadOutput, CloudBudgetExceeded, CloudError, CloudRateLimited, CloudUnavailable
 from hq.llm.json_utils import parse_and_validate, repair_message
 from hq.models import roles as roles_mod
 from hq.models.discovery.base import model_family
@@ -69,11 +68,11 @@ def _to_prompt(messages: list[dict[str, str]]) -> tuple[str, str]:
 
 
 class Router:
-    def __init__(self, conn: sqlite3.Connection, manager: ModelManager | None, claude: ClaudeRunner | None = None,
+    def __init__(self, conn: sqlite3.Connection, manager: ModelManager | None, cloud_runner: Any = None,
                  chat_fn: ChatFn | None = None):
         self.conn = conn
         self.manager = manager
-        self.claude = claude
+        self.cloud = cloud_runner
         self.chat_fn = chat_fn or llm_client.chat
 
     def candidates(self, role: str, exclude: set[str]) -> list[str]:
@@ -94,11 +93,11 @@ class Router:
 
     async def route(self, role: str, messages: list[dict[str, str]], schema: dict[str, Any] | None, *,
                     exclude_models: frozenset[str] | set[str] = frozenset(), lineage: tuple[str, ...] | list[str] = (),
-                    allow_claude: bool = True, max_tokens: int = 900, temperature: float = 0.0,
+                    cloud_use: str | None = "needed", max_tokens: int = 900, temperature: float = 0.0,
                     task_type: str | None = None, confidence_threshold: float | None = None,
                     agent_id: str = "router", task_id: str | None = None, parent_run_id: str | None = None,
                     on_progress: Callable[[str, float | None, str | None], None] | None = None,
-                    claude_model: str | None = None, pinned_model: str | None = None) -> LLMResult:
+                    cloud_model: str | None = None, pinned_model: str | None = None) -> LLMResult:
         s = get_settings(self.conn)
         threshold = confidence_threshold if confidence_threshold is not None else (
             float(s.get("eligibility_threshold", 0.8)) if schema_has_confidence(schema) else None)
@@ -106,9 +105,12 @@ class Router:
         attempts: list[dict[str, Any]] = []
         prev_run: str | None = None
         level = 0
+        local_on = policy.local_on(s)
         ladder = [pinned_model] if pinned_model and not cloud.is_cloud(pinned_model) else self._ladder(role, exclude)
         if pinned_model and cloud.is_cloud(pinned_model):
-            ladder, claude_model = [], pinned_model.removeprefix("claude:")
+            ladder, cloud_model = [], pinned_model
+        if not local_on:
+            ladder = []
         for model_id in ladder:
             run_id = new_id()
             try:
@@ -139,10 +141,17 @@ class Router:
             self._escalated(task_id, agent_id, model_id, level, errors)
             prev_run, level = run_id, level + 1
         level = max(level, 2) if attempts else 2
-        if not allow_claude or self.claude is None:
-            raise EscalationExhausted(f"no local model for {role} succeeded and Claude is not allowed", attempts)
-        return await self._claude(role, messages, schema, task_type or f"escalation.{role}", agent_id, task_id,
-                                  parent_run_id, prev_run, attempts, s, claude_model, lineage)
+        if cloud_use is None:
+            raise EscalationExhausted(f"no local model for {role} succeeded (this step stays local)", attempts)
+        decision = policy.escalate(s, cloud_use, local_tried=bool(attempts))
+        if pinned_model and cloud.is_cloud(pinned_model) and policy.grok_on(s):
+            decision = policy.Decision(True, pinned_model, "pinned to Grok")
+        if not decision.allowed or self.cloud is None:
+            raise EscalationExhausted(f"no local model for {role} succeeded; Grok not used: "
+                                      f"{decision.reason or 'no cloud runner'}", attempts)
+        cloud_model = cloud_model or decision.model
+        return await self._cloud(role, messages, schema, task_type or f"escalation.{role}", agent_id, task_id,
+                                 parent_run_id, prev_run, attempts, s, cloud_model, lineage)
 
     async def _local(self, model_id: str, messages: list[dict[str, str]], schema: dict[str, Any] | None,
                      max_tokens: int, temperature: float,
@@ -171,17 +180,17 @@ class Router:
                     chat.finish_reason = "repaired"
             return output, errors, chat
 
-    async def _claude(self, role: str, messages: list[dict[str, str]], schema: dict[str, Any] | None, task_type: str,
-                      agent_id: str, task_id: str | None, parent_run_id: str | None, prev_run: str | None,
-                      attempts: list[dict[str, Any]], s: dict[str, Any], claude_model: str | None,
-                      lineage: tuple[str, ...] | list[str]) -> LLMResult:
-        assert self.claude is not None
-        model = claude_model or cloud.main_model(s)
+    async def _cloud(self, role: str, messages: list[dict[str, str]], schema: dict[str, Any] | None, task_type: str,
+                     agent_id: str, task_id: str | None, parent_run_id: str | None, prev_run: str | None,
+                     attempts: list[dict[str, Any]], s: dict[str, Any], cloud_model: str | None,
+                     lineage: tuple[str, ...] | list[str]) -> LLMResult:
+        assert self.cloud is not None
+        model = cloud_model or cloud.fast_model(s)
         mid, who = cloud.tag(model), cloud.label(model)
         if mid in set(lineage):
             raise EscalationExhausted(f"{mid} already authored this document", attempts)
-        if not await cloud.is_available(self.claude, model):
-            raise EscalationExhausted(f"{who} unavailable ({self.claude.reason})", attempts)
+        if not await cloud.is_available(self.cloud, model):
+            raise EscalationExhausted(f"{who} unavailable ({self.cloud.reason})", attempts)
         reservation = budget_mod.reserve(self.conn, task_type, s)
         if reservation is None:
             raise Deferred("deferred_budget", budget_mod.to_iso(budget_mod.next_midnight_ist()),
@@ -190,24 +199,25 @@ class Router:
         run_id = new_id()
         t0 = time.monotonic()
         try:
-            res = await self.claude.run(prompt, schema=schema or {"type": "object"}, system_prompt=system, model=model,
-                                        max_budget_usd=float(s.get("claude_per_call_cap_usd", 0.5)))
-        except ClaudeError as exc:
+            res = await self.cloud.run(prompt, schema=schema or {"type": "object"}, system_prompt=system, model=model,
+                                       max_budget_usd=float(s.get("cloud_per_call_cap_usd", 0.5)))
+        except CloudError as exc:
             cost = getattr(exc, "cost_usd", None)
-            if cost is not None or isinstance(exc, (ClaudeBadOutput, ClaudeBudgetExceeded)):
+            if cost is not None or isinstance(exc, (CloudBadOutput, CloudBudgetExceeded)):
                 budget_mod.commit(self.conn, reservation, cost_usd=cost, model=model, subtype=exc.kind)
             else:
                 budget_mod.release(self.conn, reservation)
             self._record(run_id, agent_id, task_id, parent_run_id, prev_run, mid, None, "failed",
                          str(exc), cost=cost, duration_ms=(time.monotonic() - t0) * 1000)
             attempts.append({"level": 2, "model_id": mid, "error": str(exc)[:300]})
-            if isinstance(exc, ClaudeRateLimited):
+            if isinstance(exc, CloudRateLimited):
                 raise Deferred("queued", iso_in(3600), f"{who} rate-limited: {exc}") from exc
-            if isinstance(exc, ClaudeUnavailable):
+            if isinstance(exc, CloudUnavailable):
                 raise EscalationExhausted(f"{who} unavailable: {exc}", attempts) from exc
             raise EscalationExhausted(f"{who} failed: {exc}", attempts) from exc
         budget_mod.commit(self.conn, reservation, cost_usd=res.cost_usd, model=model, input_tokens=res.input_tokens,
-                          output_tokens=res.output_tokens, cache_read_tokens=res.cache_read_tokens)
+                          output_tokens=res.output_tokens, cache_read_tokens=res.cache_read_tokens,
+                          cost_source=getattr(res, "cost_source", None))
         self._record(run_id, agent_id, task_id, parent_run_id, prev_run, mid, None, "succeeded", None,
                      res.output, cost=res.cost_usd, duration_ms=res.duration_ms, prompt_tokens=res.input_tokens,
                      completion_tokens=res.output_tokens)
@@ -226,8 +236,7 @@ class Router:
                 "prompt_tokens, completion_tokens, tok_s, ttft_ms, cost_usd, duration_ms, status, error, started_at, "
                 "finished_at, output_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (run_id, task_id, parent_run_id, escalated_from, agent_id,
-                 "claude_code" if model_id.startswith("claude:") else "xai" if model_id.startswith("xai:")
-                 else "openai_compatible", model_id,
+                 "xai" if model_id.startswith("xai:") else "openai_compatible", model_id,
                  prompt_tokens if chat is None else chat.prompt_tokens,
                  completion_tokens if chat is None else chat.completion_tokens, chat.tok_s if chat else None,
                  chat.ttft_ms if chat else None, cost,

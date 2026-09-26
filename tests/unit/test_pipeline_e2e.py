@@ -1,5 +1,5 @@
 """Phase (c) end to end in DRY RUN with fakes at the edges only: a fake Greenhouse board behind an httpx
-MockTransport, fake local models behind the router and a fake Claude. Everything in between is the real code:
+MockTransport, fake local models behind the router and a fake Grok. Everything in between is the real code:
 discovery, rules-first parsing, eligibility rules, scam/pay checks, fit, the Writer, all fact-check layers, the
 quality gate, the résumé builder and the Applicant's manual pack. Also proves: nothing but GETs leaves the Mac, the
 phone number never reaches a model, and unconfirmed profile values are left for Prerit."""
@@ -18,7 +18,7 @@ from conftest import drive
 from hq.adapters.base import Services
 from hq.db.conn import tx
 from hq.db.seed import set_settings
-from hq.llm.claude import ClaudeResult
+from hq.llm.errors import CloudResult
 from hq.llm.router import LLMResult
 from hq.pipeline.discover.fetch import Fetcher
 from hq.worker import queue
@@ -29,6 +29,7 @@ from _letter_fixture import letter  # noqa: E402
 
 PHONE = "+91 98111 22334"
 WRITER, CHECKER = "local/qwen-writer-7b", "local/llama-checker-8b"
+SECOND_CHECKER = "local/gemma-checker-12b"
 
 JOBS = [
     {"id": 101, "title": "Machine Learning Intern", "location": {"name": "Bengaluru, India"},
@@ -93,7 +94,8 @@ class FakeRouter:
         self.calls: list[dict[str, Any]] = []
 
     async def route(self, role: str, messages: list[dict[str, str]], schema: Any, **kw: Any) -> LLMResult:
-        self.calls.append({"role": role, "messages": messages, **{k: kw.get(k) for k in ("lineage", "exclude_models")}})
+        self.calls.append({"role": role, "messages": messages,
+                           **{k: kw.get(k) for k in ("lineage", "exclude_models", "pinned_model")}})
         text = "\n".join(m["content"] for m in messages)
         if role == "eligibility":
             quote = "Currently pursuing a Bachelor's degree in Computer Science or a related field."
@@ -107,13 +109,14 @@ class FakeRouter:
             return LLMResult(WRITER, out, prompt_tokens=900, completion_tokens=400, tok_s=42.0)
         if role == "fact_checker":
             n = len(re.findall(r"SENTENCE:", text)) or 20
-            return LLMResult(CHECKER, {"results": [{"i": i, "verdict": "supported"} for i in range(n)]})
+            return LLMResult(kw.get("pinned_model") or CHECKER,
+                             {"results": [{"i": i, "verdict": "supported"} for i in range(n)]})
         if role == "summarizer":
             return LLMResult(CHECKER, {"score": 4, "reasons": "names the organisation and the work"})
         raise AssertionError(f"unexpected role {role}")
 
 
-class FakeClaude:
+class FakeGrok:
     reason = "fake"
 
     def __init__(self) -> None:
@@ -123,7 +126,7 @@ class FakeClaude:
         return True
 
     async def run(self, prompt: str, *, schema: dict, system_prompt: str, model: str, max_budget_usd: float,
-                  **_: Any) -> ClaudeResult:
+                  **_: Any) -> CloudResult:
         self.prompts.append(system_prompt + "\n" + prompt)
         if "sentences" in (schema.get("properties") or {}):  # polish
             out = letter("Fakeco")
@@ -133,7 +136,7 @@ class FakeClaude:
         else:
             n = len(re.findall(r"SENTENCE:", prompt))
             out = {"results": [{"i": i, "verdict": "supported"} for i in range(n)]}
-        return ClaudeResult(out, 0.02, 1200, 300, 0, 50.0, model, "success")
+        return CloudResult(out, 0.02, 1200, 300, 0, 50.0, model, "success", cost_source="reported")
 
 
 async def _nosleep(_: float) -> None:
@@ -154,11 +157,11 @@ def pipeline(db, team, monkeypatch):
                    "('b1', ?, 'v1', 'eligibility', 0.95, '2026-01-01T00:00:00Z')", (WRITER,))
         update_field(db, "phone", PHONE)
     board = Board()
-    router, claude = FakeRouter(), FakeClaude()
+    router, grok = FakeRouter(), FakeGrok()
     fetcher = Fetcher(db, transport=httpx.MockTransport(board), sleep=_nosleep)
     w = Worker(conn=db, agents_dir=team, loop_interval=0.01, watch=False, schedule=False,
-               services=Services(router=router, claude=claude, fetcher=fetcher))
-    return w, board, router, claude
+               services=Services(router=router, cloud=grok, fetcher=fetcher))
+    return w, board, router, grok
 
 
 def _stage(db, title: str) -> tuple[str | None, str | None]:
@@ -167,7 +170,7 @@ def _stage(db, title: str) -> tuple[str | None, str | None]:
 
 
 async def test_dry_run_pipeline_end_to_end(db, pipeline):
-    w, board, router, claude = pipeline
+    w, board, router, grok = pipeline
     w.startup()
     with tx(db):
         queue.enqueue(db, "discover.ats", type_="scheduled")
@@ -217,19 +220,40 @@ async def test_dry_run_pipeline_end_to_end(db, pipeline):
     # independence: the checker is told the letter's lineage (so the router can refuse the writer's model)
     checks = [c for c in router.calls if c["role"] == "fact_checker"]
     assert checks and all(WRITER in (c["lineage"] or ()) for c in checks)
-    assert claude.prompts, "Claude sign-off never ran"
+    assert grok.prompts, "no local sign-off model exists here, so Grok must have signed off"
 
-    # safety: GET-only to third parties, phone never sent to a model or Claude, nothing mailed
+    # safety: GET-only to third parties, phone never sent to a model or Grok, nothing mailed
     assert board.requests and {r.method for r in board.requests} == {"GET"}
     assert set(r["method"] for r in db.execute("SELECT method FROM fetch_log")) <= {"GET", "HEAD"}
-    everything_sent = json.dumps([c["messages"] for c in router.calls]) + "\n".join(claude.prompts)
+    everything_sent = json.dumps([c["messages"] for c in router.calls]) + "\n".join(grok.prompts)
     assert PHONE not in everything_sent and "98111" not in everything_sent
     assert db.execute("SELECT COUNT(*) FROM mock_mailbox").fetchone()[0] == 0
     assert db.execute("SELECT COUNT(*) FROM outbound_log").fetchone()[0] == 0
 
 
+async def test_local_signoff_costs_nothing_when_two_independent_local_checkers_exist(db, pipeline):
+    """API-saving mode: a second local checker (not the writer, not the layer-(b) checker) signs off — no Grok call."""
+    w, board, router, grok = pipeline
+    with tx(db):
+        for rank, mid in enumerate((CHECKER, SECOND_CHECKER)):
+            db.execute("INSERT INTO role_assignments(role, model_id, rank, score, source, created_at) VALUES "
+                       "('fact_checker', ?, ?, 0.9, 'auto', '2026-01-01T00:00:00Z')", (mid, rank))
+    w.startup()
+    with tx(db):
+        queue.enqueue(db, "discover.ats", type_="scheduled")
+    ok = await drive(w, lambda: db.execute("SELECT 1 FROM needs_prerit WHERE kind='submit_form'").fetchone() is not None,
+                     timeout=90)
+    await w.shutdown()
+    assert ok
+    assert grok.prompts == []                                                   # zero paid calls
+    assert db.execute("SELECT COUNT(*) FROM cloud_usage").fetchone()[0] == 0
+    signers = {r[0] for r in db.execute("SELECT DISTINCT checker_model FROM fact_checks WHERE layer='signoff'")}
+    assert signers == {SECOND_CHECKER}
+    assert any(c["pinned_model"] == SECOND_CHECKER for c in router.calls if c["role"] == "fact_checker")
+
+
 async def test_unconfirmed_phone_is_left_for_prerit(db, pipeline):
-    w, board, router, claude = pipeline
+    w, board, router, grok = pipeline
     with tx(db):
         db.execute("UPDATE profile_fields SET confirmed_by_prerit=0 WHERE key='phone'")
     w.startup()
@@ -253,7 +277,7 @@ def _need(db, kind: str):
 async def test_approve_first_binds_approval_to_the_exact_letter_and_resume(db, pipeline, authed):
     from conftest import MUTATE
 
-    w, board, router, claude = pipeline
+    w, board, router, grok = pipeline
     with tx(db):
         set_settings(db, {"autonomy": "approve_first"})
     w.settings["autonomy"] = "approve_first"
@@ -281,7 +305,7 @@ async def test_unknown_pay_waits_for_a_keep_or_drop_decision(db, pipeline, authe
     mod = sys.modules[__name__]
     no_pay = dict(JOBS[0], content=JOBS[0]["content"].replace("<p>Stipend: ₹60,000 per month. Duration: 6 months.</p>", ""))
     monkeypatch.setattr(mod, "JOBS", [no_pay])
-    w, board, router, claude = pipeline
+    w, board, router, grok = pipeline
     w.startup()
     with tx(db):
         queue.enqueue(db, "discover.ats", type_="scheduled")

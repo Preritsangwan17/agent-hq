@@ -89,15 +89,15 @@ class SimAdapter:
     def _sim_model(ctx: RunContext) -> str:
         return str(ctx.agent.adapter_config.get("sim_model") or ctx.agent.model or "qwen3-4b-2507").split(":")[-1]
 
-    def _is_claude(self, ctx: RunContext) -> bool:
-        return ctx.agent.cost_tier == "claude" or self._sim_model(ctx).startswith("claude")
+    def _is_cloud(self, ctx: RunContext) -> bool:
+        return ctx.agent.cost_tier == "cloud" or self._sim_model(ctx).startswith("grok")
 
     async def _work(self, ctx: RunContext, rng: random.Random, lines: list[str], *, can_fail: bool = True,
                     opportunity_id: str | None = None) -> float | None:
         """Spread `lines` over 2–8 s ÷ sim_speed with progress updates; maybe raise a transient failure."""
         model = self._sim_model(ctx)
         model_id = f"sim:{model}"
-        tok_range = None if (model in NON_LLM or self._is_claude(ctx)) else LOCAL_TOK_S.get(model, (60, 200))
+        tok_range = None if (model in NON_LLM or self._is_cloud(ctx)) else LOCAL_TOK_S.get(model, (60, 200))
         lines = [ln for ln in lines if ln][:6]
         while len(lines) < 3:
             lines.append(rng.choice(["Cross-checking intermediate results…", "Writing structured output…",
@@ -121,7 +121,7 @@ class SimAdapter:
             return res
         res.prompt_tokens = rng.randint(400, 3200)
         res.completion_tokens = rng.randint(60, 650)
-        if self._is_claude(ctx):
+        if self._is_cloud(ctx):
             res.tok_s = None
             res.cost_usd = round(rng.uniform(0.012, 0.058), 4)
         else:
@@ -445,7 +445,7 @@ class SimAdapter:
         approve_first = ctx.settings.get("autonomy") == "approve_first"
         effects = [
             {"op": "gate_result", "values": {"application_id": doc["application_id"], "document_id": doc["id"],
-                                             "gate": "claude_signoff", "passed": 1,
+                                             "gate": "signoff", "passed": 1,
                                              "details_json": {"version": doc["version"], "verdict": "approved"}}},
             {"op": "document.update", "id": doc["id"], "values": {"status": "passed"}},
             {"op": "application.update", "id": doc["application_id"],

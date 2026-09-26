@@ -30,7 +30,7 @@ class FieldDef:
 
 
 FIELD_DEFS: tuple[FieldDef, ...] = (
-    FieldDef("phone", "Phone number", "text", "forms", True, "With country code, e.g. +91 98xxxxxxx. Never sent to Claude."),
+    FieldDef("phone", "Phone number", "text", "forms", True, "With country code, e.g. +91 98xxxxxxx. Never sent to Grok or any cloud model."),
     FieldDef("cgpa", "CGPA (current)", "number", "forms", True, "Out of 10, as on your latest grade sheet."),
     FieldDef("marks_x", "Class X marks", "text", "on_request", False, "Percentage or CGPA, e.g. 92%."),
     FieldDef("marks_xii", "Class XII marks", "text", "on_request", False, "Percentage, e.g. 88%."),

@@ -1,7 +1,7 @@
-"""Redaction for logs, run records and anything sent to Claude (PLAN "Security and safety").
+"""Redaction for logs, run records and anything sent to Grok (PLAN "Security and safety").
 
 Removes secret values from the environment, Prerit's phone number, date of birth and address (confirmed or not),
-and anything shaped like a phone number, card number or government ID. The phone number never reaches Claude.
+and anything shaped like a phone number, card number or government ID. The phone number never reaches Grok.
 """
 from __future__ import annotations
 

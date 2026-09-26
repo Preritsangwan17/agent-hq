@@ -143,7 +143,7 @@ def factcheck_lines(rng: random.Random, capability: str, n_sent: int) -> list[st
 
 
 def signoff_lines(n_sent: int) -> list[str]:
-    return [f"Claude sign-off: reviewing {n_sent} sentences with fact IDs…",
+    return [f"Final sign-off: reviewing {n_sent} sentences with fact IDs…",
             "Cross-checking job quotes against the posting…",
             "Sign-off decision…"]
 

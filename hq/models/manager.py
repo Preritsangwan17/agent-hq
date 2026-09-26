@@ -220,6 +220,10 @@ class ModelManager:
     async def ensure(self, model_id: str) -> Endpoint:
         m = self._model(model_id)
         meta = m["meta"]
+        if not self.settings().get("local_ai_enabled", True):
+            raise ModelBroken("local AI is switched off (Settings › AI & budget)")
+        if not m.get("enabled", 1):
+            raise ModelBroken(f"{model_id} is switched off on the Models page")
         if m["runtime"] in ("ollama", "lmstudio"):
             return Endpoint(model_id, meta.get("base_url") or "", meta.get("served_id") or m["name"], managed=False)
         if m["status"] == "broken":
@@ -377,7 +381,12 @@ class ModelManager:
         if not force and now - self._last_health < HEALTH_EVERY_S:
             return
         self._last_health = now
-        budget = self.pool_budget_gb()
+        s = self.settings()
+        budget = self.pool_budget_gb(s)
+        off = {r["id"] for r in self.conn.execute("SELECT id FROM models WHERE enabled=0")}
+        for sv in list(self.servers.values()):   # local AI or this model switched off: free the memory
+            if sv.in_use == 0 and (not s.get("local_ai_enabled", True) or sv.model_id in off):
+                await self._stop(sv, reason="switched off by Prerit")
         for sv in list(self.servers.values()):
             alive = sv.proc.poll() is None if sv.proc is not None else _pid_alive(sv.pid)
             healthy = alive and await self.health(sv.base_url)

@@ -7,7 +7,7 @@ from typing import Any, Literal
 from croniter import croniter
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-ADAPTERS = ["sim", "script", "openai_compatible", "claude_code", "http", "browser"]
+ADAPTERS = ["sim", "script", "openai_compatible", "cloud", "http", "browser"]
 
 # Outbound side effects. Only the built-in owners below may declare them; the loader enforces it and the
 # dispatcher double-checks, so a hand-edited DB row cannot route them elsewhere either.
@@ -32,16 +32,16 @@ CAPABILITIES: list[tuple[str, str, str, str]] = [
     ("verify.eligibility_hard", "Hard eligibility", "verify", "Escalated eligibility review."),
     ("verify.pay", "Verify pay", "verify", "Normalise pay to ₹/month and compare to living cost."),
     ("verify.scam", "Scam check", "verify", "Fees, mills, free-mail recruiters, lookalike domains."),
-    ("score.fit", "Score fit", "verify", "0–100 fit score."),
+    ("score.fit", "Match score", "verify", "Transparent 0–100 match score against the career plan."),
     ("draft.cover_letter", "Draft cover letter", "draft", "Fact-cited cover letter."),
     ("draft.cold_email", "Draft cold email", "draft", "Short fact-cited email."),
     ("draft.research_statement", "Draft research statement", "draft", "Research-program statement."),
     ("draft.form_answers", "Draft form answers", "draft", "Answers mapped to facts or confirmed fields."),
     ("draft.followup", "Draft follow-up", "draft", "One polite follow-up."),
-    ("polish.final", "Final polish", "draft", "Claude polish for high-fit drafts."),
+    ("polish.final", "Final polish", "draft", "Grok polish, only when the local-first policy allows it."),
     ("factcheck.deterministic", "Fact rules", "check", "Deterministic fact-gate rules."),
     ("factcheck.sentence", "Sentence fact-check", "check", "Independent per-sentence verifier."),
-    ("factcheck.signoff", "Sign-off", "check", "Claude sign-off on the final text."),
+    ("factcheck.signoff", "Sign-off", "check", "Independent final sign-off: a second local model, or Grok."),
     ("check.quality", "Quality gate", "check", "Specificity, clichés, length, salutation."),
     ("build.resume", "Build résumé", "build", "Approved bullets only, one page."),
     ("apply.email_send", "Send application email", "apply", "Outbound email (reserved side effect)."),
@@ -71,7 +71,7 @@ PALETTE = ["#22D3EE", "#2DD4BF", "#A78BFA", "#F59E0B", "#FB7185", "#60A5FA", "#F
            "#FB923C", "#E879F9", "#34D399", "#818CF8", "#FACC15", "#38BDF8", "#F87171", "#C084FC"]
 
 ID_RE = re.compile(r"^[a-z][a-z0-9_-]{1,31}$")
-MODEL_RE = re.compile(r"^(auto|(mlx|ollama|lmstudio|llamacpp|claude|xai|sim|openai):.+)$")
+MODEL_RE = re.compile(r"^(auto|(mlx|ollama|lmstudio|llamacpp|xai|sim|openai):.+)$")
 
 
 def is_side_effect_family(capability: str) -> bool:
@@ -119,11 +119,11 @@ class AgentConfig(BaseModel):
     color: str = Field(default="#94A3B8", pattern=r"^#[0-9A-Fa-f]{6}$")
     role: str = Field(default="custom", min_length=1, max_length=40)
     description: str = Field(default="", max_length=500)
-    adapter: Literal["sim", "script", "openai_compatible", "claude_code", "http", "browser"]
+    adapter: Literal["sim", "script", "openai_compatible", "cloud", "http", "browser"]
     adapter_config: dict[str, Any] = Field(default_factory=dict)
     model: str | None = None
     capabilities: list[str] = Field(min_length=1)
-    cost_tier: Literal["local", "claude", "external"] = "local"
+    cost_tier: Literal["local", "cloud", "external"] = "local"
     concurrency: int = Field(default=1, ge=1, le=8)
     schedule: Schedule = Field(default_factory=Schedule)
     enabled: bool = True

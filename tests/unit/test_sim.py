@@ -133,8 +133,8 @@ async def test_sim_flow_reaches_applied_with_only_mock_mailbox_writes(team, db, 
             ("reviewer", "resume"), ("resume", "applicant"), ("applicant", "followup")} <= handoffs
     runs = db.execute("SELECT agent_id, model_id, tok_s, cost_usd, status FROM agent_runs").fetchall()
     assert all(r["status"] == "succeeded" and r["model_id"].startswith("sim:") for r in runs)
-    reviewer = next(r for r in runs if r["agent_id"] == "reviewer")
-    assert reviewer["tok_s"] is None and reviewer["cost_usd"] > 0
+    reviewer = next(r for r in runs if r["agent_id"] == "reviewer")   # local first: the sign-off costs nothing
+    assert reviewer["tok_s"] is not None and not reviewer["cost_usd"]
     assert all(40 <= r["tok_s"] <= 370 for r in runs if r["agent_id"] in ("verifier", "writer", "factchecker"))
     docs = db.execute("SELECT kind, author_model FROM documents ORDER BY created_at").fetchall()
     assert [d["kind"] for d in docs] == ["cover_letter", "resume_pdf"]

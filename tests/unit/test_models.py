@@ -294,33 +294,33 @@ def test_roles_assign_checker_first_and_keep_writer_independent(db):
     writers = roles.ranked(db, "writer")
     assert writers[0] != "mlx:q/Qwen3-30B" and "mlx:q/Qwen3-30B" not in writers
     assert writers[0] == "mlx:l/Llama-3.1-8B"  # different family from the checker wins a near-tie
-    assert not roles.needs_claude_signoff(db)
+    assert not roles.needs_cloud_signoff(db)
     with pytest.raises(roles.IndependenceError):
         roles.set_override(db, "writer", "mlx:q/Qwen3-30B")
     roles.set_override(db, "writer", "mlx:q/Qwen2.5-7B")
     roles.assign(db, 30)  # overrides survive re-benchmarks
     assert roles.ranked(db, "writer")[0] == "mlx:q/Qwen2.5-7B"
-    assert roles.checker_allowed("mlx:q/Qwen3-30B", ["mlx:q/Qwen2.5-7B", "claude:sonnet"])
-    assert not roles.checker_allowed("claude:sonnet", ["mlx:q/Qwen2.5-7B", "claude:sonnet"])
+    assert roles.checker_allowed("mlx:q/Qwen3-30B", ["mlx:q/Qwen2.5-7B", "xai:grok-4-fast"])
+    assert not roles.checker_allowed("xai:grok-4-fast", ["mlx:q/Qwen2.5-7B", "xai:grok-4-fast"])
 
 
-def test_no_checker_meeting_floor_means_claude_signoff(db):
+def test_no_checker_meeting_floor_means_cloud_signoff(db):
     _add_model(db, "mlx:q/Small", 1.0)
     _bench(db, "mlx:q/Small", "factcheck", acc=0.6, rec=0.5, prec=0.9, f1=0.6)
     roles.assign(db, 30)
-    assert roles.needs_claude_signoff(db)
-    assert roles.roles_json(db)[0]["needs_claude_signoff"] is True
+    assert roles.needs_cloud_signoff(db)
+    assert roles.roles_json(db)[0]["needs_cloud_signoff"] is True
 
 
 # ── budget ───────────────────────────────────────────────────────────────────────────────────────────
 def test_budget_reserve_commit_and_cap(db):
     with tx(db):
-        db.execute("UPDATE settings SET value_json='0.2' WHERE key='claude_daily_budget_usd'")
+        db.execute("UPDATE settings SET value_json='0.2' WHERE key='cloud_daily_budget_usd'")
     r1 = budget.reserve(db, "factcheck.signoff")
-    assert r1 and r1.estimate_usd == pytest.approx(0.06)
+    assert r1 and r1.estimate_usd == pytest.approx(0.04)
     budget.commit(db, r1, cost_usd=0.12)
     r2 = budget.reserve(db, "factcheck.signoff")  # EMA now above the seed
-    assert r2 and r2.estimate_usd > 0.06
+    assert r2 and r2.estimate_usd > 0.04
     assert budget.reserve(db, "factcheck.signoff") is None  # 0.12 + reserved + est > 0.2
     budget.release(db, r2)
     state = budget.budget_state(db)
@@ -329,12 +329,12 @@ def test_budget_reserve_commit_and_cap(db):
 
 def test_budget_call_cap_and_ist_day_rollover(db):
     with tx(db):
-        db.execute("UPDATE settings SET value_json='1' WHERE key='claude_daily_call_cap'")
+        db.execute("UPDATE settings SET value_json='1' WHERE key='cloud_daily_call_cap'")
     r = budget.reserve(db, "polish.final")
     budget.commit(db, r, cost_usd=0.01)
     assert budget.reserve(db, "polish.final") is None
     with tx(db):
-        db.execute("UPDATE claude_usage SET date_local='2000-01-01'")  # yesterday's calls don't count today
+        db.execute("UPDATE cloud_usage SET date_local='2000-01-01'")  # yesterday's calls don't count today
     assert budget.reserve(db, "polish.final") is not None
     nxt = budget.next_midnight_ist()
     assert nxt.hour == 0 and nxt.minute == 0 and str(nxt.tzinfo) == "Asia/Kolkata"
@@ -372,7 +372,7 @@ def test_models_roles_budget_routes(authed, db):
     assert r.status_code == 200 and r.json()["pinned"] is True
     assert authed.post("/api/models/benchmark", json={"suite": "quick"}, headers=MUTATE).json() == {"queued": True}
     b = authed.get("/api/budget").json()
-    assert b["budget_usd"] == 5.0 and b["call_cap"] == 40 and b["calls"] == 0
+    assert b["budget_usd"] == 2.0 and b["call_cap"] == 40 and b["calls"] == 0
 
 
 # ── benchmark suite (fake model) ─────────────────────────────────────────────────────────────────────
@@ -408,8 +408,8 @@ async def test_quick_benchmark_fills_leaderboard_and_assigns_roles(db, hq_env):
     assert res["factcheck"]["recall"] == 0.0 and res["factcheck"]["precision"] == 1.0  # passes everything
     assert res["classify_email"]["json_valid_first"] == 1.0 and res["classify_email"]["tok_s_gen"] == 60.0
     assert db.execute("SELECT COUNT(*) FROM benchmarks").fetchone()[0] == 6
-    assert roles.needs_claude_signoff(db)  # a checker that flags nothing is below the floor
-    # one model can't be both writer and checker: the writer role stays empty (the Writer escalates to Claude)
+    assert roles.needs_cloud_signoff(db)  # a checker that flags nothing is below the floor
+    # one model can't be both writer and checker: the writer role stays empty (the Writer escalates to Grok)
     assert roles.ranked(db, "fact_checker") == ["mlx:q/Qwen3-4B"] and roles.ranked(db, "writer") == []
     assert roles.ranked(db, "classifier") == ["mlx:q/Qwen3-4B"]
     assert (hq_env.root / "artifacts" / "bench" / "mlx_q_Qwen3-4B" / "factcheck.json").exists()

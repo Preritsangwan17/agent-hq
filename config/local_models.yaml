@@ -1,0 +1,33 @@
+# Local models recommended for this Mac: MacBook Pro, Apple M4 Pro, 48 GB unified memory, 1 TB SSD.
+# HQ downloads them through Ollama (free, runs on the GPU via Metal) when you click Download on the Models page, or
+# all of the `core` set with `make models`. After a download HQ benchmarks the model on your real data and assigns it
+# roles automatically; the best model per role wins, and every model can be switched off on the Models page.
+#
+# Why these: the fact-checker must come from a different model family than the writer (independence), and a
+# SECOND independent checker lets the final sign-off run locally for free instead of on Grok. Sizes are the
+# approximate download (Q4) and the memory the model needs while loaded. The model pool is 32 GB of the 48 GB
+# (the rest stays free for macOS and your apps); HQ loads and unloads models to fit.
+#
+# ollama = the exact tag passed to `ollama pull`. set: core (download these first) | optional.
+models:
+  - {ollama: "qwen3:30b-a3b", family: qwen, set: core, download_gb: 19, ram_gb: 21,
+     roles: [writer, parser, eligibility],
+     why: "Mixture-of-experts: 30B quality at ~3B speed on Apple silicon. Main writer and job parser."}
+  - {ollama: "gemma3:12b", family: gemma, set: core, download_gb: 8.1, ram_gb: 10,
+     roles: [fact_checker, classifier],
+     why: "Different family from Qwen, so it can independently fact-check what Qwen writes."}
+  - {ollama: "phi4:14b", family: phi, set: core, download_gb: 9.1, ram_gb: 11,
+     roles: [fact_checker, eligibility],
+     why: "A second independent checker: lets the final sign-off run locally instead of on Grok."}
+  - {ollama: "qwen3:4b", family: qwen, set: core, download_gb: 2.6, ram_gb: 4,
+     roles: [title_filter, classifier],
+     why: "Small and very fast for high-volume work: title filtering and email triage."}
+  - {ollama: "mistral-small3.2:24b", family: mistral, set: optional, download_gb: 15, ram_gb: 17,
+     roles: [writer, fact_checker],
+     why: "Strong writer from another family; a good alternative or extra checker."}
+  - {ollama: "gemma3:27b", family: gemma, set: optional, download_gb: 17, ram_gb: 19,
+     roles: [fact_checker, eligibility],
+     why: "The strongest Gemma; a stricter checker when you have memory to spare."}
+  - {ollama: "llama3.1:8b", family: llama, set: optional, download_gb: 4.9, ram_gb: 6,
+     roles: [fact_checker, classifier],
+     why: "Meta's family: one more independent opinion at low memory cost."}

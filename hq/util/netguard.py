@@ -20,7 +20,7 @@ from hq import settings as paths
 
 LOOPBACK = {"127.0.0.1", "localhost", "::1"}
 SEND_HOSTS = {"gmail.googleapis.com", "oauth2.googleapis.com", "www.googleapis.com"}
-LLM_HOSTS = {"api.x.ai"}  # cloud model API (redacted prompts only); the Claude CLI talks to Anthropic itself
+LLM_HOSTS = {"api.x.ai"}  # Grok API (redacted prompts only) — the only cloud model host
 AUTH_ENDPOINTS = {("oauth2.googleapis.com", "/token")}  # OAuth code exchange / token refresh (not mail)
 
 

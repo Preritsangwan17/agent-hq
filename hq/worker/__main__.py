@@ -62,7 +62,7 @@ def main() -> int:
         return 1
 
     async def run() -> None:
-        # model upkeep: discovery, model servers, Claude availability (HQ_MODEL_UPKEEP=0 turns it off)
+        # model upkeep: discovery, model servers, Grok availability (HQ_MODEL_UPKEEP=0 turns it off)
         worker = Worker(model_upkeep=os.environ.get("HQ_MODEL_UPKEEP", "1") != "0")
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):

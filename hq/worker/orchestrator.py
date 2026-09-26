@@ -3,6 +3,7 @@ retries with backoff, watchdog, interval/cron scheduler, worker heartbeat and ag
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import random
@@ -109,7 +110,7 @@ class Worker:
         self.benchmarking: asyncio.Task | None = None
         self._last_discovery = 0.0
         self._last_model_state = 0.0
-        self._last_claude_check = 0.0
+        self._last_cloud_check = 0.0
 
     def _build_services(self) -> Services:
         from hq.llm.cloud import CloudRunner
@@ -118,7 +119,7 @@ class Worker:
 
         manager = ModelManager(self.conn)
         cloud = CloudRunner(self.conn)
-        return Services(router=Router(self.conn, manager, cloud), claude=cloud, manager=manager)
+        return Services(router=Router(self.conn, manager, cloud), cloud=cloud, manager=manager)
 
     # ── lifecycle ───────────────────────────────────────────────────────────────────────────────────
     def startup(self) -> None:
@@ -306,7 +307,7 @@ class Worker:
                                                               else f"failed: {st.get('error')}"),
                       level="info" if st["ok"] else "warn", data=st)
 
-    # ── models / Claude upkeep (phase b) ────────────────────────────────────────────────────────────
+    # ── models / Grok upkeep (phase b) ────────────────────────────────────────────────────────────
     async def _model_upkeep(self, now: float) -> None:
         mgr = self.services.manager
         if mgr is not None:
@@ -320,9 +321,9 @@ class Worker:
         if now - self._last_discovery >= 600 or self._last_discovery == 0.0:
             self._last_discovery = now
             await self._discover()
-        if self.services.claude is not None and (now - self._last_claude_check >= 600 or self._last_claude_check == 0.0):
-            self._last_claude_check = now
-            await self._check_claude()
+        if self.services.cloud is not None and (now - self._last_cloud_check >= 600 or self._last_cloud_check == 0.0):
+            self._last_cloud_check = now
+            await self._check_cloud()
 
     async def _discover(self) -> None:
         from hq.models import discovery
@@ -333,16 +334,59 @@ class Worker:
         if new_usable and self.settings.get("benchmark_on_new_model", True):
             self.start_benchmark(new_usable, quick=True)
 
-    async def _check_claude(self) -> None:
-        runner = self.services.claude
+    async def _pull_model(self, name: str) -> None:
+        """`ollama pull <name>` through Ollama's local API, with progress in settings.model_pull_state."""
+        import httpx
+
+        from hq.models import catalog
+
+        state: dict[str, Any] = {"status": "starting", "pct": 0.0, "error": None, "at": now_iso()}
+
+        def publish(**kw: Any) -> None:
+            state.update(kw, at=now_iso())
+            pulls = dict(self.settings.get("model_pull_state") or {})
+            pulls[name] = dict(state)
+            with tx(self.conn):
+                set_settings(self.conn, {"model_pull_state": pulls}, by="worker")
+                repo.emit(self.conn, "model.pull", f"{name}: {state['status']}"
+                          + (f" {state['pct']:.0f}%" if state.get("pct") else ""), level="debug",
+                          data={"name": name, **state})
+
+        publish()
+        last = 0.0
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(None, connect=5.0)) as c:
+                async with c.stream("POST", f"{catalog.OLLAMA}/api/pull",
+                                    json={"model": name, "name": name, "stream": True}) as r:
+                    if r.status_code != 200:
+                        raise RuntimeError(f"Ollama HTTP {r.status_code}")
+                    async for line in r.aiter_lines():
+                        if not line.strip():
+                            continue
+                        msg = json.loads(line)
+                        if msg.get("error"):
+                            raise RuntimeError(str(msg["error"])[:200])
+                        total, done = msg.get("total"), msg.get("completed")
+                        pct = round(100 * done / total, 1) if total and done else state["pct"]
+                        if time.monotonic() - last > 2 or msg.get("status") == "success":
+                            last = time.monotonic()
+                            publish(status=msg.get("status", "downloading"), pct=pct)
+            publish(status="success", pct=100.0)
+            self._last_discovery = 0.0   # rescan now; a new usable model gets a quick benchmark
+        except (httpx.HTTPError, RuntimeError, ValueError) as exc:
+            reason = ("Ollama is not running — install it with `brew install ollama` and start it with "
+                      "`brew services start ollama`") if isinstance(exc, httpx.ConnectError) else str(exc)
+            publish(status="failed", error=reason[:300])
+
+    async def _check_cloud(self) -> None:
+        runner = self.services.cloud
         before = runner.state(self.settings)
         await runner.available(force=True)
         after = runner.state(self.settings)
         with tx(self.conn):
-            set_settings(self.conn, {"claude_state": {**after, "checked_at": now_iso()}}, by="worker")
+            set_settings(self.conn, {"cloud_state": {**after, "checked_at": now_iso()}}, by="worker")
             if before.get("available") != after.get("available") and before.get("checked"):
-                who = "xAI" if after.get("provider") == "xai" else "Claude"
-                repo.emit(self.conn, "claude.status", f"{who} {'available' if after['available'] else 'unavailable'}"
+                repo.emit(self.conn, "cloud.status", f"Grok {'available' if after['available'] else 'unavailable'}"
                           + (f": {after['reason']}" if after.get("reason") else ""),
                           level="info" if after["available"] else "warn", data=after)
 
@@ -397,8 +441,13 @@ class Worker:
                 if mgr is not None:
                     asyncio.get_running_loop().create_task(mgr.unload(payload.get("model_id", "")))
                 result = {"ok": mgr is not None}
-            elif kind == "claude_recheck":
-                self._last_claude_check = 0.0
+            elif kind == "model_pull":
+                name = str(payload.get("name") or "")
+                if name:
+                    asyncio.get_running_loop().create_task(self._pull_model(name), name=f"pull:{name}")
+                result = {"ok": bool(name), "started": bool(name)}
+            elif kind == "cloud_recheck":
+                self._last_cloud_check = 0.0
             elif kind == "gmail_recheck":
                 self._rebuild_gmail()
                 self._last_gmail_check = 0.0
@@ -790,15 +839,15 @@ class Worker:
         deadline = parse_iso(opp["deadline_at"]) if opp else None
         if not deadline or (deadline - utcnow()).total_seconds() > 48 * 3600:
             return
-        title = f"Claude budget blocks {opp['company_name']} (due soon)"
+        title = f"Grok budget blocks {opp['company_name']} (due soon)"
         if self.conn.execute("SELECT 1 FROM needs_prerit WHERE title=? AND status='open'", (title,)).fetchone():
             return
         need_id = repo.insert_need(self.conn, {
             "opportunity_id": opp_id, "kind": "decision", "title": title, "priority": 80, "due_at": opp["deadline_at"],
             "est_minutes": 1,
             "instructions_md": (f"**{opp['company_name']} — {opp['title']}** is due within 48 hours, but "
-                                f"`{task['capability']}` needs Claude and today's budget is used up. Raise the budget "
-                                "in Settings › Budget, or let it wait until midnight IST."),
+                                f"`{task['capability']}` needs Grok and today's Grok budget is used up. Raise the budget "
+                                "in Settings › AI & budget, or let it wait until midnight IST."),
         })
         need = serializers.need_json(repo.get_need_row(self.conn, need_id))
         repo.emit(self.conn, "needs.created", title, level="warn", opportunity_id=opp_id, data={"need": need})

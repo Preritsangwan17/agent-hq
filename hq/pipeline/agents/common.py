@@ -95,4 +95,12 @@ def confirmed(ctx: RunContext) -> dict[str, str]:
 
 
 def has_role_model(ctx: RunContext, role: str) -> bool:
-    return bool(ctx.query("SELECT 1 FROM role_assignments WHERE role=? LIMIT 1", (role,)))
+    """A model can take this role now: an enabled local model while local AI is on, or Grok when it is the only
+    engine switched on (Grok only)."""
+    from hq.llm import policy
+
+    s = ctx.settings
+    if not policy.local_on(s):
+        return policy.grok_on(s)
+    return bool(ctx.query("SELECT 1 FROM role_assignments r LEFT JOIN models m ON m.id=r.model_id WHERE r.role=? "
+                          "AND COALESCE(m.enabled, 1)=1 LIMIT 1", (role,)))

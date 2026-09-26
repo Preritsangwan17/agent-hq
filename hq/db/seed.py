@@ -23,24 +23,27 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "eligibility_threshold": 0.8,
     "min_pay_ratio": 1.0,
     "funded_program_min_inr": 5000,
-    "fit_draft_threshold": 60,
-    "fit_polish_threshold": 75,
+    "fit_draft_threshold": 60,       # match score needed before HQ drafts an application ("don't apply blindly")
+    "fit_polish_threshold": 80,
+    "important_score_threshold": 75,  # "important" applications may use more Grok (hq.llm.policy)
     "daily_draft_cap": 20,
-    "claude_daily_budget_usd": 5.0,
-    "claude_daily_call_cap": 40,
+    "cloud_daily_budget_usd": 2.0,
+    "cloud_daily_call_cap": 40,
     "email_daily_cap": 10,
     "quiet_hours": {"enabled": False, "start": "23:00", "end": "07:00"},
     "unknown_pay_policy": "decision",
-    # phase (b): models, Claude, budget
-    "model_pool_budget_gb": 30,
+    # models, Grok, budget — local first (hq.llm.policy)
+    "model_pool_budget_gb": 32,      # M4 Pro, 48 GB unified memory: ~36 GB can be wired for the GPU
     "usability_mode": True,
-    "claude_model": "sonnet",
-    "claude_signoff_model": "opus",
-    "cloud_llm": "auto",
-    "xai_model": "grok-4-fast",
-    "xai_signoff_model": "grok-4",
-    "claude_per_call_cap_usd": 0.5,
-    "require_claude_signoff": True,
+    "local_ai_enabled": True,        # the local models on this Mac (free, private)
+    "grok_enabled": True,            # Grok via xAI's API (paid) — also needs HQ_XAI_API_KEY in .env
+    "cloud_mode": "saver",           # saver (API-saving) | balanced | quality
+    "xai_model": "grok-4-fast",      # fast, cheap tier
+    "xai_signoff_model": "grok-4",   # strong tier (sign-off of important applications)
+    "cloud_per_call_cap_usd": 0.5,
+    "signoff_required": True,        # an independent final check (a second local model or Grok) before sending
+    "grok_credit_usd": None,         # the balance Prerit last saw on console.x.ai (for the remaining-credit estimate)
+    "grok_credit_at": None,          # when he entered it (ISO time)
     "benchmark_on_new_model": True,
     # phase (d): Gmail, inbox, notifications, go-live
     "gmail_poll_minutes": 3,
@@ -67,6 +70,12 @@ def _num(lo: float, hi: float, integer: bool = False) -> Callable[[Any], float]:
         if not lo <= v <= hi:
             raise SettingError(f"must be between {lo} and {hi}")
         return int(v) if integer else float(v)
+    return check
+
+
+def _optional(inner: Callable[[Any], Any]) -> Callable[[Any], Any]:
+    def check(v: Any) -> Any:
+        return None if v is None else inner(v)
     return check
 
 
@@ -120,24 +129,26 @@ EDITABLE: dict[str, Callable[[Any], Any]] = {
     "fit_draft_threshold": _num(0, 100, integer=True),
     "fit_polish_threshold": _num(0, 100, integer=True),
     "daily_draft_cap": _num(0, 500, integer=True),
-    "claude_daily_budget_usd": _num(0.0, 1000.0),
-    "claude_daily_call_cap": _num(0, 10_000, integer=True),
+    "important_score_threshold": _num(0, 100, integer=True),
+    "cloud_daily_budget_usd": _num(0.0, 1000.0),
+    "cloud_daily_call_cap": _num(0, 10_000, integer=True),
     "email_daily_cap": _num(0, 100, integer=True),
     "quiet_hours": _quiet_hours,
     "unknown_pay_policy": _choice("decision", "accept", "reject"),
     "model_pool_budget_gb": _num(2, 40),
     "usability_mode": _bool,
-    "claude_model": _choice("haiku", "sonnet", "opus"),
-    "claude_signoff_model": _choice("haiku", "sonnet", "opus"),
-    "cloud_llm": _choice("auto", "claude", "xai"),
+    "local_ai_enabled": _bool,
+    "grok_enabled": _bool,
+    "cloud_mode": _choice("saver", "balanced", "quality"),
+    "grok_credit_usd": _optional(_num(0.0, 100_000.0)),
     "gmail_poll_minutes": _num(1, 60, integer=True),
     "auto_reply_enabled": _bool,
     "mac_notifications": _bool,
     "signoff_policy_ack": _bool,
     "xai_model": _model_name,
     "xai_signoff_model": _model_name,
-    "claude_per_call_cap_usd": _num(0.01, 5.0),
-    "require_claude_signoff": _bool,
+    "cloud_per_call_cap_usd": _num(0.01, 5.0),
+    "signoff_required": _bool,
     "benchmark_on_new_model": _bool,
 }
 

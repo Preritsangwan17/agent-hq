@@ -1,111 +1,87 @@
-"""Claude runner (fake `claude` shim) and the router's escalation ladder (local → different local → Claude)."""
+"""Local-first policy, the Grok runner contract and the router's escalation ladder (local → different local → Grok)."""
 from __future__ import annotations
 
-import json
-import stat
-import sys
-from pathlib import Path
 from typing import Any
 
 import pytest
 
 from hq.adapters.base import Deferred
 from hq.db.conn import tx
+from hq.db.seed import get_settings, set_settings
 from hq.llm import client as llm_client
-from hq.llm.claude import (
-    ClaudeBadOutput,
-    ClaudeBudgetExceeded,
-    ClaudeError,
-    ClaudeRunner,
-    ClaudeUnavailable,
-    LOGIN_NEED_TITLE,
-)
+from hq.llm import policy
+from hq.llm.errors import CloudResult
 from hq.llm.router import EscalationExhausted, Router
+from hq.models import roles
 from hq.models.discovery.base import ModelInfo, upsert_models
 
 SCHEMA = {"type": "object", "required": ["verdict"], "properties": {"verdict": {"enum": ["yes", "no"]},
                                                                   "confidence": {"type": "number"}}}
 
-SHIM = r'''#!{python}
-import json, os, sys
-state = os.path.dirname(os.path.abspath(__file__))
-mode = open(os.path.join(state, "mode")).read().strip()
-open(os.path.join(state, "argv.json"), "w").write(json.dumps(sys.argv[1:]))
-if sys.argv[1:3] == ["auth", "status"]:
-    print(json.dumps({{"loggedIn": mode != "logged_out"}}))
-    sys.exit(0)
-prompt = sys.stdin.read()
-open(os.path.join(state, "stdin.txt"), "w").write(prompt)
-base = {{"type": "result", "total_cost_usd": 0.0421, "usage": {{"input_tokens": 900, "output_tokens": 40}}}}
-if mode == "ok":
-    print(json.dumps({{**base, "subtype": "success", "is_error": False, "structured_output": {{"verdict": "yes"}}}}))
-elif mode == "bad_output":
-    print(json.dumps({{**base, "subtype": "success", "is_error": False, "structured_output": {{"verdict": "maybe"}}}}))
-elif mode == "budget":
-    print(json.dumps({{**base, "subtype": "error_max_budget_usd", "is_error": True, "result": "budget"}}))
-elif mode == "logged_out":
-    print(json.dumps({{"type": "result", "subtype": "success", "is_error": True,
-                      "result": "Invalid API key · Please run /login"}}))
-elif mode == "is_error":
-    print(json.dumps({{**base, "subtype": "error_during_execution", "is_error": True, "result": "boom"}}))
-'''
+
+class FakeCloud:
+    """Stands in for hq.llm.cloud.CloudRunner (Grok): always reachable, fixed answer and cost."""
+
+    def __init__(self) -> None:
+        self.reason = None
+        self.calls: list[str] = []
+
+    async def available_for(self, model: str) -> bool:
+        return True
+
+    async def run(self, prompt: str, *, schema: dict[str, Any], system_prompt: str, model: str | None = None,
+                  max_budget_usd: float = 0.5, **kw: Any) -> CloudResult:
+        self.calls.append(model or "")
+        return CloudResult(output={"verdict": "yes"}, cost_usd=0.0421, input_tokens=900, output_tokens=40,
+                           cache_read_tokens=None, duration_ms=5.0, model=model or "", subtype="success",
+                           cost_source="reported")
 
 
-@pytest.fixture
-def shim(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, hq_env) -> Path:
-    d = tmp_path / "shim"
-    d.mkdir()
-    exe = d / "claude"
-    exe.write_text(SHIM.format(python=sys.executable))
-    exe.chmod(exe.stat().st_mode | stat.S_IEXEC)
-    (d / "mode").write_text("ok")
-    monkeypatch.setenv("SHIM_DIR", str(d))
-    monkeypatch.setenv("HQ_CLAUDE_BIN", str(exe))
-    monkeypatch.setenv("PATH", f"{d}:{Path(sys.executable).parent}:/usr/bin:/bin")
-    return d
+def _set(db, **values: Any) -> dict[str, Any]:
+    with tx(db):
+        set_settings(db, values)
+    return get_settings(db)
 
 
-def _mode(shim: Path, mode: str) -> None:
-    (shim / "mode").write_text(mode)
+# ── policy ───────────────────────────────────────────────────────────────────────────────────────────
+def test_policy_saver_mode_keeps_optional_work_local(db):
+    s = get_settings(db)
+    assert policy.mode(s) == "saver" and policy.engines(s) == "both"
+    assert policy.escalate(s, "needed").allowed and policy.escalate(s, "needed").model == "xai:grok-4-fast"
+    assert not policy.escalate(s, "bulk").allowed
+    assert not policy.escalate(s, "second_look", local_tried=True).allowed      # becomes a one-click decision
+    top, low = {"fit_score": 90}, {"fit_score": 50}
+    assert not policy.polish(s, top, "high fit").allowed                          # never optional polish
+    assert policy.polish(s, top, "fix").allowed and not policy.polish(s, low, "fix").allowed
+    d = policy.signoff(s, top, local_checker_available=True)
+    assert d.allowed and d.model is None                                           # free local sign-off
+    d = policy.signoff(s, top, local_checker_available=False)
+    assert d.allowed and d.model == "xai:grok-4-fast"
 
 
-async def test_claude_runner_uses_isolated_flags_and_accepts_valid_output(db, shim, monkeypatch):
-    monkeypatch.setenv("HQ_SESSION_SECRET", "s" * 64)
-    runner = ClaudeRunner(db)
-    assert await runner.available() is True
-    res = await runner.run("Check this. Secret: " + "s" * 64, schema=SCHEMA, system_prompt="You check.",
-                           model="sonnet", max_budget_usd=0.3)
-    assert res.output == {"verdict": "yes"} and res.cost_usd == pytest.approx(0.0421)
-    argv = json.loads((shim / "argv.json").read_text())
-    assert argv[:3] == ["-p", "--output-format", "json"]
-    i = argv.index("--tools")
-    assert argv[i + 1] == ""
-    for flag in ("--strict-mcp-config", "--disable-slash-commands", "--no-session-persistence"):
-        assert flag in argv
-    assert argv[argv.index("--mcp-config") + 1] == '{"mcpServers":{}}'
-    assert argv[argv.index("--settings") + 1] == '{"disableAllHooks":true}'
-    assert argv[argv.index("--max-budget-usd") + 1] == "0.30"
-    assert not any("dangerously" in a or a == "--bare" for a in argv)
-    assert "s" * 64 not in (shim / "stdin.txt").read_text()  # secrets are redacted before Claude sees them
+def test_policy_balanced_and_quality_spend_on_important_applications(db):
+    s = _set(db, cloud_mode="balanced")
+    top, low = {"fit_score": 90}, {"fit_score": 50}
+    assert policy.escalate(s, "second_look").allowed
+    assert policy.polish(s, top, "high fit").allowed and not policy.polish(s, low, "high fit").allowed
+    assert policy.signoff(s, top, local_checker_available=True).model == "xai:grok-4"
+    assert policy.signoff(s, low, local_checker_available=True).model is None
+    s = _set(db, cloud_mode="quality")
+    assert policy.signoff(s, low, local_checker_available=True).model == "xai:grok-4"
 
 
-@pytest.mark.parametrize("mode, exc", [("bad_output", ClaudeBadOutput), ("budget", ClaudeBudgetExceeded),
-                                       ("is_error", ClaudeError)])
-async def test_claude_runner_rejects_failures(db, shim, mode, exc):
-    _mode(shim, mode)
-    with pytest.raises(exc):
-        await ClaudeRunner(db).run("x", schema=SCHEMA, system_prompt="s")
-
-
-async def test_logged_out_claude_opens_one_need(db, shim):
-    _mode(shim, "logged_out")
-    runner = ClaudeRunner(db)
-    assert await runner.available(force=True) is False
-    assert await runner.available(force=True) is False
-    with pytest.raises(ClaudeUnavailable):
-        await runner.run("x", schema=SCHEMA, system_prompt="s")
-    n = db.execute("SELECT COUNT(*) FROM needs_prerit WHERE title=? AND status='open'", (LOGIN_NEED_TITLE,)).fetchone()[0]
-    assert n == 1
+def test_policy_engine_switches(db):
+    s = _set(db, **policy.engines_patch("local"))
+    assert policy.engines(s) == "local" and not policy.escalate(s, "needed").allowed
+    d = policy.signoff(s, None, local_checker_available=True)
+    assert d.allowed and d.model is None
+    assert not policy.signoff(s, None, local_checker_available=False).allowed
+    s = _set(db, **policy.engines_patch("grok"))
+    assert policy.engines(s) == "grok" and policy.escalate(s, "bulk").allowed      # Grok only: Grok does it all
+    s = _set(db, **policy.engines_patch("none"))
+    assert policy.engines(s) == "none" and not policy.escalate(s, "needed").allowed
+    with pytest.raises(ValueError):
+        policy.engines_patch("everything")
 
 
 # ── router ───────────────────────────────────────────────────────────────────────────────────────────
@@ -160,25 +136,26 @@ async def test_router_first_model_with_one_repair(db):
     assert chat.calls == ["mlx:q/Qwen3-4B", "mlx:q/Qwen3-4B"]
 
 
-async def test_router_escalates_to_a_different_family_then_claude(db, shim):
+async def test_router_escalates_to_a_different_family_then_grok(db):
     _setup_roles(db)
     chat = make_chat({"mlx:q/Qwen3-4B": ["bad", "still bad"], "mlx:q/Qwen2.5-7B": [],
                       "mlx:l/Llama-8B": ['{"verdict": "yes", "confidence": 0.2}']})
-    r = Router(db, FakeManager(), ClaudeRunner(db), chat_fn=chat)
+    r = Router(db, FakeManager(), FakeCloud(), chat_fn=chat)
     res = await r.route("eligibility", [{"role": "system", "content": "sys"}, {"role": "user", "content": "x"}],
                         SCHEMA, task_type="verify.eligibility_hard")
-    # level 0 Qwen3 (bad JSON after repair) → level 1 skips same-family Qwen2.5 for Llama (low confidence) → Claude
-    assert [a["model_id"] for a in res.attempts] == ["mlx:q/Qwen3-4B", "mlx:l/Llama-8B", "claude:sonnet"]
+    # level 0 Qwen3 (bad JSON after repair) → level 1 skips same-family Qwen2.5 for Llama (low confidence) → Grok
+    assert [a["model_id"] for a in res.attempts] == ["mlx:q/Qwen3-4B", "mlx:l/Llama-8B", "xai:grok-4-fast"]
     assert res.escalation_level == 2 and res.output == {"verdict": "yes"} and res.cost_usd == pytest.approx(0.0421)
     runs = db.execute("SELECT model_id, escalated_from_run_id, status FROM agent_runs ORDER BY rowid").fetchall()
     assert [r["status"] for r in runs] == ["failed", "failed", "succeeded"]
     assert runs[1]["escalated_from_run_id"] and runs[2]["escalated_from_run_id"]
-    assert db.execute("SELECT cost_usd_est FROM claude_usage WHERE subtype='success'").fetchone()[0] == pytest.approx(0.0421)
+    row = db.execute("SELECT cost_usd_est, cost_source FROM cloud_usage WHERE subtype='success'").fetchone()
+    assert row[0] == pytest.approx(0.0421) and row[1] == "reported"
     esc = db.execute("SELECT COUNT(*) FROM events WHERE type='task.escalated'").fetchone()[0]
     assert esc == 2
 
 
-async def test_router_respects_lineage_and_claude_permission(db):
+async def test_router_respects_lineage_and_local_only_steps(db):
     _setup_roles(db)
     chat = make_chat({"mlx:q/Qwen2.5-7B": ['{"verdict": "yes"}']})
     r = Router(db, FakeManager(), None, chat_fn=chat)
@@ -188,18 +165,42 @@ async def test_router_respects_lineage_and_claude_permission(db):
     chat2 = make_chat({"mlx:q/Qwen3-4B": [], "mlx:q/Qwen2.5-7B": [], "mlx:l/Llama-8B": []})
     with pytest.raises(EscalationExhausted):
         await Router(db, FakeManager(), None, chat_fn=chat2).route("eligibility", [{"role": "user", "content": "x"}],
-                                                                   SCHEMA, allow_claude=False)
+                                                                   SCHEMA, cloud_use=None)
 
 
-async def test_router_defers_when_claude_budget_is_spent(db, shim):
+async def test_router_defers_when_grok_budget_is_spent(db):
     _setup_roles(db)
     with tx(db):
-        db.execute("UPDATE settings SET value_json='0' WHERE key='claude_daily_budget_usd'")
+        db.execute("UPDATE settings SET value_json='0' WHERE key='cloud_daily_budget_usd'")
     chat = make_chat({"mlx:q/Qwen3-4B": [], "mlx:q/Qwen2.5-7B": [], "mlx:l/Llama-8B": []})
     with pytest.raises(Deferred) as exc:
-        await Router(db, FakeManager(), ClaudeRunner(db), chat_fn=chat).route(
+        await Router(db, FakeManager(), FakeCloud(), chat_fn=chat).route(
             "eligibility", [{"role": "user", "content": "x"}], SCHEMA)
     assert exc.value.status == "deferred_budget"
+
+
+async def test_router_obeys_the_on_off_switches(db):
+    _setup_roles(db)
+    grok = FakeCloud()
+    _set(db, **policy.engines_patch("grok"))
+    chat = make_chat({"mlx:q/Qwen3-4B": ['{"verdict": "no"}']})
+    res = await Router(db, FakeManager(), grok, chat_fn=chat).route("eligibility", [{"role": "user", "content": "x"}],
+                                                                   SCHEMA, cloud_use="bulk")
+    assert res.model_id == "xai:grok-4-fast" and chat.calls == []                 # local models never touched
+    _set(db, **policy.engines_patch("local"))
+    chat = make_chat({"mlx:q/Qwen3-4B": [], "mlx:q/Qwen2.5-7B": [], "mlx:l/Llama-8B": []})
+    with pytest.raises(EscalationExhausted, match="Grok is switched off"):
+        await Router(db, FakeManager(), grok, chat_fn=chat).route("eligibility", [{"role": "user", "content": "x"}],
+                                                                  SCHEMA)
+    assert len(grok.calls) == 1
+    _set(db, **policy.engines_patch("both"))
+    with tx(db):
+        db.execute("UPDATE models SET enabled=0 WHERE id='mlx:q/Qwen3-4B'")        # one model switched off
+    assert roles.ranked(db, "eligibility") == ["mlx:q/Qwen2.5-7B", "mlx:l/Llama-8B"]
+    chat = make_chat({"mlx:q/Qwen2.5-7B": ['{"verdict": "yes", "confidence": 0.9}']})
+    res = await Router(db, FakeManager(), grok, chat_fn=chat).route("eligibility", [{"role": "user", "content": "x"}],
+                                                                   SCHEMA)
+    assert res.model_id == "mlx:q/Qwen2.5-7B" and "mlx:q/Qwen3-4B" not in chat.calls
 
 
 async def test_worker_parks_deferred_tasks_without_burning_attempts(db, hq_env):
@@ -215,7 +216,7 @@ async def test_worker_parks_deferred_tasks_without_burning_attempts(db, hq_env):
             return {"ok": True}
 
         async def run(self, task, ctx: RunContext) -> RunResult:
-            raise Deferred("deferred_budget", "2999-01-01T00:00:00Z", "Claude daily budget or call cap reached")
+            raise Deferred("deferred_budget", "2999-01-01T00:00:00Z", "Grok daily budget or call cap reached")
 
     write_agent(hq_env.agents, "helper", capabilities=["summarize"])
     w = Worker(adapters={"sim": Needy()}, loop_interval=0.02, watch=False, schedule=False)

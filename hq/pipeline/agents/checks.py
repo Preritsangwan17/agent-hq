@@ -1,9 +1,10 @@
 """Fact-Checker (factcheck.deterministic, factcheck.sentence, check.quality) and Reviewer (factcheck.signoff).
 
 The fact gate runs every layer on every version: (a) deterministic rules, (b) an independent local verifier whose
-model differs from every model in the document's lineage ("partial" fails), (c) Claude sign-off with a Claude model
-that didn't write or polish the text. Any failure sends targeted feedback back to the Writer and all layers run
-again; after 3 loops there is one Claude polish, and if it still fails the letter goes to Needs Prerit for review.
+model differs from every model in the document's lineage ("partial" fails), (c) a final sign-off by a model that
+didn't write the text and (when local) isn't the layer-(b) checker either. hq.llm.policy decides whether that
+sign-off is a second local model (free) or Grok. Any failure sends targeted feedback back to the Writer and all
+layers run again; after 3 loops there may be one Grok polish (policy), then the letter goes to Needs Prerit.
 """
 from __future__ import annotations
 
@@ -11,7 +12,7 @@ import json
 from typing import Any
 
 from hq.adapters.base import Deferred, RunContext, RunResult
-from hq.llm import cloud
+from hq.llm import cloud, policy
 from hq.llm.prompts import load_prompt, load_schema
 from hq.llm.router import EscalationExhausted
 from hq.util.timeutil import iso_in
@@ -60,16 +61,18 @@ def _carry(task: dict[str, Any], doc: dict[str, Any]) -> dict[str, Any]:
             **({"polished": True} if p.get("polished") else {})}
 
 
-async def _polish_allowed(ctx: RunContext) -> bool:
-    runner = ctx.services.claude
-    return runner is not None and await cloud.is_available(runner, cloud.main_model(ctx.settings))
+async def _polish_allowed(ctx: RunContext, opp: dict[str, Any], reason: str) -> bool:
+    if not policy.polish(ctx.settings, opp, reason).allowed:
+        return False
+    runner = ctx.services.cloud
+    return runner is not None and await cloud.is_available(runner, cloud.fast_model(ctx.settings))
 
 
 async def _fail(task: dict[str, Any], ctx: RunContext, opp: dict[str, Any], doc: dict[str, Any], layer: str,
                 feedback: list[str], effects: list[dict[str, Any]], summary: str,
                 model_id: str | None = None) -> RunResult:
     carry = _carry(task, doc)
-    allowed = await _polish_allowed(ctx)
+    allowed = await _polish_allowed(ctx, opp, "fix")
     effects = effects + [{"op": "document.update", "id": doc["id"], "values": {"status": "failed"}},
                          {"op": "gate_result", "values": {"application_id": doc["application_id"], "document_id": doc["id"],
                                                           "gate": layer, "passed": 0,
@@ -80,7 +83,7 @@ async def _fail(task: dict[str, Any], ctx: RunContext, opp: dict[str, Any], doc:
         effects.append(need_effect(
             opp, kind="review_letter", title=f"Review the letter for {label(opp)}",
             instructions=("The fact gate still rejects this letter after 3 rewrites"
-                          + (" and a Claude polish" if carry.get("polished") else "") + ". Edit it yourself or skip "
+                          + (" and a Grok polish" if carry.get("polished") else "") + ". Edit it yourself or skip "
                           "the role. Problems found:\n\n" + "\n".join(f"- {f}" for f in feedback[:10])
                           + f"\n\n---\n\n{doc['content_text']}"),
             priority=60, est_minutes=5, application_id=doc["application_id"],
@@ -130,10 +133,10 @@ async def sentence_check(task: dict[str, Any], ctx: RunContext, opp: dict[str, A
     msgs = [{"role": "system", "content": load_prompt("fact_checker")},
             {"role": "user", "content": f"FACTS:\n{facts_block(load_facts())}\n\nSENTENCES:\n" + "\n\n".join(lines)}]
     try:
-        res = await ctx.llm("fact_checker", msgs, load_schema("factcheck"), lineage=tuple(lineage), allow_claude=False,
+        res = await ctx.llm("fact_checker", msgs, load_schema("factcheck"), lineage=tuple(lineage), cloud_use=None,
                             max_tokens=1600, now_line=f"Checking {len(sents)} sentences for {opp['company_name']}…")
     except EscalationExhausted:
-        return _pass(task, doc, "fact.local", [], f"{label(opp)}: no independent local checker — Claude sign-off decides",
+        return _pass(task, doc, "fact.local", [], f"{label(opp)}: no independent local checker — the sign-off decides",
                      extra={"skipped": "no local checker independent of the authors"})
     if not roles_mod.checker_allowed(res.model_id, lineage):
         return _pass(task, doc, "fact.local", [], "local checker not independent — skipped",
@@ -172,7 +175,7 @@ async def quality(task: dict[str, Any], ctx: RunContext, opp: dict[str, Any], do
         res = await ctx.llm("summarizer", [{"role": "system", "content": RUBRIC_PROMPT},
                                            {"role": "user", "content": f"ROLE: {opp['title']} at {opp['company_name']}\n\n"
                                                                        f"LETTER:\n{doc['content_text']}"}],
-                            RUBRIC_SCHEMA, lineage=tuple(loads(doc.get("lineage_models_json"), [])), allow_claude=False,
+                            RUBRIC_SCHEMA, lineage=tuple(loads(doc.get("lineage_models_json"), [])), cloud_use=None,
                             max_tokens=200, now_line="Rating specificity…")
         rubric, rubric_model = float(res.output.get("score")), res.model_id
     except (EscalationExhausted, TypeError, ValueError, AttributeError):
@@ -184,35 +187,67 @@ async def quality(task: dict[str, Any], ctx: RunContext, opp: dict[str, Any], do
                            f"{label(opp)} v{doc['version']}: quality gate — " + "; ".join(report.failures())[:200],
                            model_id=rubric_model)
     p = task.get("payload") or {}
-    polish = (int(opp.get("fit_score") or 0) >= int(ctx.settings.get("fit_polish_threshold", 75))
-              and not p.get("polished") and await _polish_allowed(ctx))
+    polish = (int(opp.get("fit_score") or 0) >= int(ctx.settings.get("fit_polish_threshold", 80))
+              and not p.get("polished") and await _polish_allowed(ctx, opp, "high fit"))
     return _pass(task, doc, "quality", [], f"{label(opp)} v{doc['version']}: quality gate passed"
-                 + (f" (specificity {rubric:.0f}/5)" if rubric else "") + (" — high fit, Claude polish next" if polish else ""),
+                 + (f" (specificity {rubric:.0f}/5)" if rubric else "") + (" — high fit, Grok polish next" if polish else ""),
                  extra={"polish": polish, "checks": report.checks}, model_id=rubric_model)
 
 
-# ── (c) Claude sign-off ──────────────────────────────────────────────────────────────────────────────
+# ── (c) final sign-off: a second local model or Grok (hq.llm.policy) ──────────────────────────────────
+def local_signoff_candidates(ctx: RunContext, lineage: set[str], used: set[str]) -> list[str]:
+    """Enabled local fact-checkers that meet the benchmark floor, wrote nothing in this document and weren't the
+    layer-(b) checker."""
+    rows = ctx.query("SELECT r.model_id, r.reason FROM role_assignments r LEFT JOIN models m ON m.id=r.model_id "
+                     "WHERE r.role='fact_checker' AND COALESCE(m.enabled, 1)=1 ORDER BY r.rank")
+    return [r["model_id"] for r in rows if not (r["reason"] or "").startswith("below floor")
+            and not cloud.is_cloud(r["model_id"]) and r["model_id"] not in lineage and r["model_id"] not in used]
+
+
 async def signoff(task: dict[str, Any], ctx: RunContext, opp: dict[str, Any], doc: dict[str, Any]) -> RunResult:
     s = ctx.settings
-    required = bool(s.get("require_claude_signoff", True)) or roles_mod.needs_claude_signoff(ctx.conn)
+    required = bool(s.get("signoff_required", True)) or roles_mod.needs_cloud_signoff(ctx.conn)
     effects: list[dict[str, Any]] = []
     if not required:
         effects.append({"op": "document.update", "id": doc["id"], "values": {"status": "passed"}})
         return _pass(task, doc, "fact.signoff", effects, f"{label(opp)}: sign-off not required (setting off)",
-                     extra={"skipped": "require_claude_signoff is off"})
+                     extra={"skipped": "signoff_required is off"})
     lineage = set(loads(doc.get("lineage_models_json"), []))
-    model = await cloud.signoff_model(ctx.services.claude, s, lineage) if ctx.services.claude else None
-    if model is None:  # every reachable cloud model wrote part of this text (or none is reachable): wait
-        raise Deferred("queued", iso_in(3600), "no independent cloud model is available for sign-off")
-    mid = cloud.tag(model)
+    used = {r["checker_model"] for r in ctx.query(
+        "SELECT DISTINCT checker_model FROM fact_checks WHERE document_id=? AND layer='local' AND checker_model "
+        "IS NOT NULL", (doc["id"],))}
+    local = [] if roles_mod.needs_cloud_signoff(ctx.conn) else local_signoff_candidates(ctx, lineage, used)
+    decision = policy.signoff(s, opp, local_checker_available=bool(local))
+    if not decision.allowed:
+        raise Deferred("queued", iso_in(3600), f"no sign-off possible yet: {decision.reason}")
     sents = _sentences(ctx, doc["id"])
     lines, prev = [], "(start)"
     for i, x in enumerate(sents):
         lines.append(f"[{i}] PREVIOUS: {prev}\n[{i}] SENTENCE: {x['text']}")
         prev = x["text"]
-    res = await ctx.claude("factcheck.signoff", f"FACTS:\n{facts_block(load_facts())}\n\nSENTENCES:\n" + "\n\n".join(lines),
-                           load_schema("factcheck"), system_prompt=load_prompt("fact_checker"), model=model)
-    got = {r["i"]: r for r in (res.output or {}).get("results", []) if isinstance(r, dict) and isinstance(r.get("i"), int)}
+    user = f"FACTS:\n{facts_block(load_facts())}\n\nSENTENCES:\n" + "\n\n".join(lines)
+    output, mid, who, cost = None, None, None, None
+    if decision.model is None:  # a second, independent local model signs off — free
+        try:
+            res = await ctx.llm("fact_checker", [{"role": "system", "content": load_prompt("fact_checker")},
+                                                 {"role": "user", "content": user}], load_schema("factcheck"),
+                                pinned_model=local[0], lineage=tuple(lineage), cloud_use=None, max_tokens=1600,
+                                now_line=f"Local sign-off for {opp['company_name']}…")
+            output, mid, who = res.output, res.model_id, res.model_id
+        except EscalationExhausted:
+            decision = policy.Decision(policy.grok_on(s), cloud.fast_model(s), "the local sign-off model failed")
+            if not decision.allowed:
+                raise Deferred("queued", iso_in(1800), "the local sign-off model failed and Grok is switched off")
+    if output is None:
+        model = await cloud.signoff_model(ctx.services.cloud, s, lineage,
+                                          strong_first=decision.model == cloud.strong_model(s)) \
+            if ctx.services.cloud else None
+        if model is None:  # every reachable Grok model wrote part of this text (or Grok is unreachable): wait
+            raise Deferred("queued", iso_in(3600), "no independent model is available for sign-off")
+        res = await ctx.cloud("factcheck.signoff", user, load_schema("factcheck"),
+                              system_prompt=load_prompt("fact_checker"), model=model)
+        output, mid, who, cost = res.output, cloud.tag(model), f"Grok {model.split(':')[-1]}", res.cost_usd
+    got = {r["i"]: r for r in (output or {}).get("results", []) if isinstance(r, dict) and isinstance(r.get("i"), int)}
     feedback = []
     for i, x in enumerate(sents):
         r = got.get(i, {})
@@ -221,13 +256,12 @@ async def signoff(task: dict[str, Any], ctx: RunContext, opp: dict[str, Any], do
             "document_id": doc["id"], "sentence_id": x["id"], "layer": "signoff", "checker_model": mid,
             "verdict": verdict, "unsupported_span": r.get("unsupported_span"), "explanation": r.get("explanation")}})
         if verdict in ("unsupported", "partial"):
-            feedback.append(f"Sentence {i + 1} (“{x['text'][:100]}”): {cloud.label(model)} sign-off says {verdict}"
+            feedback.append(f"Sentence {i + 1} (“{x['text'][:100]}”): {who} sign-off says {verdict}"
                             + (f" — “{r.get('unsupported_span')}”" if r.get("unsupported_span") else ""))
     if feedback:
         return await _fail(task, ctx, opp, doc, "fact.signoff", feedback, effects,
-                           f"{label(opp)}: {cloud.label(model)} sign-off rejected {len(feedback)} sentence(s)",
-                           model_id=mid)
+                           f"{label(opp)}: {who} sign-off rejected {len(feedback)} sentence(s)", model_id=mid)
     effects.append({"op": "document.update", "id": doc["id"], "values": {"status": "passed"}})
-    return _pass(task, doc, "fact.signoff", effects,
-                 f"{label(opp)} v{doc['version']}: signed off by {cloud.label(model)} {model.split(':')[-1]}",
-                 model_id=mid, cost=res.cost_usd)
+    return _pass(task, doc, "fact.signoff", effects, f"{label(opp)} v{doc['version']}: signed off by {who}",
+                 extra={"signoff_by": "local" if decision.model is None and cost is None else "grok",
+                        "why": decision.reason}, model_id=mid, cost=cost)

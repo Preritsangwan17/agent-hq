@@ -44,7 +44,8 @@ cat <<'MSG'
 Agent HQ is running → http://localhost:8765 (Safari just opened it).
   • First visit: choose a passcode.
   • Settings › Simulation: turn it off to see only real jobs.
-  • Add your xAI key:   echo 'HQ_XAI_API_KEY=your-key' >> ~/agent-hq/.env
+  • Local AI (free, recommended):   cd ~/agent-hq && make models      (installs Ollama + ~39 GB of models)
+  • Add your Grok (xAI) key:   echo 'HQ_XAI_API_KEY=your-key' >> ~/agent-hq/.env
   • Start automatically after login:   cd ~/agent-hq && make install-launchd
   • Stop / start later:   cd ~/agent-hq && make down   /   make up
 MSG

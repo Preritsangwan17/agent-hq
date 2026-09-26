@@ -9,6 +9,7 @@ from datetime import date, datetime, timezone
 from typing import Any
 
 from hq.adapters.base import Deferred, RunContext, RunResult
+from hq.llm import policy
 from hq.llm.prompts import load_prompt, load_schema
 from hq.llm.router import EscalationExhausted
 from hq.pipeline.agents.common import (
@@ -106,7 +107,7 @@ def start_date(opp: dict[str, Any]) -> date | None:
 
 
 def model_accuracy(ctx: RunContext, model_id: str) -> float:
-    if model_id.startswith(("claude:", "xai:")):
+    if model_id.startswith("xai:"):
         return 0.9
     rows = ctx.query("SELECT accuracy FROM benchmarks WHERE model_id=? AND task='eligibility' ORDER BY created_at DESC "
                      "LIMIT 1", (model_id,))
@@ -123,19 +124,28 @@ def grounding(out: dict[str, Any], text: str) -> tuple[float, list[dict[str, Any
 
 
 async def _llm_eligibility(ctx: RunContext, text: str, rules_needs_info: bool) -> dict[str, Any] | None:
-    """Up to three opinions (role model → a different local model → Claude) until one is confident enough."""
+    """Up to three opinions (role model → a different local model → Grok) until one is confident enough.
+    hq.llm.policy decides the Grok step: in API-saving mode Grok answers only when no local model could; an unclear
+    local answer becomes a one-click decision for Prerit instead of a paid call."""
     threshold = float(ctx.settings.get("eligibility_threshold", 0.8))
     msgs = [{"role": "system", "content": load_prompt("eligibility")},
             {"role": "user", "content": f"POSTING:\n{text[:12000]}"}]
     tried: set[str] = set()
     best: dict[str, Any] | None = None
-    for attempt in range(3):
+    attempt = 0
+    while attempt < 3:
+        local_phase = attempt < 2 and policy.local_on(ctx.settings)
+        use = None if local_phase else ("second_look" if best is not None else "needed")
         try:
             res = await ctx.llm("eligibility", msgs, load_schema("eligibility"), exclude_models=set(tried),
-                                allow_claude=attempt == 2, confidence_threshold=0.0, max_tokens=700,
+                                cloud_use=use, confidence_threshold=0.0, max_tokens=700,
                                 task_type="verify.eligibility_hard", now_line="Checking eligibility with quotes…")
         except EscalationExhausted:
+            if local_phase:
+                attempt = 2   # no (further) local model: the Grok step decides whether to ask Grok
+                continue
             break
+        attempt = attempt + 1 if local_phase else 3
         tried.add(res.model_id)
         out = res.output if isinstance(res.output, dict) else {}
         verdict = out.get("verdict")
@@ -177,7 +187,7 @@ async def eligibility(task: dict[str, Any], ctx: RunContext, opp: dict[str, Any]
                          summary=f"{label(opp)}: ineligible — “{h.quote[:120]}”")
     best = await _llm_eligibility(ctx, text, bool(rules.needs_info))
     if best is None:
-        raise Deferred("queued", _in_minutes(30), "no eligibility model or Claude available yet")
+        raise Deferred("queued", _in_minutes(30), "no eligibility model available yet (local models / Grok)")
     threshold = float(ctx.settings.get("eligibility_threshold", 0.8))
     verdict, conf = best["verdict"], best["confidence"]
     if rules.needs_info and verdict in ("eligible", "eligible_gaps"):

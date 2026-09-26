@@ -51,7 +51,7 @@ async def _llm_titles(ctx: RunContext, postings: list[RawPosting]) -> set[str]:
     try:
         res = await ctx.llm("title_filter", [{"role": "system", "content": load_prompt("title_filter")},
                                              {"role": "user", "content": f"TITLES:\n{lines}"}],
-                            load_schema("title_filter"), allow_claude=False, max_tokens=800,
+                            load_schema("title_filter"), cloud_use="bulk", max_tokens=800,
                             now_line="Classifying uncertain titles…")
     except Exception:
         return set()
@@ -161,7 +161,7 @@ async def parse_job(task: dict[str, Any], ctx: RunContext) -> RunResult:
         try:
             res = await ctx.llm("parser", [{"role": "system", "content": load_prompt("parse_job")},
                                            {"role": "user", "content": f"POSTING:\n{text[:12000]}"}],
-                                load_schema("job_parse"), allow_claude=False, max_tokens=900,
+                                load_schema("job_parse"), cloud_use="bulk", max_tokens=900,
                                 now_line=f"Extracting requirements from {opp['company_name']}…")
             parsed = merge_llm(parsed, res.output, text, res.model_id)
             model_id = res.model_id

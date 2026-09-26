@@ -14,7 +14,7 @@ from typing import Any
 
 from hq import settings as paths
 from hq.adapters.base import RunContext, RunResult, TransientError
-from hq.llm.claude import minimal_env
+from hq.llm.errors import minimal_env
 
 
 class ScriptAdapter:
