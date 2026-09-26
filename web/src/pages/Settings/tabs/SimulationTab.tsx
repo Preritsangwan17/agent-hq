@@ -81,7 +81,7 @@ export function SimulationTab() {
       </Section>
 
       <Callout icon={Sparkles} color={SIM} title="Real work is never simulated">
-        Agents on real adapters (local models, Claude, scripts) ignore this switch, and legacy applications stay frozen until you
+        Agents on real adapters (local models, cloud models, scripts) ignore this switch, and legacy applications stay frozen until you
         confirm what was sent.
       </Callout>
     </div>

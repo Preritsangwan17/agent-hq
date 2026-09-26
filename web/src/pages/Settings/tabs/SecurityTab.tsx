@@ -55,7 +55,7 @@ export function SecurityTab() {
       </Section>
 
       <Section kicker=".env" title="Secrets on this Mac" icon={KeyRound} color="#FBBF24" rows={false}
-        description="Secrets live only in .env (mode 600, git-ignored). The UI shows which ones exist, never their values; logs and anything sent to Claude or xAI pass through a redaction filter.">
+        description="Secrets live only in .env (mode 600, git-ignored). The UI shows which ones exist, never their values; logs and anything sent to a cloud model (Claude CLI, Codex CLI, Grok) pass through a redaction filter.">
         <div className="flex flex-wrap gap-1.5">
           {['HQ_PASSCODE_HASH', 'HQ_SESSION_SECRET', 'HQ_GMAIL_CLIENT_ID', 'HQ_GMAIL_CLIENT_SECRET', 'HQ_GMAIL_REFRESH_TOKEN', 'HQ_XAI_API_KEY'].map((k) => {
             const on = s?.secrets_present.includes(k);

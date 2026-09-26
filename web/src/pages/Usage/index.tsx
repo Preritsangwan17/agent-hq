@@ -1,7 +1,8 @@
 /**
- * /usage — AI & Grok: the on/off switches and API-saving mode, then Grok (xAI) usage. Every figure says whether it
- * is exact or an estimate: per-call cost is exact when xAI reported it, HQ's daily limit is exact (HQ enforces it),
- * and remaining credit is an estimate (xAI's API doesn't give HQ the account balance).
+ * /usage — AI usage & limits: the on/off switches (local, cloud, each provider) and API-saving mode; the Claude CLI
+ * and ChatGPT (Codex CLI) usage windows; then Grok (xAI) spend. Every figure says whether it is exact, reported by
+ * the provider, or an estimate: HQ's own counts and limits are exact, window percentages are shown only when the
+ * CLI reported them, Grok per-call cost is exact when xAI returned it, and remaining Grok credit is an estimate.
  */
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -21,12 +22,13 @@ import {
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { Badge, Button, EmptyState, EnginesControl, GlassPanel, GROK, LOCAL, ModeControl, SectionHeader, Tooltip } from '@/components';
+import { Badge, Button, EmptyState, EnginesControl, GlassPanel, GROK, LOCAL, ModeControl, ProgressBar, ProvidersControl, SectionHeader, Tooltip } from '@/components';
 import { api } from '@/lib/api';
 import { eventBus } from '@/lib/bus';
+import { cn } from '@/lib/cn';
 import { formatCompact, formatDateIST, formatDateTimeIST, formatRelative } from '@/lib/format';
 import { useHQ } from '@/lib/store';
-import type { GrokUsage } from '@/lib/types';
+import type { GrokUsage, ProviderUsage } from '@/lib/types';
 import { colors, withAlpha } from '@/theme/tokens';
 
 const qk = ['usage'] as const;
@@ -76,19 +78,24 @@ export default function Usage() {
 
   return (
     <div className="space-y-5">
-      <SectionHeader as="h1" size="lg" kicker="Local first · Grok when it counts" title="AI & Grok usage" />
+      <SectionHeader as="h1" size="lg" kicker="Local first · cloud when it counts" title="AI usage & limits" />
 
       <GlassPanel padding="lg" glow="#34D399" glowStrength={0.22}>
         <SectionHeader kicker="On / off" title="Which AI HQ may use" icon={Power} color="#34D399" />
         <p className="mt-1.5 max-w-3xl text-[13px] text-muted">
-          Local models run on your Mac for free and keep your data private. Grok is paid, so HQ only uses it when it gives a real advantage. Switch
-          individual local models on or off on the <Link className="text-cyan-300 hover:text-cyan-200" to="/models">Models</Link> page.
+          Local models run on your Mac for free and keep your data private. Cloud models are used only when they give a real advantage — your
+          Claude and ChatGPT subscriptions first (already paid for), then pay-per-token Grok. Switch individual local models on or off on the{' '}
+          <Link className="text-cyan-300 hover:text-cyan-200" to="/models">Models</Link> page.
         </p>
         <div className="mt-4">
           <EnginesControl />
         </div>
         <div className="mt-5">
-          <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted">How much Grok to use</div>
+          <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted">Cloud providers</div>
+          <ProvidersControl />
+        </div>
+        <div className="mt-5">
+          <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted">How much cloud to use</div>
           <ModeControl />
         </div>
       </GlassPanel>
@@ -98,9 +105,10 @@ export default function Usage() {
           <LoaderCircle className="size-5 animate-spin" aria-label="Loading usage" />
         </div>
       ) : !u ? (
-        <EmptyState icon={Sparkles} title="Couldn't load Grok usage" hint={q.error instanceof Error ? q.error.message : undefined} />
+        <EmptyState icon={Sparkles} title="Couldn't load AI usage" hint={q.error instanceof Error ? q.error.message : undefined} />
       ) : (
         <>
+          <SubscriptionWindows u={u} />
           <KeyPanel u={u} />
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             <Tile
@@ -132,7 +140,7 @@ export default function Usage() {
               icon={Cpu}
               label="Handled locally (30 days)"
               value={u.local.local_share == null ? '—' : `${Math.round(u.local.local_share * 100)}%`}
-              sub={`${u.local.calls} local model calls vs ${u.local.grok_calls} Grok calls`}
+              sub={`${u.local.calls} local model calls vs ${u.local.cloud_calls} cloud calls (${u.local.grok_calls} Grok)`}
               badge={<Exactness exact why="Counted from HQ's own run log." />}
               color={LOCAL}
             />
@@ -258,11 +266,120 @@ function CreditTile({ u }: { u: GrokUsage }) {
   );
 }
 
+const PROVIDER_COLOR: Record<string, string> = { claude: '#F59E0B', codex: '#34D399', xai: GROK };
+
+function SubscriptionWindows({ u }: { u: GrokUsage }) {
+  const subs = u.providers.filter((p) => p.kind === 'subscription');
+  if (!subs.length) return null;
+  return (
+    <div className="grid gap-5 xl:grid-cols-2">
+      {subs.map((p) => (
+        <ProviderWindowCard key={p.provider} p={p} />
+      ))}
+    </div>
+  );
+}
+
+function ProviderWindowCard({ p }: { p: ProviderUsage }) {
+  const color = PROVIDER_COLOR[p.provider] ?? '#8B95A7';
+  const status = !p.switched_on
+    ? { text: 'off', color: '#8B95A7' }
+    : !p.installed
+      ? { text: 'not installed', color: '#8B95A7' }
+      : p.available
+        ? { text: 'ready', color: colors.ok }
+        : p.available == null
+          ? { text: 'not checked yet', color: '#8B95A7' }
+          : { text: 'unavailable', color: colors.warn };
+  const hq = p.hq_window;
+  const rep = p.reported;
+  const loginCmd = p.provider === 'claude' ? 'claude auth login' : 'codex login';
+  const checkCmd = p.provider === 'claude' ? '/usage in Claude Code' : '/status in Codex';
+  return (
+    <GlassPanel padding="lg" glow={color} glowStrength={0.18} className={cn(!p.switched_on && 'opacity-75')}>
+      <SectionHeader
+        kicker="Subscription · usage windows"
+        title={p.label}
+        icon={Sparkles}
+        color={color}
+        right={<Badge color={status.color}>{status.text}</Badge>}
+      />
+      {p.reason && p.switched_on && !p.available && <p className="mt-2 text-[12.5px] text-amber-200/90">{p.reason}</p>}
+      {!p.installed && p.switched_on && (
+        <p className="mt-2 text-[12.5px] text-muted">
+          Install it, then log in: <span className="font-mono text-ink/85">{p.provider === 'claude' ? 'npm i -g @anthropic-ai/claude-code' : 'brew install codex'}</span> →{' '}
+          <span className="font-mono text-ink/85">{loginCmd}</span>
+        </p>
+      )}
+      {rep?.limited_until && (
+        <div className="mt-3 rounded-xl border border-red-400/30 bg-red-400/[.06] p-3 text-[12.5px] text-red-100/90">
+          <b className="text-red-100">Plan limit reached</b> — HQ pauses this provider until about {formatDateTimeIST(rep.limited_until)} IST.
+          {rep.limit_message && <div className="mt-1 text-xs text-red-100/70">“{rep.limit_message}”</div>}
+        </div>
+      )}
+      <div className="mt-4 space-y-4">
+        {rep && rep.windows.length > 0 ? (
+          rep.windows.map((w) => (
+            <div key={w.name}>
+              <div className="flex items-baseline justify-between gap-3 text-[13px]">
+                <span className="text-ink">
+                  {w.name}: <b className="font-display tabular">{Math.round(w.left_percent)}% left</b>
+                </span>
+                <span className="flex items-center gap-2 text-xs text-muted">
+                  {w.resets_at ? `resets ${formatRelative(w.resets_at)}` : ''}
+                  <Exactness exact why={`${rep.source ?? 'Reported by the CLI'}${rep.at ? `, ${formatRelative(rep.at)}` : ''}.`} />
+                </span>
+              </div>
+              <ProgressBar className="mt-1.5" value={w.used_percent / 100} color={w.used_percent >= 85 ? colors.warn : color} height={5} />
+            </div>
+          ))
+        ) : (
+          <div className="flex items-start justify-between gap-3 text-[12.5px] text-muted">
+            <span>
+              Plan allowance left: <b className="text-ink">not reported</b>. The CLI hasn't told HQ its window usage yet — check {checkCmd}.
+            </span>
+            <Tooltip content={rep?.note ?? 'HQ never guesses your plan limits.'} side="bottom">
+              <span>
+                <Badge size="xs" color="#8B95A7">unknown</Badge>
+              </span>
+            </Tooltip>
+          </div>
+        )}
+        {hq && (
+          <div>
+            <div className="flex items-baseline justify-between gap-3 text-[13px]">
+              <span className="text-ink">
+                HQ's share of this 5-hour window: <b className="font-display tabular">{hq.left} of {hq.cap} calls left</b>
+              </span>
+              <Exactness exact why={hq.note} />
+            </div>
+            <ProgressBar className="mt-1.5" value={hq.cap ? hq.used / hq.cap : 1} color={hq.left === 0 ? colors.warn : LOCAL} height={5} />
+          </div>
+        )}
+        <div className="grid grid-cols-2 gap-2 text-center text-xs text-muted">
+          <div className="rounded-lg border border-white/[.06] bg-white/[.02] py-2">
+            <div className="font-display text-[15px] font-semibold text-ink tabular">{p.last_5h.calls}</div>
+            calls · last 5 h
+          </div>
+          <div className="rounded-lg border border-white/[.06] bg-white/[.02] py-2">
+            <div className="font-display text-[15px] font-semibold text-ink tabular">{p.last_7d.calls}</div>
+            calls · last 7 days
+          </div>
+        </div>
+        <p className="text-[11.5px] text-faint">
+          Models: {p.fast_model.split(':')[1]} (fast) · {p.strong_model.split(':')[1]} (sign-off). No per-call cost to you
+          {p.last_7d.notional_usd > 0 ? ` — about ${usd(p.last_7d.notional_usd)} of API-equivalent value this week` : ''}.
+        </p>
+      </div>
+    </GlassPanel>
+  );
+}
+
 function KeyPanel({ u }: { u: GrokUsage }) {
   const qc = useQueryClient();
   const [busy, setBusy] = useState(false);
   const k = u.key;
-  const off = !u.policy.grok_enabled;
+  const off = !u.policy.grok_enabled || !u.policy.cloud_ai_enabled;
   const status = off
     ? { text: 'switched off', color: '#8B95A7' }
     : !k.present

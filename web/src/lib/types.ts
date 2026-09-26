@@ -594,9 +594,18 @@ export interface Settings {
   daily_draft_cap: number;
   cloud_daily_budget_usd: number;
   cloud_daily_call_cap: number;
-  /** on/off switches: local models on this Mac, Grok via xAI */
+  /** on/off switches: local models on this Mac; cloud master + each provider */
   local_ai_enabled?: boolean;
+  cloud_ai_enabled?: boolean;
   grok_enabled?: boolean;
+  claude_cli_enabled?: boolean;
+  codex_cli_enabled?: boolean;
+  prefer_subscriptions?: boolean;
+  claude_cli_model?: string;
+  claude_cli_strong_model?: string;
+  codex_model?: string;
+  claude_window_calls?: number;
+  codex_window_calls?: number;
   /** saver = API-saving mode */
   cloud_mode?: CloudMode;
   important_score_threshold?: number;
@@ -923,12 +932,19 @@ export interface BenchState {
 }
 
 export type CloudMode = 'saver' | 'balanced' | 'quality';
-export type Engines = 'both' | 'local' | 'grok' | 'none';
+export type Engines = 'both' | 'local' | 'cloud' | 'none';
+export type CloudProvider = 'claude' | 'codex' | 'xai';
 
 export interface AIPolicy {
   engines: Engines;
   local_ai_enabled: boolean;
+  cloud_ai_enabled: boolean;
   grok_enabled: boolean;
+  claude_cli_enabled: boolean;
+  codex_cli_enabled: boolean;
+  /** switched-on cloud providers in the order HQ tries them */
+  cloud_order: CloudProvider[];
+  prefer_subscriptions: boolean;
   mode: CloudMode;
   fast_model: string;
   strong_model: string;
@@ -944,6 +960,8 @@ export interface CloudState {
   strong_model?: string;
   models?: string[];
   checked_at?: ISODate;
+  /** per provider (claude, codex, xai) as the worker last saw it */
+  providers?: Record<string, { label: string; enabled: boolean; available: boolean; installed?: boolean; reason?: string | null }>;
 }
 
 export interface ModelsResponse {
@@ -1035,10 +1053,12 @@ export interface GrokUsage {
     input_tokens: number;
     output_tokens: number;
     grok_calls: number;
+    cloud_calls: number;
     local_share: number | null;
     est_saved_usd: number;
     saved_note: string;
   };
+  providers: ProviderUsage[];
   recent: {
     at: ISODate;
     task_type: string | null;
@@ -1049,6 +1069,46 @@ export interface GrokUsage {
     output_tokens: number | null;
     result: string | null;
   }[];
+}
+
+export interface ProviderWindowUse {
+  calls: number;
+  tokens: number;
+  spent_usd: number;
+  notional_usd: number;
+}
+
+export interface ReportedWindow {
+  name: string;
+  used_percent: number;
+  left_percent: number;
+  window_minutes?: number | null;
+  resets_at?: ISODate | null;
+}
+
+export interface ProviderUsage {
+  provider: CloudProvider;
+  label: string;
+  kind: 'subscription' | 'api';
+  switched_on: boolean;
+  in_use: boolean;
+  available: boolean | null;
+  installed: boolean;
+  reason: string | null;
+  fast_model: string;
+  strong_model: string;
+  last_5h: ProviderWindowUse;
+  last_7d: ProviderWindowUse;
+  hq_window?: { cap: number; used: number; left: number; is_estimate: false; note: string };
+  reported?: {
+    windows: ReportedWindow[];
+    at: ISODate | null;
+    source: string | null;
+    limited_until: ISODate | null;
+    limit_message: string | null;
+    limit_at: ISODate | null;
+    note: string;
+  };
 }
 
 export interface MatchFactor {

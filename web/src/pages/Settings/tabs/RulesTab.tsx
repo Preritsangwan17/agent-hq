@@ -159,16 +159,16 @@ export function RulesTab() {
       </Section>
 
       <Section
-        kicker="Fit"
+        kicker="Match score"
         title="Drafting thresholds"
         icon={Target}
         color="#A78BFA"
-        description="The Verifier scores fit 0–100. Below the draft line a role is parked; at or above the polish line the draft also gets a budgeted Claude polish."
+        description="The Verifier scores every role 0–100 against your career plan (twelve explained factors: skills, projects, education, experience, location, visa, role type, pay, company, AI/ML relevance, eligibility, career value — edit config/career.yaml). Below the draft line a role is parked (you can still press Apply anyway); at or above the polish line the draft may get a cloud polish if the AI mode allows it."
       >
         <FitBar draft={draft} polish={polish} />
-        <SettingRow icon={FilePenLine} color="#A78BFA" title="Draft at fit ≥" phase="live" control={<Value>{draft}</Value>}>
+        <SettingRow icon={FilePenLine} color="#A78BFA" title="Draft at match ≥" phase="live" control={<Value>{draft}</Value>}>
           <Slider
-            aria-label="Fit threshold for drafting"
+            aria-label="Match threshold for drafting"
             value={draft}
             min={0}
             max={100}
@@ -178,9 +178,9 @@ export function RulesTab() {
             onChange={(v) => save({ fit_draft_threshold: Math.round(v) }, SLIDE_MS)}
           />
         </SettingRow>
-        <SettingRow icon={Sparkles} color="#E879F9" title="Claude polish at fit ≥" phase="live" control={<Value>{polish}</Value>}>
+        <SettingRow icon={Sparkles} color="#E879F9" title="Cloud polish at match ≥" phase="live" control={<Value>{polish}</Value>}>
           <Slider
-            aria-label="Fit threshold for Claude polish"
+            aria-label="Match threshold for a cloud polish"
             value={polish}
             min={0}
             max={100}

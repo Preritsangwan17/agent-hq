@@ -145,7 +145,7 @@ export default function Models() {
                   icon={Cpu}
                   color={AMBER}
                   title="No usable local models found"
-                  hint="HQ looks in Ollama, the Hugging Face cache (MLX), LM Studio and GGUF files. Download a recommended model above (or run `make models`), then Rescan."
+                  hint="HQ looks in Ollama, the Hugging Face cache (MLX), LM Studio and GGUF files. Download a recommended model above (or run make models in the agent-hq folder), then Rescan."
                 />
               </GlassPanel>
             ) : (
@@ -291,9 +291,9 @@ function Stat({ label, value }: { label: string; value: string }) {
 // ── AI engines + Grok ─────────────────────────────────────────────────
 
 const ENGINE_TEXT: Record<string, { label: string; color: string; text: string }> = {
-  both: { label: 'Local + Grok', color: '#34D399', text: 'Local models do the work; Grok steps in only when the policy says it adds real value.' },
-  local: { label: 'Local only', color: '#22D3EE', text: 'Nothing is sent to Grok. Steps no local model can do wait.' },
-  grok: { label: 'Grok only', color: '#E879F9', text: 'Every AI step goes to Grok (paid); local models are unloaded.' },
+  both: { label: 'Local + cloud', color: '#34D399', text: 'Local models do the work; cloud models step in only when the policy says they add real value.' },
+  local: { label: 'Local only', color: '#22D3EE', text: 'Nothing leaves the Mac. Steps no local model can do wait.' },
+  cloud: { label: 'Cloud only', color: '#E879F9', text: 'Every AI step goes to the cloud providers you switched on; local models are unloaded.' },
   none: { label: 'AI off', color: '#8B95A7', text: 'No AI runs. Rules-only steps continue; AI steps wait.' },
 };
 
@@ -303,7 +303,9 @@ function EnginesCard({ data }: { data: ModelsResponse }) {
   const qc = useQueryClient();
   const recheck = useMutation({ mutationFn: api.recheckCloud, onSuccess: () => setTimeout(() => void qc.invalidateQueries({ queryKey: qk }), 3000) });
   const e = ENGINE_TEXT[engineOf(s)];
-  const grokOn = s.grok_enabled !== false;
+  const cloudOn = s.cloud_ai_enabled !== false;
+  const subs = [s.claude_cli_enabled === true && 'Claude (CLI)', s.codex_cli_enabled === true && 'ChatGPT (Codex CLI)'].filter(Boolean).join(' and ');
+  const providers = Object.values(c.providers ?? {}).filter((p) => p.enabled);
   const ok = c.available === true;
   const unknown = c.available == null;
   const mode = { saver: 'API-saving', balanced: 'Balanced', quality: 'Quality' }[String(s.cloud_mode ?? 'saver')] ?? 'API-saving';
@@ -321,26 +323,35 @@ function EnginesCard({ data }: { data: ModelsResponse }) {
         }
       />
       <div className="mt-3 space-y-3 text-[13px] leading-relaxed text-muted">
-        <p>{e.text}{engineOf(s) === 'both' ? ` Mode: ${mode}.` : ''}</p>
-        {grokOn &&
-          (ok ? (
-            <p>
-              Grok is connected. Escalations use <b className="text-ink">{(c.model ?? '').replace('xai:', '')}</b>; important sign-offs use{' '}
-              <b className="text-ink">{(c.strong_model ?? '').replace('xai:', '')}</b>. Prompts are redacted and budget-capped.
-            </p>
-          ) : (
-            <div className="rounded-xl border border-amber-300/25 bg-amber-300/[.06] p-3 text-amber-100/90">
-              <div className="flex items-center gap-2 font-medium text-amber-100">
-                <AlertTriangle className="size-4" aria-hidden /> {unknown ? 'Grok has not been checked yet' : 'Grok is not reachable'}
-              </div>
-              <p className="mt-1">
-                Put <Code>HQ_XAI_API_KEY=…</Code> in <Code>.env</Code> on this Mac and restart HQ. Local models keep working meanwhile.
-              </p>
-              {c.reason && <p className="mt-1 text-xs text-amber-100/70">{c.reason}</p>}
+        <p>
+          {e.text}
+          {engineOf(s) === 'both' ? ` Mode: ${mode}.` : ''}
+          {subs && s.cloud_ai_enabled !== false ? ` Subscriptions in use first: ${subs}.` : ''}
+        </p>
+        {cloudOn && providers.length > 0 && (
+          <ul className="space-y-1">
+            {providers.map((p) => (
+              <li key={p.label} className="flex items-center justify-between gap-3">
+                <span className="text-ink/90">{p.label}</span>
+                <Badge size="xs" color={p.available ? colors.ok : colors.warn}>{p.available ? 'reachable' : p.installed === false ? 'not installed' : 'unavailable'}</Badge>
+              </li>
+            ))}
+          </ul>
+        )}
+        {cloudOn && !ok && (
+          <div className="rounded-xl border border-amber-300/25 bg-amber-300/[.06] p-3 text-amber-100/90">
+            <div className="flex items-center gap-2 font-medium text-amber-100">
+              <AlertTriangle className="size-4" aria-hidden /> {unknown ? 'Cloud providers have not been checked yet' : 'No cloud provider is reachable'}
             </div>
-          ))}
+            <p className="mt-1">
+              Grok: put <Code>HQ_XAI_API_KEY=…</Code> in <Code>.env</Code>. Claude CLI: <Code>claude auth login</Code>. ChatGPT: <Code>codex login</Code>. Local models keep
+              working meanwhile.
+            </p>
+            {c.reason && <p className="mt-1 text-xs text-amber-100/70">{c.reason}</p>}
+          </div>
+        )}
         <div className="flex items-center justify-between gap-3">
-          <span className="text-xs text-faint">{c.checked_at ? `Grok checked ${formatRelative(c.checked_at)}` : 'Grok is checked every 10 minutes'}</span>
+          <span className="text-xs text-faint">{c.checked_at ? `checked ${formatRelative(c.checked_at)}` : 'cloud providers are checked every 10 minutes'}</span>
           <Button size="sm" icon={RotateCcw} loading={recheck.isPending} onClick={() => recheck.mutate()}>
             Re-check
           </Button>

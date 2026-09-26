@@ -1,11 +1,12 @@
-/** AI & budget: the local/Grok switches, API-saving mode, Grok's daily limits with a live gauge, which Grok models
- * are used, and the final sign-off rule. The full usage dashboard lives at /usage. */
+/** AI & budget: the local / cloud / per-provider switches, API-saving mode, Grok's daily limits with a live gauge,
+ * which Grok, Claude CLI and Codex CLI models are used (and HQ's share of each subscription window), and the final
+ * sign-off rule. The full usage dashboard lives at /usage. */
 import { useQuery } from '@tanstack/react-query';
 import { BadgeCheck, CalendarClock, Cpu, DollarSign, Hash, HandHelping, KeyRound, Moon, Power, Sparkles, Star, Wand2, type LucideIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { Badge } from '@/components/Badge';
-import { EnginesControl, ModeControl } from '@/components/AIEngines';
+import { EnginesControl, ModeControl, ProvidersControl } from '@/components/AIEngines';
 import { TextInput } from '@/pages/Agents/formKit';
 import type { ReactNode } from 'react';
 import { GlassPanel } from '@/components/GlassPanel';
@@ -15,7 +16,7 @@ import { api } from '@/lib/api';
 import { formatCompact, formatDateTimeIST, formatUSD } from '@/lib/format';
 import { useSettings, useStats } from '@/lib/store';
 import { colors, withAlpha } from '@/theme/tokens';
-import { NumberField, SettingRow, Slider, Toggle } from '../controls';
+import { NumberField, Segmented, SettingRow, Slider, Toggle } from '../controls';
 import { Callout, Section } from '../parts';
 import { useSaver } from '../saver';
 
@@ -37,9 +38,11 @@ export function BudgetTab() {
   return (
     <div className="space-y-5">
       <Section kicker="On / off" title="Which AI HQ may use" icon={Power} color="#34D399" rows={false}
-        description="Local models (free, private) and Grok (paid) can each be switched off. Individual local models have their own switch on the Models page.">
+        description="Local models (free, private) and each cloud provider can be switched on or off. Individual local models have their own switch on the Models page.">
         <EnginesControl />
-        <div className="mt-5 mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted">How much Grok to use</div>
+        <div className="mt-5 mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted">Cloud providers</div>
+        <ProvidersControl />
+        <div className="mt-5 mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted">How much cloud to use</div>
         <ModeControl />
       </Section>
 
@@ -170,7 +173,7 @@ export function BudgetTab() {
           color="#FBBF24"
           title="“Important” from match score"
           htmlFor="important"
-          description="In Balanced mode, applications at or above this match score may use the strong Grok model and a polish. API-saving mode also allows a Grok rescue for these when the local writer fails."
+          description="In Balanced mode, applications at or above this match score may use a strong cloud model and a polish. API-saving mode also allows a cloud rescue for these when the local writer fails."
           control={
             <NumberField
               id="important"
@@ -189,6 +192,7 @@ export function BudgetTab() {
       </Section>
 
       <ProviderSection live={live} />
+      <SubscriptionSection />
 
       <Section kicker="Safety" title="Final sign-off" icon={Wand2} color={GROK}>
         <SettingRow
@@ -196,7 +200,7 @@ export function BudgetTab() {
           color={GROK}
           title="Require an independent sign-off"
           htmlFor="signoff"
-          description="Nothing is submitted until a model that didn't write the text checks every claim against your facts: a second local model when one qualifies (free), Grok otherwise. Turning this off leaves the deterministic rules and the local checker."
+          description="Nothing is submitted until a model that didn't write the text checks every claim against your facts: a second local model when one qualifies (free), a cloud model otherwise. Turning this off leaves the deterministic rules and the local checker."
           control={<Toggle id="signoff" label="Require an independent sign-off" checked={s.signoff_required !== false} onChange={(v) => save({ signoff_required: v })} color={GROK} size="lg" />}
         />
       </Section>
@@ -310,8 +314,45 @@ function ProviderSection({ live }: { live: Awaited<ReturnType<typeof api.budget>
   );
 }
 
+function SubscriptionSection() {
+  const s = useSettings();
+  const { save } = useSaver();
+  const models = [
+    { value: 'haiku', label: 'Haiku' },
+    { value: 'sonnet', label: 'Sonnet' },
+    { value: 'opus', label: 'Opus' },
+  ];
+  return (
+    <Section kicker="Subscriptions" title="Claude CLI and ChatGPT (Codex CLI)" icon={Cpu} color="#F59E0B"
+      description="Used before Grok when switched on (no per-call cost). HQ only takes its share of each 5-hour window, so the rest of your plan stays yours; a “limit reached” answer pauses that provider until it resets.">
+      <SettingRow
+        title="Claude — fast model"
+        description="Escalations, polish and the eligibility third opinion."
+        control={<Segmented aria-label="Claude fast model" value={String(s.claude_cli_model ?? 'sonnet')} onChange={(v) => save({ claude_cli_model: v })} color="#F59E0B" options={models} />}
+      />
+      <SettingRow
+        title="Claude — sign-off model"
+        description="Signs off important applications. Should differ from the fast model."
+        control={<Segmented aria-label="Claude sign-off model" value={String(s.claude_cli_strong_model ?? 'opus')} onChange={(v) => save({ claude_cli_strong_model: v })} color="#F59E0B" options={models} />}
+      />
+      <SettingRow
+        title="Claude — HQ calls per 5-hour window"
+        htmlFor="claude-window"
+        control={<NumberField id="claude-window" aria-label="Claude calls per 5-hour window" value={Number(s.claude_window_calls ?? 30)} onChange={(v) => save({ claude_window_calls: v })} min={0} max={1000} step={5} integer stepper className="w-36" />}
+      />
+      <ModelField label="ChatGPT — model" settingKey="codex_model" fallback="" models={[]}
+        description="Leave empty to use the Codex CLI's default model." />
+      <SettingRow
+        title="ChatGPT — HQ calls per 5-hour window"
+        htmlFor="codex-window"
+        control={<NumberField id="codex-window" aria-label="ChatGPT calls per 5-hour window" value={Number(s.codex_window_calls ?? 30)} onChange={(v) => save({ codex_window_calls: v })} min={0} max={1000} step={5} integer stepper className="w-36" />}
+      />
+    </Section>
+  );
+}
+
 function ModelField({ label, settingKey, fallback, models, description }: {
-  label: string; settingKey: 'xai_model' | 'xai_signoff_model'; fallback: string; models: string[]; description: string;
+  label: string; settingKey: 'xai_model' | 'xai_signoff_model' | 'codex_model'; fallback: string; models: string[]; description: string;
 }) {
   const s = useSettings();
   const { save } = useSaver();
@@ -332,7 +373,7 @@ function ModelField({ label, settingKey, fallback, models, description }: {
             list={listId}
             value={draft}
             onChange={(e) => setDraft(e.target.value.trim())}
-            onBlur={() => draft && draft !== current && save({ [settingKey]: draft })}
+            onBlur={() => (draft || settingKey === 'codex_model') && draft !== current && save({ [settingKey]: draft })}
             onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
             className="w-48"
           />

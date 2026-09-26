@@ -28,7 +28,7 @@ export function FitRing({ score, size = 34, stroke, caption, className }: FitRin
       className={cn('relative inline-grid shrink-0 place-items-center', className)}
       style={{ width: size, height: size }}
       role="img"
-      aria-label={score == null ? 'Fit not scored yet' : `Fit ${Math.round(v)} of 100`}
+      aria-label={score == null ? 'Match not scored yet' : `Match ${Math.round(v)} of 100`}
     >
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="absolute inset-0 -rotate-90" aria-hidden>
         <circle
@@ -61,7 +61,7 @@ export function FitRing({ score, size = 34, stroke, caption, className }: FitRin
         >
           {score == null ? '—' : Math.round(v)}
         </span>
-        {caption && <span className="mt-1 font-mono text-[9px] uppercase tracking-[0.2em] text-faint">fit</span>}
+        {caption && <span className="mt-1 font-mono text-[9px] uppercase tracking-[0.2em] text-faint">match</span>}
       </span>
     </span>
   );

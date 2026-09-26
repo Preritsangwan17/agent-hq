@@ -67,7 +67,7 @@ export function ProfileTab() {
             {done}/{required.length} required confirmed
           </Badge>
         }
-        description="Agents only use a value after you save it here. Until then, any question that needs it becomes a Needs Prerit item. The share setting limits where a value may appear; the phone number is never sent to Claude."
+        description="Agents only use a value after you save it here. Until then, any question that needs it becomes a Needs Prerit item. The share setting limits where a value may appear; the phone number is never sent to any cloud model."
       >
         {fields.map((f) => (
           <FieldRow key={f.key} field={f} />
