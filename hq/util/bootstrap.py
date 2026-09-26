@@ -13,7 +13,7 @@ def main() -> int:
     from hq.agents.registry import Registry
     from hq.api.auth import ensure_session_secret
     from hq.db.conn import connect, tx
-    from hq.db.migrate import migrate
+    from hq.db.migrate import migrate, repair_schema
     from hq.db.seed import seed_all
 
     settings.load_env()
@@ -21,7 +21,8 @@ def main() -> int:
     ensure_session_secret()
     conn = connect()
     try:
-        applied = migrate(conn)
+        applied = migrate(conn, repair=False)
+        repaired = repair_schema(conn)
         with tx(conn):
             seeded = seed_all(conn)["settings"]
         registry = Registry(settings.AGENTS_DIR, conn)
@@ -29,7 +30,7 @@ def main() -> int:
         legacy = import_legacy_once(conn)
     finally:
         conn.close()
-    print(summary(applied, seeded, len(registry.configs), legacy))
+    print(summary(applied, seeded, len(registry.configs), legacy, len(repaired)))
     errors = [agent for agent, kind in changes if kind == "error"]
     if errors:
         print(f"! invalid agent file(s): {', '.join(f'{e}.yaml' for e in errors)} — the last good config is kept; "
@@ -58,7 +59,7 @@ def import_legacy_once(conn, src: Path | None = None) -> int:
     return len(report.items)
 
 
-def summary(applied: list[int], seeded: int, agents: int, legacy: int = 0) -> str:
+def summary(applied: list[int], seeded: int, agents: int, legacy: int = 0, repaired: int = 0) -> str:
     """One friendly line for start.sh, e.g. `database ready (data/hq.db, up to date) · 10 agents`."""
     try:
         where = settings.DB_PATH.relative_to(settings.ROOT)
@@ -67,7 +68,8 @@ def summary(applied: list[int], seeded: int, agents: int, legacy: int = 0) -> st
     schema = f"migrated to v{max(applied)}" if applied else "up to date"
     extra = f", {seeded} default settings added" if seeded else ""
     imported = f" · {legacy} legacy applications imported" if legacy else ""
-    return f"database ready ({where}, {schema}{extra}) · {agents} agents{imported}"
+    fixed = f", repaired {repaired} missing table/column/index item(s)" if repaired else ""
+    return f"database ready ({where}, {schema}{extra}{fixed}) · {agents} agents{imported}"
 
 
 if __name__ == "__main__":
