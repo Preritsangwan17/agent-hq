@@ -22,7 +22,14 @@ Not built: the daily Strategist report and the Analytics charts (the pages exist
 
 ## Install and start (once)
 
-Needs Homebrew, `uv` and Node: `brew install uv node`.
+Easiest: paste this one line into Terminal (installs everything, downloads HQ into `~/agent-hq`, starts it and
+opens Safari):
+
+```sh
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/Preritsangwan17/agent-hq/main/install.sh)"
+```
+
+Or by hand — needs Homebrew, `uv` and Node (`brew install uv node`):
 
 ```sh
 cd agent-hq
