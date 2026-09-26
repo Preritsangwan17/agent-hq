@@ -600,3 +600,106 @@ export interface AgentValidation {
   yaml: string | null;
   probe: { ok: boolean; url: string; status?: number; error?: string; detail?: { models?: string[] } | null } | null;
 }
+
+// ── models / roles / budget (phase b) ─────────────────────────────────
+export interface ModelScore {
+  n?: number | null;
+  accuracy?: number | null;
+  precision?: number | null;
+  recall?: number | null;
+  f1?: number | null;
+  json_valid_first?: number | null;
+  json_valid_after_repair?: number | null;
+  tok_s_gen?: number | null;
+  tok_s_prompt?: number | null;
+  ttft_ms?: number | null;
+  peak_footprint_gb?: number | null;
+}
+
+export interface Model {
+  id: string;
+  runtime: 'mlx' | 'ollama' | 'lmstudio' | 'llamacpp' | (string & {});
+  name: string;
+  modality: string;
+  complete: boolean;
+  incomplete_reason: string | null;
+  runtime_supported: boolean;
+  size_gb: number | null;
+  params_b: number | null;
+  quant: string | null;
+  ctx_len: number | null;
+  est_ram_gb: number | null;
+  measured_ram_gb: number | null;
+  status: 'available' | 'loaded' | 'broken' | 'unsupported' | (string & {});
+  pinned: boolean;
+  model_type: string | null;
+  roles: string[];
+  ranked_in: Record<string, number>;
+  scores: Record<string, ModelScore>;
+  role_scores: Record<string, number>;
+  last_benchmark_at: ISODate | null;
+  note?: string | null;
+}
+
+export interface RoleAssignment {
+  role: string;
+  label: string;
+  ranked: { model_id: string; score: number | null; source: 'auto' | 'override'; reason: string | null }[];
+  needs_claude_signoff?: boolean;
+}
+
+export interface MemoryState {
+  total_gb: number;
+  available_gb: number;
+  pool_used_gb: number;
+  pool_budget_gb: number;
+  pressure: 'normal' | 'warn' | 'critical';
+  user_active: boolean;
+  on_battery: boolean;
+  usability_mode: boolean;
+  usability_reason?: string | null;
+  servers?: { model_id: string; port: number; pid: number; footprint_gb: number | null; need_gb: number; in_use: number }[];
+  stale?: boolean;
+}
+
+export interface BenchState {
+  running: boolean;
+  model_id?: string;
+  task?: string;
+  progress?: number;
+  eta_s?: number | null;
+  finished_at?: ISODate;
+  error?: string;
+}
+
+export interface ClaudeState {
+  available: boolean | null;
+  logged_in: boolean;
+  reason?: string | null;
+  model?: string;
+  signoff_model?: string;
+  checked_at?: ISODate;
+}
+
+export interface ModelsResponse {
+  models: Model[];
+  roles: RoleAssignment[];
+  servers: { model_id: string; pid: number; port: number; started_at: ISODate; footprint_gb: number | null; status: string }[];
+  memory: MemoryState;
+  benchmark: BenchState;
+  claude: ClaudeState;
+}
+
+export interface BudgetState {
+  date_ist: string;
+  spent_usd: number;
+  reserved_usd: number;
+  budget_usd: number;
+  calls: number;
+  call_cap: number;
+  by_task: Record<string, { calls: number; spent_usd: number }>;
+  deferred_tasks: number;
+  claude_available: boolean | null;
+  last_error: string | null;
+  resets_at: ISODate;
+}

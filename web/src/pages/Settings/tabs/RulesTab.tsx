@@ -178,7 +178,7 @@ export function RulesTab() {
             onChange={(v) => save({ fit_draft_threshold: Math.round(v) }, SLIDE_MS)}
           />
         </SettingRow>
-        <SettingRow icon={Sparkles} color="#E879F9" title="Claude polish at fit ≥" phase="b" control={<Value>{polish}</Value>}>
+        <SettingRow icon={Sparkles} color="#E879F9" title="Claude polish at fit ≥" phase="live" control={<Value>{polish}</Value>}>
           <Slider
             aria-label="Fit threshold for Claude polish"
             value={polish}

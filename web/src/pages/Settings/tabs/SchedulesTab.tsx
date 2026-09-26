@@ -1,5 +1,5 @@
 /** Schedules: quiet hours (24 h dial in IST), keep-awake, and a read-only overview of agent schedules. */
-import { ArrowRight, BatteryCharging, CalendarClock, Clock3, MoonStar, Sunrise, Sunset } from 'lucide-react';
+import { ArrowRight, BatteryCharging, CalendarClock, Clock3, MemoryStick, MoonStar, Sunrise, Sunset } from 'lucide-react';
 import { Link } from 'react-router';
 import { AgentAvatar } from '@/components/AgentAvatar';
 import { Badge } from '@/components/Badge';
@@ -9,7 +9,7 @@ import { useAgentsList, useSettings } from '@/lib/store';
 import type { QuietHours } from '@/lib/types';
 import { withAlpha } from '@/theme/tokens';
 import { describeSchedule } from '@/pages/Agents/schedule';
-import { SettingRow, Toggle } from '../controls';
+import { SettingRow, Slider, Toggle } from '../controls';
 import { Section } from '../parts';
 import { useSaver } from '../saver';
 
@@ -66,7 +66,7 @@ export function SchedulesTab() {
           <div className="min-w-0 divide-y divide-white/[.06]">
             <SettingRow
               title="Enable quiet hours"
-              phase="b"
+              phase="live"
               htmlFor="quiet-on"
               description={q.enabled ? `${Math.floor(len / 60)} h ${len % 60 ? `${len % 60} min ` : ''}every night.` : 'Off — agents work around the clock.'}
               control={<Toggle id="quiet-on" checked={q.enabled} onChange={(v) => setQ({ enabled: v })} color={QUIET} size="lg" />}
@@ -88,6 +88,33 @@ export function SchedulesTab() {
           control={
             <Toggle id="keep-awake" checked={!!s.keep_awake} onChange={(v) => save({ keep_awake: v })} color="#A3E635" size="lg" />
           }
+        />
+      </Section>
+
+      <Section kicker="Local models" title="Memory pool" icon={MemoryStick} color="#22D3EE">
+        <SettingRow title="Pool budget for loaded models" control={<span className="font-display text-xl font-semibold text-ink tabular">{Number(s.model_pool_budget_gb ?? 30)} GB</span>}>
+          <Slider
+            aria-label="Model memory pool in gigabytes"
+            value={Number(s.model_pool_budget_gb ?? 30)}
+            min={4}
+            max={40}
+            step={1}
+            color="#22D3EE"
+            format={(v) => `${v} GB`}
+            onChange={(v) => save({ model_pool_budget_gb: v }, 350)}
+            marks={[
+              { value: 4, label: '4 GB' },
+              { value: 8, label: '8' },
+              { value: 30, label: '30 default' },
+              { value: 40, label: '40' },
+            ]}
+          />
+        </SettingRow>
+        <SettingRow
+          title="Usability mode"
+          htmlFor="usability"
+          description="While you're using the Mac (input in the last 5 minutes), on battery or in quiet hours, the pool shrinks to 8 GB and big models unload."
+          control={<Toggle id="usability" label="Usability mode" checked={s.usability_mode !== false} onChange={(v) => save({ usability_mode: v })} color="#22D3EE" size="lg" />}
         />
       </Section>
 
