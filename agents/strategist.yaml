@@ -1,0 +1,15 @@
+id: strategist
+name: Strategist (Claude)
+avatar: "🧭"
+color: "#E879F9"
+role: strategist
+description: Writes the daily pipeline review at 21:00 IST and proposes source and threshold changes.
+adapter: sim
+adapter_config: {sim_model: claude}
+model: null
+capabilities: [strategy.daily_review]
+cost_tier: claude
+concurrency: 1
+schedule: {mode: cron, cron: "0 21 * * *"}
+enabled: true
+builtin: true

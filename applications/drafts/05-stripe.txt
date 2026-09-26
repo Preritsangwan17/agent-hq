@@ -1,0 +1,11 @@
+Dear Hiring Team,
+
+I am Prerit Sangwan, a 2nd-year B.Tech student in Computer Science and Engineering with a focus on AI/ML at Bennett University, India. I am excited to apply for the Software Engineer Intern role at Stripe, as I am eager to contribute to impactful, ML-driven projects like anomaly detection and fraud controls. My academic and personal projects align with the technical depth and end-to-end ownership that Stripe values in its interns.
+
+I have built a full-stack recommendation system using item-based collaborative filtering on the Book-Crossing dataset, which involved a 4-stage pipeline (ingestion, validation, transformation, training) driven by YAML configuration, custom logging, and error handling. This project showcased my ability to manage data flow and model training in a structured, production-like environment. You can find the project here: https://github.com/Preritsangwan17/End-to-End-Book-Recommendation-System.
+
+While I have not previously worked in a professional internship, I am highly motivated to learn and contribute to Stripe’s mission. I am especially interested in understanding how ML models are integrated into real-time systems and am eager to support Stripe’s efforts in building robust, scalable financial infrastructure.
+
+Best regards,  
+Prerit Sangwan  
+sangwanprerit40@gmail.com | LinkedIn: https://www.linkedin.com/in/prerit-sangwan-1b7572304 | GitHub: https://github.com/Preritsangwan17

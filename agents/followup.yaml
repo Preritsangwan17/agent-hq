@@ -1,0 +1,15 @@
+id: followup
+name: Follow-up
+avatar: "⏰"
+color: "#FB923C"
+role: followup
+description: Schedules one polite follow-up 10 days after an email application with no reply.
+adapter: sim
+adapter_config: {sim_model: rules}
+model: null
+capabilities: [followup.schedule]
+cost_tier: local
+concurrency: 1
+schedule: {mode: on_demand}
+enabled: true
+builtin: true

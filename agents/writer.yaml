@@ -1,0 +1,15 @@
+id: writer
+name: Writer
+avatar: "✍️"
+color: "#A78BFA"
+role: writer
+description: Drafts cover letters sentence by sentence, citing Prerit's verified fact IDs and quoted job text.
+adapter: sim
+adapter_config: {sim_model: qwen3-coder-30b-a3b}
+model: null
+capabilities: [draft.cover_letter]
+cost_tier: local
+concurrency: 1
+schedule: {mode: on_demand}
+enabled: true
+builtin: true

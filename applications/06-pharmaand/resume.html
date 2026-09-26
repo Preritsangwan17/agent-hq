@@ -1,0 +1,32 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Prerit Sangwan - Resume</title><style>
+@page { size: A4; margin: 14mm 15mm; }
+body { font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif; font-size: 10.3pt; color: #111; line-height: 1.38; }
+h1 { font-size: 20pt; margin: 0 0 2px; letter-spacing: 0.2px; }
+.contact { font-size: 9.4pt; color: #333; margin-bottom: 8px; }
+.contact a, .proj a { color: #0b4f9c; text-decoration: none; }
+.summary { margin: 6px 0 4px; }
+h2 { font-size: 10.5pt; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #999; padding-bottom: 2px; margin: 12px 0 5px; }
+.ph { display: flex; justify-content: space-between; }
+.ph span { color: #444; font-size: 9.4pt; }
+.ph span:last-child { white-space: nowrap; padding-left: 12px; }
+.tech { font-style: italic; color: #444; font-size: 9.4pt; }
+ul { margin: 3px 0 7px 16px; padding: 0; } li { margin-bottom: 2px; }
+.sk b { display: inline-block; min-width: 88px; }
+</style></head><body>
+<h1>Prerit Sangwan</h1>
+<div class="contact">sangwanprerit40@gmail.com &middot; <a href="https://www.linkedin.com/in/prerit-sangwan-1b7572304">linkedin.com/in/prerit-sangwan-1b7572304</a> &middot; <a href="https://github.com/Preritsangwan17">github.com/Preritsangwan17</a> &middot; Indian citizen &middot; Open to relocation</div>
+<div class="summary">2nd-year Computer Science (AI/ML) student with two ML projects I can walk through in detail: a collaborative-filtering recommender and a churn classifier.</div>
+<h2>Education</h2>
+<div class="ph"><span style="color:#111;font-size:10.3pt"><b>Bennett University</b>, India &mdash; B.Tech, Computer Science and Engineering (AI/ML specialisation)</span><span>2nd year, in progress</span></div>
+<h2>Projects</h2><div class="proj"><div class="ph"><b><a href="https://github.com/Preritsangwan17/End-to-End-Book-Recommendation-System">End-to-End Book Recommendation System</a></b><span>Jun 2026</span></div>
+<div class="tech">Python, pandas, scikit-learn, SciPy, Streamlit</div><ul>
+<li>Built an item-based collaborative-filtering recommender on the Book-Crossing dataset (1.15M ratings, 271K books).</li>
+<li>Reduced sparsity by keeping users with 200+ ratings and books with 50+ ratings, giving a 742-book by 888-user rating matrix.</li>
+<li>Trained a k-nearest-neighbours model (scikit-learn, sparse CSR input) that returns the 5 most similar books.</li>
+<li>Structured the code as a 4-stage pipeline (ingestion, validation, transformation, training) driven by a YAML config, with custom logging and exception handling; ingestion falls back to local data if the download fails.</li>
+<li>Built a Streamlit app that retrains the model and shows 5 recommendations with cover images; prototyped a cosine-similarity version in Jupyter first.</li></ul></div><div class="proj"><div class="ph"><b><a href="https://github.com/Preritsangwan17/Churn-ml-model-project">Telco Customer Churn Prediction</a></b><span>Jan 2026</span></div>
+<div class="tech">Python, pandas, scikit-learn</div><ul>
+<li>Prepared the IBM Telco Customer Churn dataset (7,043 customers, cleaned to 7,032): one-hot encoded categorical fields and binned tenure into 12-month groups, giving 50 features.</li>
+<li>Trained a Random Forest classifier (100 trees) to predict churn and saved the model for reuse.</li></ul></div>
+<h2>Skills</h2><div class="sk"><b>Language:</b> Python</div><div class="sk"><b>ML and data:</b> scikit-learn (k-NN, Random Forest), pandas, NumPy, SciPy sparse matrices, collaborative filtering, cosine similarity, one-hot encoding, feature binning</div><div class="sk"><b>Tools:</b> Streamlit, Jupyter, Git and GitHub, YAML-configured modular pipelines, logging and exception handling</div>
+</body></html>

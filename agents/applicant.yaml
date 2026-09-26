@@ -1,0 +1,15 @@
+id: applicant
+name: Applicant
+avatar: "🚀"
+color: "#F472B6"
+role: applicant
+description: Applies by email (mock mailbox in dry run) or prepares a pre-filled pack for Prerit.
+adapter: sim
+adapter_config: {sim_model: mock-mailer}
+model: null
+capabilities: [apply.email_send, apply.manual_pack]
+cost_tier: local
+concurrency: 1
+schedule: {mode: on_demand}
+enabled: true
+builtin: true

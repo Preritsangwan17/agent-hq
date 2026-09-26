@@ -1,0 +1,15 @@
+Dear Hiring Team,
+
+I'm a 2nd-year B.Tech Computer Science (AI/ML) student at Bennett University, applying for the AI & Machine Learning Intern role in Hyderabad. Your posting asks for projects candidates can explain in detail; here are mine.
+
+End-to-End Book Recommendation System (https://github.com/Preritsangwan17/End-to-End-Book-Recommendation-System): item-based collaborative filtering on the Book-Crossing dataset. I filtered 1.15 million ratings to users with 200+ ratings and books with 50+ ratings (a 742-book by 888-user matrix), trained a k-nearest-neighbours model on a sparse matrix, and built a four-stage pipeline with YAML config, logging and error handling, plus a Streamlit app that shows five recommendations.
+
+Telco Customer Churn Prediction (https://github.com/Preritsangwan17/Churn-ml-model-project): I prepared the IBM Telco dataset with one-hot encoding and 12-month tenure bins (50 features) and trained a Random Forest classifier.
+
+I haven't yet used PyTorch, TensorFlow or LLM APIs; I'm learning them and would welcome the chance to do so on real problems. I'm willing to relocate to Hyderabad.
+
+Thank you for your time.
+
+Best regards,
+Prerit Sangwan
+sangwanprerit40@gmail.com | LinkedIn: https://www.linkedin.com/in/prerit-sangwan-1b7572304 | GitHub: https://github.com/Preritsangwan17

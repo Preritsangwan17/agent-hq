@@ -1,0 +1,15 @@
+Subject: TEEP internship enquiry (recommender systems) - Prerit Sangwan, B.Tech CSE, India
+
+Dear Professor Chiu,
+
+I'm Prerit Sangwan, a 2nd-year B.Tech Computer Science and Engineering student (AI/ML specialisation) at Bennett University, India. I found your MARS lab's listing on the TEEP portal and was drawn to its work on recommender systems and retrieval.
+
+I recently built an item-based collaborative-filtering book recommender on the Book-Crossing dataset (https://github.com/Preritsangwan17/End-to-End-Book-Recommendation-System). Filtering 1.15 million ratings down to a usable 742-book by 888-user matrix showed me how much sparsity limits simple recommenders, and I'd like to learn how a research lab tackles it.
+
+Would you consider me for a TEEP internship in your lab? Could you let me know whether positions are open and for which periods? My resume is attached.
+
+Thank you for your time.
+
+Best regards,
+Prerit Sangwan
+sangwanprerit40@gmail.com | LinkedIn: https://www.linkedin.com/in/prerit-sangwan-1b7572304 | GitHub: https://github.com/Preritsangwan17

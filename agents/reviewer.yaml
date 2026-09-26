@@ -1,0 +1,15 @@
+id: reviewer
+name: Reviewer (Claude)
+avatar: "🧠"
+color: "#FB7185"
+role: reviewer
+description: Final Claude sign-off on every outbound text before anything is applied.
+adapter: sim
+adapter_config: {sim_model: claude}
+model: null
+capabilities: [factcheck.signoff]
+cost_tier: claude
+concurrency: 1
+schedule: {mode: on_demand}
+enabled: true
+builtin: true

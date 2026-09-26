@@ -1,0 +1,3 @@
+Profile summary (paste into Outlier's application where asked):
+
+I'm a 2nd-year B.Tech Computer Science (AI/ML) student at Bennett University, India. I write Python in all my projects, mainly with pandas, NumPy and scikit-learn. My most complete project is an End-to-End Book Recommendation System (https://github.com/Preritsangwan17/End-to-End-Book-Recommendation-System): a four-stage pipeline with YAML config, logging and error handling, a k-nearest-neighbours model on a sparse matrix, and a Streamlit front end. I'm comfortable reading unfamiliar code, explaining why a solution works or fails, and writing clearly in English. I'm new to AI evaluation work and keen to learn it.

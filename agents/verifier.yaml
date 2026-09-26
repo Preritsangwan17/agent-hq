@@ -1,0 +1,15 @@
+id: verifier
+name: Verifier
+avatar: "🔎"
+color: "#2DD4BF"
+role: verifier
+description: Checks links, deadlines, eligibility, pay vs living cost and scam signals, then scores fit.
+adapter: sim
+adapter_config: {sim_model: qwen3-coder-30b-a3b}
+model: null
+capabilities: [verify.link, verify.deadline, verify.eligibility, verify.pay, verify.scam, score.fit]
+cost_tier: local
+concurrency: 2
+schedule: {mode: on_demand}
+enabled: true
+builtin: true

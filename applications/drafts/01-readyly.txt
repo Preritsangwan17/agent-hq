@@ -1,0 +1,11 @@
+Dear Hiring Team,
+
+I am writing to express my interest in the Product Engineer Intern role at Readyly. As a 2nd-year B.Tech student in Computer Science and Engineering with a focus on AI/ML, I have built a strong foundation in Python and machine learning tools. My project "End-to-End Book Recommendation System" (https://github.com/Preritsangwan17/End-to-End-Book-Recommendation-System) demonstrates my ability to design and deploy a complete pipeline from data ingestion to model training and user-facing application using Streamlit. This project involved building a k-nearest-neighbours model and a YAML-driven configuration system—skills that align well with the technical requirements of your role.
+
+While I have not yet worked with LLM APIs or agent frameworks, I am eager to learn and apply these technologies in a real-world setting. The opportunity to prototype agent behaviors and contribute to evaluation frameworks at Readyly excites me as it aligns with my passion for AI systems and product development. I am particularly drawn to the idea of designing and shipping LLM-powered agent workflows, and I am confident that my hands-on experience with data pipelines and model deployment will help me quickly adapt to the tools and challenges of agentic systems.
+
+I am available to work 20 hours per week remotely from India and am happy to relocate if needed. I would welcome the chance to contribute to Readyly’s mission and grow alongside your team.
+
+Best regards,  
+Prerit Sangwan  
+sangwanprerit40@gmail.com | LinkedIn: https://www.linkedin.com/in/prerit-sangwan-1b7572304 | GitHub: https://github.com/Preritsangwan17

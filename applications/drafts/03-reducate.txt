@@ -1,0 +1,11 @@
+Dear Hiring Team,
+
+I am a 2nd-year B.Tech student in Computer Science and Engineering with a focus on AI/ML at Bennett University, India. I am excited to apply for the Data Science Intern role at Reducate.ai. My academic and project work has given me a solid foundation in Python, machine learning, and data analysis. I have worked on real-world datasets and built end-to-end ML pipelines, including a churn prediction model using the IBM Telco dataset and a book recommendation system using collaborative filtering.
+
+The Telco Customer Churn Prediction project aligns well with the role's emphasis on data science and machine learning. In this project, I processed a dataset of over 7,000 customers, performed one-hot encoding and feature binning, and trained a Random Forest classifier. I also built a YAML-driven pipeline with custom logging and exception handling, which reflects my understanding of structured data workflows.
+
+I am eager to learn SQL and contribute to Reducate.ai’s data-driven initiatives. My experience with pandas, NumPy, and scikit-learn gives me a strong base to grow further. You can find more details about my work in the Telco Churn project here: https://github.com/Preritsangwan17/Churn-ml-model-project.
+
+Best regards,  
+Prerit Sangwan  
+sangwanprerit40@gmail.com | LinkedIn: https://www.linkedin.com/in/prerit-sangwan-1b7572304 | GitHub: https://github.com/Preritsangwan17

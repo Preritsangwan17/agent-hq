@@ -1,0 +1,9 @@
+Dear Hiring Team,
+
+I am writing to express my interest in the Summer@EPFL 2027 research internship program. As a second-year B.Tech student in Computer Science and Engineering with a focus on AI/ML at Bennett University, I am eager to gain research experience in machine learning, particularly in recommender systems and learning from sparse data. My project "End-to-End Book Recommendation System" (https://github.com/Preritsangwan17/End-to-End-Book-Recommendation-System) aligns closely with this interest, where I implemented item-based collaborative filtering on a large dataset using k-nearest-neighbours and scikit-learn. The project involved handling a sparse rating matrix and building a Streamlit web app for model retraining and recommendations.
+
+I am especially drawn to EPFL's research environment and its focus on innovative machine learning approaches. I am keen to learn more about advanced techniques for handling sparse data and improving recommendation systems in a research setting. While I have not worked with cloud platforms or deep learning frameworks yet, I am enthusiastic about learning these during the internship.
+
+Best regards,  
+Prerit Sangwan  
+sangwanprerit40@gmail.com | LinkedIn: https://www.linkedin.com/in/prerit-sangwan-1b7572304 | GitHub: https://github.com/Preritsangwan17

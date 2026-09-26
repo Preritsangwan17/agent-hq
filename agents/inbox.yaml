@@ -1,0 +1,15 @@
+id: inbox
+name: Inbox Watcher
+avatar: "📬"
+color: "#A3E635"
+role: inbox
+description: Watches for replies and classifies them; interviews, offers and money are notify-only.
+adapter: sim
+adapter_config: {sim_model: qwen3-4b-2507}
+model: null
+capabilities: [inbox.poll, inbox.classify]
+cost_tier: local
+concurrency: 1
+schedule: {mode: interval, minutes: 2}
+enabled: true
+builtin: true

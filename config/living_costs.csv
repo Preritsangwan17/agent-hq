@@ -1,0 +1,31 @@
+key,country_iso2,city,currency,monthly_local,basis,confidence,source_note,as_of
+IN-home,IN,Remote from India,INR,12000,"remote from India, no relocation: food share, phone/internet, local travel, personal basics",provisional,provisional estimate; to be researched with sources in phase (c),2026-09-26
+IN-bengaluru,IN,Bengaluru,INR,22000,"student: shared room/PG + food + local transport + phone/internet + basics",provisional,provisional estimate; to be researched with sources in phase (c),2026-09-26
+IN-hyderabad,IN,Hyderabad,INR,18000,"student: shared room/PG + food + local transport + phone/internet + basics",provisional,provisional estimate; to be researched with sources in phase (c),2026-09-26
+IN-delhi,IN,Delhi,INR,20000,"student: shared room/PG + food + local transport + phone/internet + basics",provisional,provisional estimate; to be researched with sources in phase (c),2026-09-26
+IN-gurugram,IN,Gurugram,INR,22000,"student: shared room/PG + food + local transport + phone/internet + basics",provisional,provisional estimate; to be researched with sources in phase (c),2026-09-26
+IN-noida,IN,Noida,INR,17000,"student: shared room/PG + food + local transport + phone/internet + basics",provisional,provisional estimate; to be researched with sources in phase (c),2026-09-26
+IN-greater-noida,IN,Greater Noida,INR,14000,"student: shared room/PG + food + local transport + phone/internet + basics",provisional,provisional estimate; to be researched with sources in phase (c),2026-09-26
+IN-mumbai,IN,Mumbai,INR,28000,"student: shared room/PG + food + local transport + phone/internet + basics",provisional,provisional estimate; to be researched with sources in phase (c),2026-09-26
+IN-pune,IN,Pune,INR,18000,"student: shared room/PG + food + local transport + phone/internet + basics",provisional,provisional estimate; to be researched with sources in phase (c),2026-09-26
+IN-chennai,IN,Chennai,INR,18000,"student: shared room/PG + food + local transport + phone/internet + basics",provisional,provisional estimate; to be researched with sources in phase (c),2026-09-26
+IN-kolkata,IN,Kolkata,INR,15000,"student: shared room/PG + food + local transport + phone/internet + basics",provisional,provisional estimate; to be researched with sources in phase (c),2026-09-26
+TW-chiayi,TW,Chiayi,TWD,17000,"student: dorm or shared room + food + local transport + phone + basics",provisional,provisional estimate; to be researched with sources in phase (c),2026-09-26
+TW-taipei,TW,Taipei,TWD,25000,"student: shared room + food + MRT/bus + phone + basics",provisional,provisional estimate; to be researched with sources in phase (c),2026-09-26
+JP-tokyo,JP,Tokyo,JPY,150000,"student: share house room + food + commuter pass + phone + basics",provisional,provisional estimate; to be researched with sources in phase (c),2026-09-26
+CH-lausanne,CH,Lausanne,CHF,1900,"student: student room + food + transport pass + basic health insurance share + basics",provisional,provisional estimate; to be researched with sources in phase (c),2026-09-26
+CH-zurich,CH,Zurich,CHF,2200,"student: student room + food + transport pass + basic health insurance share + basics",provisional,provisional estimate; to be researched with sources in phase (c),2026-09-26
+DE-berlin,DE,Berlin,EUR,1150,"student: WG room + food + Deutschlandticket + insurance share + basics",provisional,provisional estimate; to be researched with sources in phase (c),2026-09-26
+DE-munich,DE,Munich,EUR,1350,"student: WG room + food + Deutschlandticket + insurance share + basics",provisional,provisional estimate; to be researched with sources in phase (c),2026-09-26
+FR-paris,FR,Paris,EUR,1300,"student: shared room/studio share + food + Navigo pass + basics",provisional,provisional estimate; to be researched with sources in phase (c),2026-09-26
+GB-london,GB,London,GBP,1600,"student: shared room + food + Oyster/travelcard + phone + basics",provisional,provisional estimate; to be researched with sources in phase (c),2026-09-26
+SG-singapore,SG,Singapore,SGD,2200,"student: shared HDB room + hawker food + MRT + phone + basics",provisional,provisional estimate; to be researched with sources in phase (c),2026-09-26
+CA-toronto,CA,Toronto,CAD,2300,"student: shared room + food + TTC pass + phone + basics",provisional,provisional estimate; to be researched with sources in phase (c),2026-09-26
+US-san-francisco,US,San Francisco,USD,3300,"student: shared room + food + transit + phone + basics",provisional,provisional estimate; to be researched with sources in phase (c),2026-09-26
+US-new-york,US,New York,USD,3200,"student: shared room + food + MetroCard + phone + basics",provisional,provisional estimate; to be researched with sources in phase (c),2026-09-26
+US-seattle,US,Seattle,USD,2600,"student: shared room + food + transit + phone + basics",provisional,provisional estimate; to be researched with sources in phase (c),2026-09-26
+AE-abu-dhabi,AE,Abu Dhabi,AED,4500,"student: shared room + food + transport + phone + basics",provisional,provisional estimate; to be researched with sources in phase (c),2026-09-26
+AE-dubai,AE,Dubai,AED,5000,"student: shared room + food + metro/bus + phone + basics",provisional,provisional estimate; to be researched with sources in phase (c),2026-09-26
+NL-amsterdam,NL,Amsterdam,EUR,1500,"student: shared room + food + transit/bike + insurance share + basics",provisional,provisional estimate; to be researched with sources in phase (c),2026-09-26
+PL-warsaw,PL,Warsaw,PLN,4000,"student: shared room + food + ZTM pass + phone + basics",provisional,provisional estimate; to be researched with sources in phase (c),2026-09-26
+QA-doha,QA,Doha,QAR,4500,"student: shared room + food + metro/bus + phone + basics",provisional,provisional estimate; to be researched with sources in phase (c),2026-09-26

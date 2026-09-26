@@ -1,0 +1,88 @@
+{
+  "seed": true,
+  "quote": "INR",
+  "note": "Fallback FX rates (1 unit of currency = rate INR) used when Frankfurter is unreachable or HQ_OFFLINE=1. Refresh: python -m hq.pipeline.verify.fx --write-seed",
+  "generated_at": "2026-09-26T14:31:13.402Z",
+  "rates": {
+    "USD": {
+      "rate": 95.82,
+      "date": "2026-09-25",
+      "source": "frankfurter v1 (ECB reference rate)"
+    },
+    "EUR": {
+      "rate": 109.2605,
+      "date": "2026-09-25",
+      "source": "frankfurter v1 (ECB reference rate)"
+    },
+    "GBP": {
+      "rate": 126.98,
+      "date": "2026-09-25",
+      "source": "frankfurter v1 (ECB reference rate)"
+    },
+    "CHF": {
+      "rate": 115.68,
+      "date": "2026-09-25",
+      "source": "frankfurter v1 (ECB reference rate)"
+    },
+    "TWD": {
+      "rate": 3.0144,
+      "date": "2026-09-26",
+      "source": "frankfurter v2"
+    },
+    "JPY": {
+      "rate": 0.60801,
+      "date": "2026-09-25",
+      "source": "frankfurter v1 (ECB reference rate)"
+    },
+    "SGD": {
+      "rate": 75.026,
+      "date": "2026-09-25",
+      "source": "frankfurter v1 (ECB reference rate)"
+    },
+    "CAD": {
+      "rate": 67.75,
+      "date": "2026-09-25",
+      "source": "frankfurter v1 (ECB reference rate)"
+    },
+    "AED": {
+      "rate": 26.104,
+      "date": "2026-09-26",
+      "source": "frankfurter v2"
+    },
+    "AUD": {
+      "rate": 67.361,
+      "date": "2026-09-25",
+      "source": "frankfurter v1 (ECB reference rate)"
+    },
+    "PLN": {
+      "rate": 24.992,
+      "date": "2026-09-25",
+      "source": "frankfurter v1 (ECB reference rate)"
+    },
+    "QAR": {
+      "rate": 26.337,
+      "date": "2026-09-26",
+      "source": "frankfurter v2"
+    },
+    "SAR": {
+      "rate": 25.565,
+      "date": "2026-09-26",
+      "source": "frankfurter v2"
+    },
+    "KRW": {
+      "rate": 0.07071,
+      "date": "2026-09-25",
+      "source": "frankfurter v1 (ECB reference rate)"
+    },
+    "HKD": {
+      "rate": 12.2153,
+      "date": "2026-09-25",
+      "source": "frankfurter v1 (ECB reference rate)"
+    },
+    "CNY": {
+      "rate": 14.2728,
+      "date": "2026-09-25",
+      "source": "frankfurter v1 (ECB reference rate)"
+    }
+  }
+}

@@ -16,3 +16,4 @@ web/dist/
 .DS_Store
 # artifacts
 artifacts/
+.ruff_cache/

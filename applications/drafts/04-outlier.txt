@@ -1,0 +1,11 @@
+Dear Hiring Team,
+
+I am a second-year B.Tech student in Computer Science and Engineering with a specialization in AI/ML at Bennett University, India. I write Python code regularly as part of my academic projects and have built two end-to-end machine learning systems from scratch. My most relevant project is the "End-to-End Book Recommendation System", which uses item-based collaborative filtering and k-nearest neighbors in scikit-learn. You can find the code here: https://github.com/Preritsangwan17/End-to-End-Book-Recommendation-System.
+
+I have experience working with structured data, building pipelines, and deploying models through Streamlit. My projects involve data ingestion, validation, transformation, and training stages, all managed with YAML configuration files and custom logging. I'm comfortable working with sparse matrices, pandas, NumPy, and Jupyter notebooks.
+
+I am eager to contribute to improving AI coding models by writing clean, well-structured code and evaluating solutions. While I haven’t worked with LLMs or cloud environments yet, I am excited to learn and grow in this space.
+
+Best regards,  
+Prerit Sangwan  
+sangwanprerit40@gmail.com | LinkedIn: https://www.linkedin.com/in/prerit-sangwan-1b7572304 | GitHub: https://github.com/Preritsangwan17

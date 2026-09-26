@@ -1,0 +1,15 @@
+Dear Summer@EPFL Selection Committee,
+
+I am a second-year B.Tech student in Computer Science and Engineering (AI/ML specialisation) at Bennett University, India, and I am applying to Summer@EPFL 2027 to gain my first research experience in machine learning.
+
+My interest in research comes from a project that raised more questions than it answered. I built an item-based collaborative-filtering recommender on the Book-Crossing dataset (https://github.com/Preritsangwan17/End-to-End-Book-Recommendation-System). To make a k-nearest-neighbours model usable, I kept only users with 200+ ratings and books with 50+ ratings, shrinking 1.15 million ratings on 271,000 books to a 742-book by 888-user matrix. The model works on that dense core, but it cannot recommend the vast majority of books. I want to learn how researchers approach sparsity, cold start and evaluation, rather than filtering the problem away.
+
+Building the project also gave me habits I would bring to a lab: a four-stage pipeline configured through YAML, with logging and error handling so runs can be repeated, plus a Streamlit interface for inspecting results. I also trained a Random Forest churn classifier on the IBM Telco dataset.
+
+I have not yet worked in a research group or used deep learning frameworks, and that is exactly why a structured summer at EPFL would matter to me: working with a supervisor on a real problem, learning to read papers critically and to design careful experiments. I would be glad to work on recommender systems, data mining or any machine learning project where I can contribute and learn.
+
+Thank you for considering my application.
+
+Sincerely,
+Prerit Sangwan
+sangwanprerit40@gmail.com | GitHub: https://github.com/Preritsangwan17

@@ -1,0 +1,11 @@
+Dear Hiring Team,
+
+I am writing to express my interest in the AI & Machine Learning Intern position at pharma&. As a 2nd-year B.Tech student in Computer Science and Engineering with a focus on AI/ML, I have worked on two machine learning projects that align well with the responsibilities of this role. My most relevant project is the "End-to-End Book Recommendation System," which I developed using item-based collaborative filtering with the Book-Crossing dataset. It involved building a k-nearest-neighbours model in scikit-learn, handling a large sparse matrix, and deploying a Streamlit web app to show recommendations. The project is available at https://github.com/Preritsangwan17/End-to-End-Book-Recommendation-System.
+
+The second project, "Telco Customer Churn Prediction," involved working with a real-world dataset to perform feature engineering and train a Random Forest classifier. I handled data cleaning, encoding categorical variables, and binning numerical features to improve model performance. Both projects demonstrate my ability to work through the full lifecycle of an ML model, from data ingestion to model deployment.
+
+I am eager to learn more about GenAI and LLM applications at pharma&, and I am open to learning new tools and techniques on the job. I am also willing to relocate to Hyderabad for the duration of the internship.
+
+Best regards,  
+Prerit Sangwan  
+sangwanprerit40@gmail.com | LinkedIn: https://www.linkedin.com/in/prerit-sangwan-1b7572304 | GitHub: https://github.com/Preritsangwan17

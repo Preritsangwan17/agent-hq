@@ -1,0 +1,13 @@
+Dear Hiring Team,
+
+I'm a 2nd-year B.Tech Computer Science (AI/ML) student at Bennett University, applying for the Machine Learning Intern role. Cleaning and structuring messy data is the part of machine learning I have spent the most time on, which is why this role appeals to me.
+
+In my End-to-End Book Recommendation System (https://github.com/Preritsangwan17/End-to-End-Book-Recommendation-System), I merged the Book-Crossing ratings and books tables (1.15 million ratings), removed duplicate user-title pairs, and kept users with 200+ ratings and books with 50+ ratings, leaving a 742-book by 888-user matrix. The code runs as a four-stage Python pipeline with YAML config, logging and error handling, so each step can be rerun and checked. In a separate churn project I prepared the IBM Telco dataset (one-hot encoding, tenure binning) for a Random Forest classifier.
+
+I haven't worked with knowledge graphs or LLMs yet. Your posting says that's fine, and I'm keen to learn how extracted business data is linked and deduplicated at scale.
+
+Thank you for your time.
+
+Best regards,
+Prerit Sangwan
+sangwanprerit40@gmail.com | LinkedIn: https://www.linkedin.com/in/prerit-sangwan-1b7572304 | GitHub: https://github.com/Preritsangwan17

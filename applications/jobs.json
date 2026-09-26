@@ -1,0 +1,122 @@
+[
+  {
+    "id": "01-readyly",
+    "company": "Readyly",
+    "role": "Product Engineer Intern - AI Agentic Systems",
+    "location": "India (remote), part-time 20 hours/week, 6 months",
+    "pay": "INR 25,000/month",
+    "apply": "https://in.linkedin.com/jobs/view/product-engineer-intern-%E2%80%93-ai-agentic-systems-at-readyly-4468467368",
+    "about": "Readyly builds AI agentic systems. Interns design and ship LLM-powered agent workflows and product features, prototype agent behaviours, analyse agent performance and failure modes, and contribute to evaluation frameworks. Wants Python (or React/Node), data structures and software design, and genuine interest in AI agents. LLM API experience is listed as a plus.",
+    "angle": "Lead with the Book Recommendation System as proof he can build a complete, rerunnable pipeline plus a user-facing Streamlit app. Say he has not yet built with LLM APIs or agent frameworks and is keen to learn them; 20 hours/week part-time fits alongside his studies.",
+    "project": "book",
+    "resume_focus": "product engineering: end-to-end pipeline, user-facing app, modular Python code"
+  },
+  {
+    "id": "02-logphase",
+    "company": "LogPhase",
+    "role": "Machine Learning Intern",
+    "location": "Remote (company based in Berlin, Germany), 6 months, 1:30 PM - 10:30 PM IST",
+    "pay": "INR 25,000 - 40,000/month",
+    "apply": "https://internshala.com/internship/detail/work-from-home-machine-learning-internship-at-logphase1789982327",
+    "about": "LogPhase builds a knowledge graph behind an M&A buyer-discovery platform. Interns write Python to extract data from business documents, clean and deduplicate it, extend the knowledge graph, and run experiments on AI components with measurable results. No prior knowledge-graph or LLM experience needed; they want proof of learning ability through projects.",
+    "angle": "Lead with the data-cleaning and filtering work in the Book Recommendation System (1.15M ratings filtered to a 742 x 888 matrix, merged and de-duplicated tables) since cleaning and deduplication is the core of this role. Mention the churn project's feature preparation briefly.",
+    "project": "book",
+    "resume_focus": "data cleaning, deduplication, merging tables, reproducible Python pipelines"
+  },
+  {
+    "id": "03-reducate",
+    "company": "Reducate.ai",
+    "role": "Data Science Intern",
+    "location": "Remote, 6 months, flexible hours",
+    "pay": "INR 15,000/month",
+    "apply": "https://internshala.com/internship/detail/work-from-home-data-science-internship-at-reducateai1790182395",
+    "about": "Reducate.ai is a technology-led group founded in 2019 by IIT BHU and IIM Ahmedabad alumni. The data science internship asks for Data Analytics, Data Science, Machine Learning, Python and SQL.",
+    "angle": "Lead with the Telco churn project (a classic business data science problem: feature preparation and a Random Forest classifier) and back it with the Book Recommendation System for pandas depth. Do not claim SQL.",
+    "project": "churn",
+    "resume_focus": "data science: pandas, feature engineering, classification, recommendation"
+  },
+  {
+    "id": "04-outlier",
+    "company": "Outlier",
+    "role": "Coding Expertise for AI Training (India)",
+    "location": "Remote freelance, flexible hours",
+    "pay": "USD 13.25 - 27.50/hour (per Outlier's posting)",
+    "apply": "https://app.outlier.ai/en/expert/opportunities/4494070005",
+    "about": "Outlier pays coders to write and evaluate code solutions, rate AI model responses, and improve AI coding models. Requires enrolment in a CS bachelor's degree, proficiency in a language such as Python, and clear written English.",
+    "angle": "Short profile blurb, not a letter: CS (AI/ML) undergrad, writes Python daily in his projects, can explain code clearly, point to the Book Recommendation System repo as a sample of structured Python.",
+    "project": "book",
+    "resume_focus": "Python proficiency and clear code"
+  },
+  {
+    "id": "05-stripe",
+    "company": "Stripe",
+    "role": "Software Engineer, Intern",
+    "location": "Bengaluru, India (cohorts: Jan-Jun, May-Jul or Jun-Aug)",
+    "pay": "Not listed",
+    "apply": "https://stripe.com/jobs/listing/software-engineer-intern/8031833",
+    "about": "Stripe builds programmable financial infrastructure. Interns own production projects end to end; recent intern projects include expanding Stripe's Payments Foundation Model for anomaly detection and building fraud controls. Prefers at least 1 year of university education and experience from internships or multi-person projects.",
+    "angle": "Connect his ML interest to Stripe's ML-driven fraud and anomaly-detection work, lead with the Book Recommendation System's engineering structure (config-driven stages, logging, error handling). Be honest that he has no prior internship; he is a 2nd-year student.",
+    "project": "book",
+    "resume_focus": "software engineering quality: modular pipeline, config, logging, error handling"
+  },
+  {
+    "id": "06-pharmaand",
+    "company": "pharma&",
+    "role": "AI & Machine Learning Intern",
+    "location": "Hyderabad, India (on-site, full-time, 6 months)",
+    "pay": "INR 15,000/month",
+    "apply": "https://in.linkedin.com/jobs/view/ai-machine-learning-intern-at-pharma-4469849859",
+    "about": "pharma& (pharmaceutical company) wants an AI & ML intern to develop and evaluate ML models, do data preparation, EDA and feature engineering, and explore GenAI/LLM applications. Requires a demonstrable AI/ML project with a GitHub link that the candidate can explain in detail.",
+    "angle": "They explicitly ask for a demonstrable project with a GitHub link: give both repos, explain the recommender in detail and the churn feature engineering. Do not claim PyTorch/TensorFlow or LLM API experience; say he is learning.",
+    "project": "book",
+    "resume_focus": "model building, feature engineering, explainable projects"
+  },
+  {
+    "id": "07-codingninjas",
+    "company": "Coding Ninjas",
+    "role": "GenAI Intern",
+    "location": "Gurugram, India",
+    "pay": "Not listed",
+    "apply": "https://in.linkedin.com/jobs/view/genai-intern-at-coding-ninjas-4468561627",
+    "about": "Coding Ninjas is an Indian coding edtech company. The GenAI intern experiments with LLMs, agents and AI tools, and turns AI concepts into learner-friendly course content, assignments and coding exercises. Wants good Python and curiosity; GitHub projects are a plus.",
+    "angle": "Emphasise he is a student himself who learned ML by building projects, so he understands what learners need; point to the recommender repo. Gurugram is close to his university in the NCR. Do not claim GenAI projects.",
+    "project": "book",
+    "resume_focus": "learning by building, explaining ML clearly"
+  },
+  {
+    "id": "08-mlh",
+    "company": "MLH Fellowship (Major League Hacking)",
+    "role": "MLH Fellow (remote, 12 weeks)",
+    "location": "Remote",
+    "pay": "Need-based stipend, amount set by track and country",
+    "apply": "https://fellowship.mlh.com/",
+    "about": "A fully remote 12-week internship alternative where fellows earn a stipend and collaborate on real open source projects with peers and engineers from top companies.",
+    "angle": "Motivation: wants to learn collaborative software engineering on real codebases; so far has built solo ML projects. Point to the recommender repo.",
+    "project": "book",
+    "resume_focus": "open source readiness, Git/GitHub"
+  },
+  {
+    "id": "09-srfp",
+    "company": "Indian Academy of Sciences, INSA and NASI",
+    "role": "Summer Research Fellowship Programme 2027",
+    "location": "India (host research institute), summer 2027",
+    "pay": "Fellowship (amount not verified)",
+    "apply": "https://webjapps.ias.ac.in/fellowship2027/index.html",
+    "about": "The Science Academies' summer research fellowship places students with research guides at Indian institutes. Needs a 150-250 word write-up on research interests, mark sheets from class X, and a teacher's contact for a recommendation.",
+    "angle": "Research-interest statement: recommender systems and learning from sparse data, grounded in what he saw building the recommender (only 742 of 271K books survived filtering). Keep it about interests, not accomplishments.",
+    "project": "book",
+    "resume_focus": "research interest in recommender systems and sparse data"
+  },
+  {
+    "id": "10-epfl",
+    "company": "EPFL, School of Computer and Communication Sciences",
+    "role": "Summer@EPFL 2027 research internship",
+    "location": "Lausanne, Switzerland (EPFL guides accepted students through the visa process)",
+    "pay": "Not verified",
+    "apply": "https://summer.epfl.ch/apply.html",
+    "about": "Summer@EPFL is a competitive summer research internship at EPFL's IC school for Bachelor and Master students. Requires a CV, all transcripts, and a motivation letter (ideally one page).",
+    "angle": "Motivation letter: wants research experience in machine learning, specifically recommender systems and learning from sparse data; describe the recommender project factually and what he wants to learn in a lab.",
+    "project": "book",
+    "resume_focus": "research potential"
+  }
+]

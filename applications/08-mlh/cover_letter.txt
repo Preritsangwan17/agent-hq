@@ -1,0 +1,13 @@
+Dear MLH Fellowship Team,
+
+I'm a 2nd-year B.Tech Computer Science (AI/ML) student at Bennett University in India. I want to join the MLH Fellowship to learn how software is built collaboratively: so far I've built two machine learning projects on my own, and I've never worked in a shared codebase with code review.
+
+My most complete project is an End-to-End Book Recommendation System (https://github.com/Preritsangwan17/End-to-End-Book-Recommendation-System): a four-stage Python pipeline with YAML config, logging and error handling, a k-nearest-neighbours model trained on a sparse user-item matrix, and a Streamlit app. Building it taught me to keep code modular so each stage can be rerun and debugged on its own, which I hope carries over to contributing to open source.
+
+I use Python, pandas, scikit-learn, Git and GitHub, and I'm ready to learn whatever stack my project needs.
+
+Thank you for considering me.
+
+Best regards,
+Prerit Sangwan
+sangwanprerit40@gmail.com | LinkedIn: https://www.linkedin.com/in/prerit-sangwan-1b7572304 | GitHub: https://github.com/Preritsangwan17

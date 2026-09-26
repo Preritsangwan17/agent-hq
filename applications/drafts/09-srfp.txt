@@ -1,0 +1,11 @@
+Dear Hiring Team,
+
+I am writing to express my interest in the Summer Research Fellowship Programme 2027 at the Indian Academy of Sciences. My academic focus lies in machine learning, particularly in recommender systems and learning from sparse data—topics I explored through my project on an end-to-end book recommendation system. Using the Book-Crossing dataset, I built a k-nearest-neighbours model that worked with a 742-book by 888-user matrix, highlighting the challenges of working with limited user interactions. This experience sparked my curiosity about how to extract meaningful insights from sparse datasets.
+
+I am especially interested in understanding how collaborative filtering methods can be improved for better coverage and relevance in real-world applications. The project also involved building a Streamlit web app to visualize recommendations, which deepened my appreciation for the practical aspects of deploying ML models. I am eager to explore theoretical and practical advancements in this area during the fellowship.
+
+I am open to learning new tools and methodologies during the programme and am particularly keen to engage with research that bridges machine learning and data science in real-world settings. My GitHub repository for the book recommendation system is available at https://github.com/Preritsangwan17/End-to-End-Book-Recommendation-System.
+
+Best regards,  
+Prerit Sangwan  
+sangwanprerit40@gmail.com | LinkedIn: https://www.linkedin.com/in/prerit-sangwan-1b7572304 | GitHub: https://github.com/Preritsangwan17

@@ -1,0 +1,7 @@
+Research interests: recommender systems and learning from sparse data (about 220 words; the form asks for 150-250)
+
+My main interest is how machine learning systems can make good predictions when data is sparse. I became curious about this while building an item-based collaborative-filtering book recommender (https://github.com/Preritsangwan17/End-to-End-Book-Recommendation-System) on the Book-Crossing dataset. The dataset has 1.15 million ratings across 271,000 books, but after keeping only users with at least 200 ratings and books with at least 50 ratings, only 742 books and 888 users remained. A simple k-nearest-neighbours model worked on that dense core, yet most books could not be recommended at all.
+
+That leaves questions I would like to study under a research guide: how to recommend items with few or no ratings (the cold-start problem), how to measure recommendation quality fairly, and when content features or learned embeddings help more than rating similarity alone. More broadly, I am interested in machine learning methods that stay reliable with incomplete, noisy real-world data.
+
+I have practical experience with Python, pandas, NumPy, scikit-learn and SciPy sparse matrices, and I have built a reproducible four-stage data pipeline. I am a second-year B.Tech student in Computer Science and Engineering (AI/ML specialisation) at Bennett University and would value the chance to learn research methods in a working lab.

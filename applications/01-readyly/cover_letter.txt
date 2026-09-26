@@ -1,0 +1,13 @@
+Dear Hiring Team,
+
+I'm a 2nd-year B.Tech student in Computer Science and Engineering (AI/ML specialisation) at Bennett University, and I'd like to apply for the Product Engineer Intern role on your AI agentic systems team.
+
+My strongest project is an End-to-End Book Recommendation System (https://github.com/Preritsangwan17/End-to-End-Book-Recommendation-System). I built it as a four-stage Python pipeline (ingestion, validation, transformation, training) driven by a YAML config, with custom logging and error handling, plus a Streamlit app that retrains the model and shows five recommendations with cover images. It taught me to structure code so a whole workflow can be rerun end to end, which I expect matters just as much for agent pipelines.
+
+I have not yet built with LLM APIs or agent frameworks. I'm keen to learn them on real product work: prototyping agent behaviour, finding failure cases and improving reliability are exactly the skills I want to build next.
+
+Thank you for considering my application.
+
+Best regards,
+Prerit Sangwan
+sangwanprerit40@gmail.com | LinkedIn: https://www.linkedin.com/in/prerit-sangwan-1b7572304 | GitHub: https://github.com/Preritsangwan17

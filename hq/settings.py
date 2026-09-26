@@ -1,17 +1,21 @@
-"""Paths and environment for Agent HQ. Everything else imports from here."""
+"""Paths and environment for Agent HQ. Everything else imports from here.
+
+Tests and throwaway runs point HQ_ENV_FILE / HQ_DB_PATH (and optionally HQ_AGENTS_DIR, HQ_RUN_DIR, HQ_LOG_DIR)
+at data/test/ so they never touch Prerit's real passcode, database, agent configs or pidfiles.
+Code elsewhere reads these as module attributes at call time (``settings.DB_PATH``) so tests can monkeypatch them.
+"""
 import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 DB_PATH = Path(os.environ.get("HQ_DB_PATH", DATA / "hq.db"))
-RUN_DIR = DATA / "run"
-LOG_DIR = DATA / "logs"
+RUN_DIR = Path(os.environ.get("HQ_RUN_DIR", DATA / "run"))
+LOG_DIR = Path(os.environ.get("HQ_LOG_DIR", DATA / "logs"))
 ARTIFACTS = DATA / "artifacts"
-AGENTS_DIR = ROOT / "agents"
+AGENTS_DIR = Path(os.environ.get("HQ_AGENTS_DIR", ROOT / "agents"))
 CONFIG_DIR = ROOT / "config"
 WEB_DIST = ROOT / "web" / "dist"
-# Tests/screenshots point HQ_ENV_FILE + HQ_DB_PATH at data/test/ so they never touch Prerit's real passcode or DB.
 ENV_PATH = Path(os.environ.get("HQ_ENV_FILE", ROOT / ".env"))
 MIGRATIONS_DIR = ROOT / "hq" / "db" / "migrations"
 
@@ -20,8 +24,9 @@ API_PORT = int(os.environ.get("HQ_PORT", "8765"))
 TZ_DISPLAY = "Asia/Kolkata"
 
 
-def load_env(path: Path = ENV_PATH) -> dict:
+def load_env(path: Path | None = None) -> dict:
     """Parse .env (KEY=VALUE lines) into os.environ without overriding values already set."""
+    path = path or ENV_PATH
     values = {}
     if path.exists():
         for line in path.read_text().splitlines():
@@ -35,8 +40,10 @@ def load_env(path: Path = ENV_PATH) -> dict:
     return values
 
 
-def set_env_value(key: str, value: str, path: Path = ENV_PATH) -> None:
+def set_env_value(key: str, value: str, path: Path | None = None) -> None:
     """Insert or replace KEY=VALUE in .env (file mode 600) and in os.environ."""
+    path = path or ENV_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
     lines = path.read_text().splitlines() if path.exists() else []
     out, replaced = [], False
     for line in lines:
