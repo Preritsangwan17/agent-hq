@@ -418,8 +418,13 @@ export async function patchAgent(id: string, patch: AgentPatch): Promise<Agent> 
   return a;
 }
 
-export async function resolveNeed(id: string, status: 'done' | 'snoozed' | 'dismissed', snooze_hours?: number) {
-  const n = await api.patchNeed(id, { status, snooze_hours });
+export async function resolveNeed(
+  id: string,
+  status: 'done' | 'snoozed' | 'dismissed',
+  snooze_hours?: number,
+  choice?: string,
+) {
+  const n = await api.patchNeed(id, { status, snooze_hours, choice });
   useHQ.getState().upsertNeed(n);
   scheduleStatsRefresh();
   return n;

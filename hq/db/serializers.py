@@ -100,13 +100,36 @@ def opp_summary_by_id(conn: sqlite3.Connection, opp_id: str) -> dict[str, Any] |
 
 def application_json(a: dict[str, Any]) -> dict[str, Any]:
     return {"id": a["id"], "channel": a["channel"], "status": a["status"], "mode": a["mode"],
-            "submitted_at": a.get("submitted_at"), "created_at": a["created_at"]}
+            "submitted_at": a.get("submitted_at"), "created_at": a["created_at"],
+            "submission_ref": a.get("submission_ref"), "doc_kind": a.get("doc_kind"),
+            "approved_at": a.get("approved_at"), "message_id": a.get("message_id"),
+            "answers": _loads(a.get("answers_json"), [])}
 
 
 def document_json(d: dict[str, Any]) -> dict[str, Any]:
     return {"id": d["id"], "kind": d["kind"], "version": d["version"], "status": d["status"],
             "author_agent": d.get("author_agent"), "author_model": d.get("author_model"),
-            "content_text": d.get("content_text"), "created_at": d["created_at"], "file_url": None}
+            "content_text": d.get("content_text"), "created_at": d["created_at"],
+            "subject": d.get("subject"), "parent_id": d.get("parent_id"),
+            "lineage": _loads(d.get("lineage_models_json"), []),
+            "file_url": f"/api/documents/{d['id']}/file" if d.get("content_path") else None}
+
+
+def document_sentences(conn: sqlite3.Connection, doc_id: str) -> list[dict[str, Any]]:
+    """Sentences with every fact-check verdict on them (deterministic / local checker / Claude sign-off)."""
+    checks: dict[str | None, list[dict[str, Any]]] = {}
+    for r in conn.execute("SELECT * FROM fact_checks WHERE document_id=? ORDER BY created_at", (doc_id,)):
+        checks.setdefault(r["sentence_id"], []).append(
+            {"layer": r["layer"], "verdict": r["verdict"], "checker_model": r["checker_model"],
+             "rules": _loads(r["rule_ids_json"], []), "span": r["unsupported_span"], "explanation": r["explanation"]})
+    out = [{"id": r["id"], "idx": r["idx"], "text": r["text"], "kind": r["kind"],
+            "fact_ids": _loads(r["fact_ids_json"], []), "job_quote_ids": _loads(r["job_quote_ids_json"], []),
+            "checks": checks.pop(r["id"], [])}
+           for r in conn.execute("SELECT * FROM document_sentences WHERE document_id=? ORDER BY idx", (doc_id,))]
+    if checks:  # document-level checks (quality, sign-off summary)
+        out.append({"id": None, "idx": -1, "text": None, "kind": "document", "fact_ids": [], "job_quote_ids": [],
+                    "checks": [c for cs in checks.values() for c in cs]})
+    return out
 
 
 def need_json(n: dict[str, Any]) -> dict[str, Any]:
@@ -145,6 +168,38 @@ def opp_detail(conn: sqlite3.Connection, opp_id: str) -> dict[str, Any] | None:
             for r in conn.execute("SELECT * FROM eligibility_checks WHERE opportunity_id=? ORDER BY created_at",
                                   (opp_id,))]
     needs = [need_json(n) for n in repo.list_need_rows(conn, status=None, opportunity_id=opp_id)]
+    scams = [{"verdict": r["verdict"], "signals": _loads(r["signals_json"], []), "created_at": r["created_at"]}
+             for r in conn.execute("SELECT * FROM scam_checks WHERE opportunity_id=? ORDER BY created_at", (opp_id,))]
+    sources = [dict(r) for r in conn.execute(
+        "SELECT os.source_id, os.external_id, os.source_url, os.first_seen, os.last_seen, s.name AS source_name "
+        "FROM opportunity_sources os LEFT JOIN sources s ON s.id=os.source_id WHERE os.opportunity_id=? "
+        "ORDER BY os.first_seen", (opp_id,))]
+    runs = [{"id": r["id"], "task_id": r["task_id"], "capability": r["capability"], "agent_id": r["agent_id"],
+             "model_id": r["model_id"], "status": r["status"], "cost_usd": r["cost_usd"],
+             "duration_ms": r["duration_ms"], "parent_run_id": r["parent_run_id"],
+             "escalated_from_run_id": r["escalated_from_run_id"], "error": r["error"], "started_at": r["started_at"]}
+            for r in conn.execute(
+                "SELECT ar.*, t.capability FROM agent_runs ar JOIN tasks t ON t.id=ar.task_id WHERE t.opportunity_id=? "
+                "ORDER BY ar.started_at DESC LIMIT 200", (opp_id,))]
+    quotes = _loads(o.get("job_quotes_json"), [])
+    base.update(
+        description_available=bool(o.get("description_path")),
+        location_raw=o.get("location_raw"),
+        apply_url=o.get("apply_url"),
+        automation=o.get("automation"),
+        posted_at=o.get("posted_at"),
+        fit_breakdown=_loads(o.get("fit_breakdown_json"), {}),
+        benefits=_loads(o.get("benefits_json"), {}),
+        eligibility_confidence=o.get("eligibility_confidence"),
+        parse=_loads(o.get("parse_json"), {}),
+        requirements=_loads(o.get("requirements_json"), {}),
+        job_quotes=[{"id": f"J{i + 1}", "text": q} for i, q in enumerate(quotes)],
+        scam_checks=scams,
+        sources=sources,
+        runs=runs,
+        document_sentences={d["id"]: document_sentences(conn, d["id"]) for d in docs
+                            if d["kind"] in ("cover_letter", "cold_email", "research_statement")},
+    )
     base.update(
         summary=o.get("summary"),
         notes_unverified=o.get("notes_unverified"),

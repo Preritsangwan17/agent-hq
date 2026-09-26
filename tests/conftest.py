@@ -20,6 +20,7 @@ for _key, _value in {
     "HQ_AGENTS_DIR": _SESSION_DIR / "agents",
     "HQ_RUN_DIR": _SESSION_DIR / "run",
     "HQ_LOG_DIR": _SESSION_DIR / "logs",
+    "HQ_OFFLINE": "1",  # tests never reach third-party hosts (fake transports are still allowed)
 }.items():
     os.environ.setdefault(_key, str(_value))
 

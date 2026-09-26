@@ -1,6 +1,6 @@
 """Paths and environment for Agent HQ. Everything else imports from here.
 
-Tests and throwaway runs point HQ_ENV_FILE / HQ_DB_PATH (and optionally HQ_AGENTS_DIR, HQ_RUN_DIR, HQ_LOG_DIR)
+Tests and throwaway runs point HQ_ENV_FILE / HQ_DB_PATH (and optionally HQ_DATA_DIR, HQ_AGENTS_DIR, HQ_RUN_DIR, HQ_LOG_DIR)
 at data/test/ so they never touch Prerit's real passcode, database, agent configs or pidfiles.
 Code elsewhere reads these as module attributes at call time (``settings.DB_PATH``) so tests can monkeypatch them.
 """
@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DATA = ROOT / "data"
+DATA = Path(os.environ.get("HQ_DATA_DIR", ROOT / "data"))
 DB_PATH = Path(os.environ.get("HQ_DB_PATH", DATA / "hq.db"))
 RUN_DIR = Path(os.environ.get("HQ_RUN_DIR", DATA / "run"))
 LOG_DIR = Path(os.environ.get("HQ_LOG_DIR", DATA / "logs"))

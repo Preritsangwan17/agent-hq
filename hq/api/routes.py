@@ -2,6 +2,7 @@
 Mutations only write rows (settings, commands, audit, events, tasks); the worker acts on them."""
 from __future__ import annotations
 
+import json
 import sqlite3
 from typing import Any, Iterator, Literal
 
@@ -59,6 +60,7 @@ class FreezeBody(BaseModel):
 class NeedPatch(BaseModel):
     status: Literal["done", "snoozed", "dismissed", "open"]
     snooze_hours: float | None = Field(default=None, gt=0, le=24 * 30)
+    choice: str | None = Field(default=None, max_length=40)  # decision items: one of payload.options[].value
 
 
 class AgentPatch(BaseModel):
@@ -436,6 +438,15 @@ def patch_need(need_id: str, body: NeedPatch, request: Request, conn: sqlite3.Co
         if need is None:
             raise ApiError(404, "need not found")
         now = now_iso()
+        if need["kind"] == "decision" and body.status in ("done", "dismissed"):
+            payload = serializers._loads(need.get("payload_json"), {})
+            allowed = [o.get("value") for o in payload.get("options") or [] if isinstance(o, dict)]
+            choice = body.choice if body.status == "done" else (body.choice or "drop")
+            if choice not in allowed:
+                raise ApiError(422, f"choice must be one of: {', '.join(map(str, allowed))}")
+            conn.execute("UPDATE needs_prerit SET payload_json=? WHERE id=?",
+                         (json.dumps({**payload, "choice": choice}), need_id))
+            need = {**need, "payload_json": json.dumps({**payload, "choice": choice})}
         if body.status == "snoozed":
             until = iso_in((body.snooze_hours or 24) * 3600)
             conn.execute("UPDATE needs_prerit SET status='snoozed', snoozed_until=? WHERE id=?", (until, need_id))
@@ -470,6 +481,12 @@ def _need_followups(conn: sqlite3.Connection, need: dict[str, Any], status: str)
         return [f"probation:{'approved' if status == 'done' else 'discarded'}"]
     opp_id, app_id = need.get("opportunity_id"), need.get("application_id")
     opp = repo.get_opportunity_row(conn, opp_id) if opp_id else None
+    if need["kind"] == "decision" and opp is not None and status in ("done", "dismissed") and \
+            opp["stage"] == "verified" and not opp["stage_override"]:
+        # Prerit answered a keep/drop question: score again (it holds while any decision is still open)
+        task_id = queue.enqueue(conn, "score.fit", opportunity_id=opp_id, priority=priority_for("score.fit"),
+                                idempotency_key=f"decision:{need['id']}", source_agent="prerit")
+        return [f"decision:{payload.get('choice')}"] + (["task:score.fit"] if task_id else [])
     if status != "done" or opp is None or opp["stage_override"]:
         return done
     if need["kind"] == "submit_form" and opp["stage"] == "checked":
@@ -483,12 +500,14 @@ def _need_followups(conn: sqlite3.Connection, need: dict[str, Any], status: str)
                   data={"opp": summary, "from": "checked", "to": "applied"})
         done.append("stage:applied")
     elif need["kind"] == "approve" and opp["stage"] == "checked":
-        cap = "apply.email_send" if opp["apply_channel"] == "email" else "apply.manual_pack"
+        route = payload.get("route") or ("email" if opp["apply_channel"] == "email" else "pack")
+        cap = {"email": "apply.email_send", "mock_ats": "apply.ats_submit"}.get(route, "apply.manual_pack")
         task_id = queue.enqueue(conn, cap, opportunity_id=opp_id, application_id=app_id, priority=priority_for(cap),
                                 idempotency_key=f"approve:{need['id']}", source_agent="prerit")
-        if app_id:
-            conn.execute("UPDATE applications SET status='queued', approved_by='prerit', approved_at=?, updated_at=? "
-                         "WHERE id=?", (now_iso(), now_iso(), app_id))
+        if app_id:  # the approval binds to the exact letter + résumé digest shown in the item
+            conn.execute("UPDATE applications SET status='queued', approved_by='prerit', approved_at=?, updated_at=?, "
+                         "approval_sha256=COALESCE(?, approval_sha256) WHERE id=?",
+                         (now_iso(), now_iso(), payload.get("sha256"), app_id))
         repo.update_opportunity(conn, opp_id, {"stage_reason": "approved by Prerit"})
         if task_id:
             done.append(f"task:{cap}")

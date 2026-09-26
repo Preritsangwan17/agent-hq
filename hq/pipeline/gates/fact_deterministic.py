@@ -48,7 +48,7 @@ class CheckContext:
 @dataclass(frozen=True)
 class Lexicon:
     rules: tuple[tuple[str, bool, str, tuple[re.Pattern, ...]], ...]   # (rule, claims_only, message, patterns)
-    whitelist: tuple[re.Pattern, ...]
+    whitelist: tuple[tuple[str, re.Pattern], ...]
     known_tech: tuple[tuple[str, re.Pattern], ...]
 
 
@@ -64,7 +64,7 @@ def _lexicon_cached(config_dir: str, mtimes: tuple[float, ...]) -> Lexicon:
     rules = tuple((name, bool(spec.get("claims_only", True)), str(spec.get("message", name)),
                    tuple(_compile(p) for p in spec.get("patterns", [])))
                   for name, spec in (banned.get("rules") or {}).items())
-    whitelist = tuple(_compile(rf"\b{t}\b") for t in tech.get("whitelist", []))
+    whitelist = tuple((t, _compile(rf"\b{t}\b")) for t in tech.get("whitelist", []))
     known = tuple((t, _compile(rf"(?<![\w-]){t}(?![\w-])")) for t in tech.get("known", []))
     return Lexicon(rules, whitelist, known)
 

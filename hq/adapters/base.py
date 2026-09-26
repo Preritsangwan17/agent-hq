@@ -43,6 +43,8 @@ class Services:
     router: Any = None      # hq.llm.router.Router
     claude: Any = None      # hq.llm.claude.ClaudeRunner
     manager: Any = None     # hq.models.manager.ModelManager
+    sim: Any = None         # hq.adapters.sim.SimAdapter (simulated opportunities)
+    fetcher: Any = None     # hq.pipeline.discover.fetch.Fetcher (polite GETs)
 
 
 @dataclass

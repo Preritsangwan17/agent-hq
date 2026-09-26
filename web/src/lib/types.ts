@@ -322,6 +322,11 @@ export interface Application {
   mode: RunMode;
   submitted_at: ISODate | null;
   created_at: ISODate;
+  submission_ref?: string | null;
+  doc_kind?: string | null;
+  approved_at?: ISODate | null;
+  message_id?: string | null;
+  answers?: NeedAnswer[];
 }
 
 export type DocumentKind = Open<
@@ -348,6 +353,70 @@ export interface Document {
   content_text: string | null;
   created_at: ISODate;
   file_url: string | null;
+  subject?: string | null;
+  parent_id?: string | null;
+  lineage?: string[];
+}
+
+export interface FactCheckVerdict {
+  layer: string;
+  verdict: string;
+  checker_model: string | null;
+  rules: string[];
+  span: string | null;
+  explanation: string | null;
+}
+
+export interface DocSentence {
+  id: string | null;
+  idx: number;
+  text: string | null;
+  kind: string | null;
+  fact_ids: string[];
+  job_quote_ids: string[];
+  checks: FactCheckVerdict[];
+}
+
+export interface GateResult {
+  id: string;
+  application_id: string;
+  document_id: string | null;
+  gate: string;
+  passed: boolean;
+  details: Record<string, unknown>;
+  ts: ISODate;
+}
+
+export interface EligibilityCheck {
+  id: string;
+  method: string;
+  model_id: string | null;
+  requirements: Record<string, unknown>;
+  quotes: ({ quote: string; requirement?: string; met?: boolean | null } | string)[];
+  verdict: string;
+  confidence: number | null;
+  created_at: ISODate;
+}
+
+export interface ScamCheck {
+  verdict: string;
+  signals: ({ id?: string; label?: string; detail?: string; weight?: number; quote?: string } | string)[];
+  created_at: ISODate;
+}
+
+export interface OppRun {
+  id: string;
+  task_id: string | null;
+  capability: string;
+  agent_id: string;
+  model_id: string | null;
+  status: string;
+  cost_usd: number | null;
+  duration_ms: number | null;
+  parent_run_id: string | null;
+  escalated_from_run_id: string | null;
+  error: string | null;
+  started_at: ISODate;
 }
 
 export interface OppDetail extends OppSummary {
@@ -356,9 +425,68 @@ export interface OppDetail extends OppSummary {
   applications: Application[];
   documents: Document[];
   timeline: HQEvent[];
-  gates: unknown[];
-  eligibility_checks: unknown[];
+  gates: GateResult[];
+  eligibility_checks: EligibilityCheck[];
   needs: Need[];
+  description_available?: boolean;
+  location_raw?: string | null;
+  apply_url?: string | null;
+  automation?: string | null;
+  posted_at?: ISODate | null;
+  fit_breakdown?: Record<string, number>;
+  benefits?: Record<string, unknown>;
+  eligibility_confidence?: number | null;
+  parse?: Record<string, unknown>;
+  requirements?: Record<string, unknown>;
+  job_quotes?: { id: string; text: string }[];
+  scam_checks?: ScamCheck[];
+  sources?: { source_id: string; source_name: string | null; external_id: string | null; source_url: string | null; first_seen: ISODate; last_seen: ISODate }[];
+  runs?: OppRun[];
+  document_sentences?: Record<string, DocSentence[]>;
+}
+
+export interface Source {
+  id: string;
+  name: string;
+  kind: string;
+  config: Record<string, unknown>;
+  automation: string;
+  tos_status: 'unreviewed' | 'allowed' | 'restricted' | 'prohibited';
+  tos_url: string | null;
+  tos_reviewed_at: ISODate | null;
+  poll_interval_min: number;
+  last_polled_at: ISODate | null;
+  last_ok_at: ISODate | null;
+  consecutive_errors: number;
+  disabled_until: ISODate | null;
+  enabled: boolean;
+  added_by: string;
+  opportunities: number;
+}
+
+export interface SourcesResponse {
+  items: Source[];
+  manual_lane: string[];
+  mode: RunMode;
+}
+
+export interface FetchLogRow {
+  id: number;
+  ts: ISODate;
+  method: string;
+  url: string;
+  domain: string;
+  status: number | null;
+  bytes: number | null;
+  from_cache: number;
+  source_id: string | null;
+  blocked_reason: string | null;
+  duration_ms: number | null;
+}
+
+export interface FetchLogResponse {
+  items: FetchLogRow[];
+  methods: Record<string, number>;
 }
 
 // ── needs prerit ──────────────────────────────────────────────────────
@@ -383,11 +511,16 @@ export interface NeedAnswer {
   label: string;
   value: string;
   copy?: boolean;
+  /** filled | needs_prerit | never | file */
+  status?: string;
+  note?: string | null;
+  required?: boolean;
 }
 
 export interface Need {
   id: string;
   opportunity_id: string | null;
+  application_id?: string | null;
   kind: NeedKind;
   title: string;
   instructions_md: string | null;

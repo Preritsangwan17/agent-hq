@@ -1,7 +1,7 @@
 # Agent HQ — common tasks. `make up` / `make down` wrap start.sh / stop.sh.
 PY := .venv/bin/python
 
-.PHONY: up down dev test bench bench-full screens fmt
+.PHONY: up down dev test bench bench-full screens fmt mock-ats audit
 
 up:
 	./start.sh
@@ -22,6 +22,14 @@ bench:
 
 bench-full:
 	$(PY) -m hq.models.benchmark --full
+
+# Local mock ATS on 127.0.0.1:8799 (enable "Mock ATS (local, dev)" in Settings › Sources to feed it into the pipeline).
+mock-ats:
+	$(PY) -m mock_ats
+
+# Export the first 20 eligibility / pay verdicts to data/audit/verdicts.csv for a manual accuracy check.
+audit:
+	$(PY) -m hq.pipeline.audit
 
 screens:
 	npm --prefix web run screens --if-present

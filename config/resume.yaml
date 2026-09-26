@@ -1,0 +1,54 @@
+# Approved résumé content (CONTRACT_C §5). The builder uses ONLY these strings; each bullet is tied to fact ids.
+# Wording follows the fact sheet: "more than 200 ratings" (never "200+").
+name: Prerit Sangwan
+contact:
+  email: sangwanprerit40@gmail.com
+  linkedin: https://www.linkedin.com/in/prerit-sangwan-1b7572304
+  github: https://github.com/Preritsangwan17
+  extras: ["Indian citizen", "Open to relocation"]
+education:
+  school: Bennett University, India
+  degree: B.Tech, Computer Science and Engineering (AI/ML specialisation)
+  status: 2nd year, in progress
+  facts: [F-EDU-YEAR2]
+projects:
+  book:
+    title: End-to-End Book Recommendation System
+    url: https://github.com/Preritsangwan17/End-to-End-Book-Recommendation-System
+    date: Jun 2026
+    tech: Python, pandas, scikit-learn, SciPy, Streamlit
+    bullets:
+      - text: Built an item-based collaborative-filtering recommender on the Book-Crossing dataset (about 1.15 million ratings, about 271,000 books).
+        facts: [F-BOOK-CF, F-BOOK-DATA]
+      - text: Reduced sparsity by keeping users with more than 200 ratings and books with at least 50 ratings, giving a 742-book by 888-user rating matrix.
+        facts: [F-BOOK-FILTER, F-BOOK-MATRIX]
+      - text: Trained a k-nearest-neighbours model (scikit-learn, sparse CSR input) that returns the 5 most similar books.
+        facts: [F-BOOK-KNN]
+      - text: Structured the code as a four-stage pipeline (ingestion, validation, transformation, training) driven by a YAML config, with custom logging and exception handling; ingestion falls back to local data if the download fails.
+        facts: [F-BOOK-PIPELINE, F-BOOK-LOGGING, F-BOOK-FALLBACK]
+      - text: Built a Streamlit app (run locally) that retrains the model and shows 5 recommendations with cover images; prototyped a cosine-similarity version in Jupyter first.
+        facts: [F-BOOK-STREAMLIT, F-BOOK-COSINE]
+  churn:
+    title: Telco Customer Churn Prediction
+    url: https://github.com/Preritsangwan17/Churn-ml-model-project
+    date: Jan 2026
+    tech: Python, pandas, scikit-learn
+    bullets:
+      - text: Prepared the IBM Telco Customer Churn dataset (7,043 customers, cleaned to 7,032 rows) by one-hot encoding the categorical fields and binning tenure into 12-month groups, giving 50 features.
+        facts: [F-CHURN-DATA, F-CHURN-FEATURES]
+      - text: Trained a Random Forest classifier (100 trees) to predict churn and saved the model for reuse.
+        facts: [F-CHURN-RF]
+skills:
+  - label: Language
+    value: Python
+  - label: ML and data
+    value: scikit-learn (k-NN, Random Forest), pandas, NumPy, SciPy sparse matrices, collaborative filtering, cosine similarity, one-hot encoding, feature binning
+  - label: Tools
+    value: Streamlit, Jupyter, Git and GitHub, YAML-configured modular pipelines, logging and exception handling
+# Summary lines by focus (the Writer may propose a tailored one; it must pass the fact gate, else these are used).
+summaries:
+  default: 2nd-year Computer Science (AI/ML) student who builds machine learning projects in Python.
+  software: 2nd-year Computer Science (AI/ML) student who writes modular, config-driven Python with logging and error handling.
+  data: 2nd-year Computer Science (AI/ML) student focused on data cleaning, deduplication and reproducible Python pipelines.
+  ml: 2nd-year Computer Science (AI/ML) student who has built a collaborative-filtering recommender and a churn classifier in Python.
+  research: 2nd-year Computer Science (AI/ML) student interested in recommender systems and learning from sparse data.

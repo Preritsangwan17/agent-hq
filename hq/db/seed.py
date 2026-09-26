@@ -150,10 +150,13 @@ def seed_settings(conn: sqlite3.Connection) -> list[str]:
 
 def seed_all(conn: sqlite3.Connection) -> dict[str, int]:
     """Every idempotent seed step (settings, profile facts and fields, answer bank, sources). Caller owns the tx."""
+    from hq.pipeline.apply.answers import seed_answer_bank
+    from hq.pipeline.discover.sources import seed_sources
     from hq.profile.facts import seed_facts
     from hq.profile.fields import seed_fields
 
-    return {"settings": len(seed_settings(conn)), "facts": seed_facts(conn), "fields": seed_fields(conn)}
+    return {"settings": len(seed_settings(conn)), "facts": seed_facts(conn), "fields": seed_fields(conn),
+            "answers": seed_answer_bank(conn), "sources": seed_sources(conn)}
 
 
 def get_settings(conn: sqlite3.Connection) -> dict[str, Any]:

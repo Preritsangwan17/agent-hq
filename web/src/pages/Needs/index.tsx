@@ -65,7 +65,12 @@ export default function Needs() {
     const st = useHQ.getState();
     st.upsertNeed({ ...need, status: action.status });
     try {
-      await resolveNeed(need.id, action.status, action.status === 'snoozed' ? action.hours : undefined);
+      await resolveNeed(
+        need.id,
+        action.status,
+        action.status === 'snoozed' ? action.hours : undefined,
+        action.status === 'done' ? action.choice : undefined,
+      );
     } catch (e) {
       useHQ.getState().upsertNeed(need);
       setError(`Couldn't update "${need.title}": ${e instanceof Error ? e.message : String(e)}`);

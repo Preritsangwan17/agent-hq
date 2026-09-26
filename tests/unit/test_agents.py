@@ -24,20 +24,26 @@ def test_starting_team_is_valid_and_matches_contract():
         "scout": ("#22D3EE", ["discover.ats", "discover.program_page", "parse.job"]),
         "verifier": ("#2DD4BF", ["verify.link", "verify.deadline", "verify.eligibility", "verify.pay", "verify.scam",
                                  "score.fit"]),
-        "writer": ("#A78BFA", ["draft.cover_letter"]),
+        "writer": ("#A78BFA", ["draft.cover_letter", "polish.final"]),
         "factchecker": ("#F59E0B", ["factcheck.deterministic", "factcheck.sentence", "check.quality"]),
         "reviewer": ("#FB7185", ["factcheck.signoff"]),
         "resume": ("#60A5FA", ["build.resume"]),
-        "applicant": ("#F472B6", ["apply.email_send", "apply.manual_pack"]),
+        "applicant": ("#F472B6", ["apply.email_send", "apply.ats_submit", "apply.manual_pack"]),
         "inbox": ("#A3E635", ["inbox.poll", "inbox.classify"]),
         "followup": ("#FB923C", ["followup.schedule"]),
         "strategist": ("#E879F9", ["strategy.daily_review"]),
     }
+    phase_c = {"scout", "verifier", "writer", "factchecker", "reviewer", "resume", "applicant"}
     found = {}
     for path in REPO_AGENTS.glob("*.yaml"):
         cfg, _ = parse_agent_file(path)
         found[cfg.id] = (cfg.color, cfg.capabilities)
-        assert cfg.builtin and cfg.adapter == "sim"
+        assert cfg.builtin
+        if cfg.id in phase_c:  # real modules; simulated opportunities are still handed to the simulator
+            assert cfg.adapter == "script" and cfg.adapter_config["module"].startswith("hq.pipeline.agents.")
+            assert cfg.adapter_config.get("sim_model")
+        else:
+            assert cfg.adapter == "sim"
     assert found == expected
 
 

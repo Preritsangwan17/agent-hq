@@ -25,7 +25,7 @@ from hq.db import repo, serializers
 from hq.db.conn import connect, dumps, tx
 from hq.db.migrate import migrate
 from hq.db.seed import get_settings, seed_all, set_settings
-from hq.pipeline.state import next_tasks, priority_for
+from hq.pipeline.state import TERMINAL, next_tasks, priority_for
 from hq.util.ids import new_id
 from hq.util.timeutil import IST, now_iso, parse_iso, to_iso, today_ist, utcnow
 from hq.worker import budget as budget_mod
@@ -92,6 +92,12 @@ class Worker:
         self._last_retention = 0.0
         self.worker_id = f"worker-{os.getpid()}"
         self.services = services or self._build_services()
+        if self.services.sim is None:
+            self.services.sim = self.adapters.get("sim")
+        if self.services.fetcher is None:
+            from hq.pipeline.discover.fetch import Fetcher
+
+            self.services.fetcher = Fetcher(self.conn)
         self.model_upkeep = model_upkeep
         self.benchmarking: asyncio.Task | None = None
         self._last_discovery = 0.0
@@ -609,6 +615,8 @@ class Worker:
             repo.update_opportunity(self.conn, opp_id, values)
             prev = stage_changes.get(opp_id)
             stage_changes[opp_id] = (prev[0] if prev else old, new)
+            if new in TERMINAL:
+                self._close_stale_needs(opp_id, f"role {new}")
         for spec in specs:
             new_task = queue.enqueue(
                 self.conn, spec.capability, payload=spec.payload, opportunity_id=opp_id,
@@ -624,6 +632,19 @@ class Worker:
                           agent_id=cfg.id, opportunity_id=opp_id, task_id=new_task,
                           data={"from_agent": cfg.id, "to_agent": to_agent, "capability": spec.capability,
                                 "opportunity_id": opp_id})
+
+    def _close_stale_needs(self, opp_id: str, reason: str) -> None:
+        """A filtered/closed role no longer needs Prerit's keep/drop, approval or form: dismiss those items.
+        Interview/offer/money/legal alerts are never touched."""
+        rows = self.conn.execute(
+            "SELECT id FROM needs_prerit WHERE opportunity_id=? AND status IN ('open','snoozed') AND kind IN "
+            "('decision','approve','submit_form','review_letter','missing_info')", (opp_id,)).fetchall()
+        for r in rows:
+            self.conn.execute("UPDATE needs_prerit SET status='dismissed', resolved_at=?, snoozed_until=NULL WHERE id=?",
+                              (now_iso(), r["id"]))
+            need = serializers.need_json(repo.get_need_row(self.conn, r["id"]))
+            repo.emit(self.conn, "needs.updated", f"{need['title']}: closed ({reason})", level="debug",
+                      opportunity_id=opp_id, data={"need": need})
 
     def _on_failed(self, run: Run, error: str, t0: float, model_id: str | None = None) -> None:
         task, cfg = run.task, run.agent

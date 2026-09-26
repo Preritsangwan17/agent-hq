@@ -1174,8 +1174,14 @@ export class Simulator {
       applications,
       documents,
       timeline: this.events.filter((e) => e.opportunity_id === id && e.level !== 'debug').slice(-100),
-      gates: reached >= 3 ? [{ gate: 'fact', passed: true }, { gate: 'eligibility', passed: true }, { gate: 'quality', passed: true }, { gate: 'scam', passed: true }] : [],
-      eligibility_checks: reached >= 1 ? [{ method: 'rules+llm', verdict: o.eligibility_status, confidence: 0.86, quotes: ['"Open to current undergraduate students"'] }] : [],
+      gates: reached >= 3
+        ? ['fact', 'eligibility', 'quality', 'scam'].map((gate, i) => ({
+            id: `${id}-g${i}`, application_id: m.appId ?? `${id}-app`, document_id: null, gate, passed: true, details: {}, ts: o.updated_at,
+          }))
+        : [],
+      eligibility_checks: reached >= 1
+        ? [{ id: `${id}-e1`, method: 'rules+llm', model_id: null, requirements: {}, verdict: o.eligibility_status, confidence: 0.86, quotes: ['"Open to current undergraduate students"'], created_at: o.updated_at }]
+        : [],
       needs: [...this.needs.values()].filter((n) => n.opportunity_id === id),
     };
   }

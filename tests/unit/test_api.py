@@ -25,7 +25,11 @@ OPP_KEYS = {"id", "company_name", "title", "kind", "role_type", "city", "country
             "deadline_confidence", "pay", "url", "apply_channel", "source_label", "active_agent_id", "needs_prerit",
             "updated_at", "first_seen_at"}
 DETAIL_EXTRA = {"summary", "notes_unverified", "applications", "documents", "timeline", "gates",
-                "eligibility_checks", "needs"}
+                "eligibility_checks", "needs",
+                # phase (c): the evidence behind every verdict
+                "description_available", "location_raw", "apply_url", "automation", "posted_at", "fit_breakdown",
+                "benefits", "eligibility_confidence", "parse", "requirements", "job_quotes", "scam_checks", "sources",
+                "runs", "document_sentences"}
 NEED_KEYS = {"id", "opportunity_id", "kind", "title", "instructions_md", "answers", "files", "direct_url", "priority",
              "due_at", "est_minutes", "status", "created_at"}
 STATS_KEYS = {"found", "verified", "drafted", "applied", "replies", "interviews", "offers", "rejected", "filtered",
@@ -59,7 +63,7 @@ def test_snapshot_shape(authed, team, db):
         assert set(agent["live"]) == LIVE_KEYS
         assert agent["status"] == "offline"  # no worker heartbeat yet
     applicant = next(a for a in snap["agents"] if a["id"] == "applicant")
-    assert applicant["side_effects"] == ["apply.email_send"]
+    assert applicant["side_effects"] == ["apply.email_send", "apply.ats_submit"]
     assert set(snap["stats"]) == STATS_KEYS
     assert snap["settings"]["mode"] == "dry_run" and snap["settings"]["sim_speed"] == 1.0
     assert snap["last_event_id"] == max(e["id"] for e in snap["events"])

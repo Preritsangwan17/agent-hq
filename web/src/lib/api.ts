@@ -17,6 +17,7 @@ import type {
   AuthStatus,
   BudgetState,
   EventsQuery,
+  FetchLogResponse,
   HQEvent,
   Model,
   ModelsResponse,
@@ -31,6 +32,8 @@ import type {
   ProfileFact,
   ProfileField,
   SecurityInfo,
+  Source,
+  SourcesResponse,
   StrategyReport,
   Settings,
   Snapshot,
@@ -176,8 +179,16 @@ export const api = {
 
   needs: (status: NeedStatus | 'all' = 'open') =>
     http.get<{ items: Need[] }>('/api/needs', status === 'all' ? undefined : { status }),
-  patchNeed: (id: string, body: { status: 'done' | 'snoozed' | 'dismissed'; snooze_hours?: number }) =>
+  patchNeed: (id: string, body: { status: 'done' | 'snoozed' | 'dismissed'; snooze_hours?: number; choice?: string }) =>
     http.patch<Need>(`/api/needs/${enc(id)}`, body),
+  needFileUrl: (id: string, idx: number) => `/api/needs/${enc(id)}/files/${idx}`,
+
+  addManual: (body: { url: string; text?: string; company?: string; title?: string }) =>
+    http.post<OppSummary>('/api/opportunities/manual', body),
+  sources: () => http.get<SourcesResponse>('/api/sources'),
+  patchSource: (id: string, patch: { enabled?: boolean; tos_status?: Source['tos_status']; poll_interval_min?: number }) =>
+    http.patch<Source>(`/api/sources/${id}`, patch),
+  fetchLog: (q: { limit?: number; domain?: string } = {}) => http.get<FetchLogResponse>('/api/fetch-log', { ...q }),
 
   stats: () => http.get<Stats>('/api/stats'),
 

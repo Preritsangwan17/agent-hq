@@ -130,6 +130,7 @@ OPP_WRITABLE = {
     "living_cost_confidence", "pay_ratio", "eligibility_status", "eligibility_confidence", "availability_status",
     "scam_status", "fit_score", "fit_breakdown_json", "stage", "stage_reason", "link_status", "source_label",
     "notes_unverified", "last_verified_at", "description_path", "desc_hash",
+    "parse_json", "job_quotes_json", "automation", "company_domain", "requirements_json",
 }
 
 

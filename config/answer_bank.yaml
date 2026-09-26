@@ -1,0 +1,91 @@
+# Form-question answers (CONTRACT_C §2). Each entry: a case-insensitive regex for the question, and either a
+# template built from verified facts / confirmed profile fields, or a policy.
+#   policy auto          → answer filled from the template (only if every referenced field is confirmed)
+#   policy needs_prerit  → the pack leaves it for Prerit
+#   policy never         → never answered by HQ (sensitive IDs)
+answers:
+  - id: name
+    pattern: '^(full )?name|first name|last name|your name'
+    template: "Prerit Sangwan"
+    facts: [F-NAME]
+    policy: auto
+  - id: email
+    pattern: 'e-?mail'
+    template: "sangwanprerit40@gmail.com"
+    facts: [F-EMAIL]
+    policy: auto
+  - id: linkedin
+    pattern: 'linkedin'
+    template: "https://www.linkedin.com/in/prerit-sangwan-1b7572304"
+    facts: [F-LINKEDIN]
+    policy: auto
+  - id: github
+    pattern: 'github|portfolio|website|personal (site|url)'
+    template: "https://github.com/Preritsangwan17"
+    facts: [F-GITHUB]
+    policy: auto
+  - id: citizenship
+    pattern: 'citizenship|nationality'
+    template: "Indian"
+    facts: [F-CITIZEN]
+    policy: auto
+  - id: work_auth_india
+    pattern: 'authori[sz]ed to work in india|eligible to work in india'
+    template: "Yes"
+    facts: [F-CITIZEN]
+    policy: auto
+  - id: work_auth_elsewhere
+    pattern: 'authori[sz]ed to work|work authori[sz]ation|right to work|legally (authorized|eligible)'
+    template: "I am an Indian citizen and would need visa sponsorship to work on-site outside India."
+    facts: [F-CITIZEN]
+    policy: auto
+  - id: sponsorship
+    pattern: 'sponsorship|visa'
+    template: "Yes — I would need visa sponsorship for on-site work outside India."
+    facts: [F-CITIZEN]
+    policy: auto
+  - id: relocation
+    pattern: 'relocat'
+    template: "Yes, I am willing to relocate."
+    facts: [F-RELOCATE]
+    policy: auto
+  - id: salary
+    pattern: 'salary|compensation expectation|expected stipend|expected pay|ctc'
+    template: "Flexible — the standard rate for the role and location."
+    policy: auto
+  - id: eeo
+    pattern: 'gender|race|ethnicity|veteran|disability|sexual orientation|pronouns|hispanic|latino'
+    template: "Prefer not to say"
+    policy: auto_if_option
+  - id: sensitive_ids
+    pattern: 'social security|ssn|aadhaa?r|pan (card|number)|passport number|national id|tax id|date of birth'
+    policy: never
+  - id: start_date
+    pattern: 'start date|when can you start|availability|available from'
+    fields: [availability_windows]
+    policy: needs_prerit
+  - id: cgpa
+    pattern: 'gpa|cgpa|grade point|percentage|marks'
+    fields: [cgpa]
+    template: "{cgpa} / 10"
+    policy: auto
+  - id: phone
+    pattern: 'phone|mobile|contact number'
+    fields: [phone]
+    template: "{phone}"
+    policy: auto
+  - id: graduation
+    pattern: 'graduat|expected (completion|degree)|year of study'
+    fields: [grad_year]
+    template: "{grad_year}"
+    policy: auto
+  - id: university
+    pattern: 'university|college|school|institution'
+    template: "Bennett University, India"
+    facts: [F-EDU-YEAR2]
+    policy: auto
+  - id: degree
+    pattern: 'degree|major|field of study|discipline'
+    template: "B.Tech in Computer Science and Engineering (AI/ML specialisation), 2nd year"
+    facts: [F-EDU-YEAR2]
+    policy: auto

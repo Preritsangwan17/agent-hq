@@ -363,7 +363,21 @@ def test_next_tasks(stage, cap, result, expected_stage, expected_caps):
 
 def test_redraft_carries_feedback_and_version():
     _, specs = next_tasks("drafted", "factcheck.deterministic", {"ok": False, "version": 1, "feedback": "x"})
-    assert specs[0].payload == {"version": 2, "feedback": "x"}
+    assert specs[0].payload == {"version": 2, "loop": 2, "feedback": "x"}
+
+
+def test_after_three_loops_the_real_pipeline_polishes_once_then_stops():
+    res = {"ok": False, "version": 3, "loop": 3, "feedback": "f", "polish_allowed": True}
+    _, specs = next_tasks("drafted", "factcheck.sentence", res)
+    assert [s.capability for s in specs] == ["polish.final"]
+    _, specs = next_tasks("drafted", "factcheck.sentence", {**res, "polished": True})
+    assert specs == []
+    _, specs = next_tasks("drafted", "factcheck.sentence", {"ok": False, "version": 3})  # the sim: no polish
+    assert specs == []
+    stage, specs = next_tasks("drafted", "check.quality", {"ok": True, "version": 1, "polish": True})
+    assert [s.capability for s in specs] == ["polish.final"]
+    _, specs = next_tasks("drafted", "polish.final", {"ok": True, "version": 2, "loop": 1})
+    assert specs[0].capability == "factcheck.deterministic" and specs[0].payload["polished"] is True
 
 
 # ── probation ────────────────────────────────────────────────────────────────────────────────────────
