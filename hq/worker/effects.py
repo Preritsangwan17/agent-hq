@@ -52,6 +52,7 @@ DOC_INSERT = {"id", "application_id", "opportunity_id", "kind", "version", "pare
               "author_agent", "author_model", "lineage_models_json", "status", "content_path", "subject",
               "email_thread_id"}
 EVENT_TYPES_ALLOWED = {"log", "notification"}
+STRATEGIST = "strategist"
 # The only tasks an adapter may request directly (everything else follows the pipeline state machine).
 REQUESTABLE = {"inbox.classify", "reply.send"}
 THREAD_COLS = {"id", "gmail_thread_id", "opportunity_id", "application_id", "subject", "counterpart_domain",
@@ -218,10 +219,39 @@ def apply_effects(conn: sqlite3.Connection, effects: list[dict[str, Any]], *, ag
         elif op == "strategy_report":
             v = eff["values"]
             conn.execute(
-                "INSERT INTO strategy_reports(date, report_md, proposed_actions_json, created_at) VALUES (?,?,?,?) "
-                "ON CONFLICT(date) DO UPDATE SET report_md=excluded.report_md, "
-                "proposed_actions_json=excluded.proposed_actions_json, created_at=excluded.created_at",
-                (v["date"], v["report_md"], dumps(v.get("proposed_actions_json", [])), now))
+                "INSERT INTO strategy_reports(date, report_md, proposed_actions_json, applied_actions_json, created_at) "
+                "VALUES (?,?,?,?,?) ON CONFLICT(date) DO UPDATE SET report_md=excluded.report_md, "
+                "proposed_actions_json=excluded.proposed_actions_json, "
+                "applied_actions_json=excluded.applied_actions_json, created_at=excluded.created_at",
+                (v["date"], v["report_md"], dumps(v.get("proposed_actions_json", [])),
+                 dumps(v.get("applied_actions_json", [])), now))
+        elif op in ("source.disable", "source.add"):
+            # the Strategist's whitelisted low-risk actions (CONTRACT_E §1); no other agent may change sources
+            if agent_id != STRATEGIST:
+                raise ValueError(f"only the Strategist may apply {op}")
+            if op == "source.disable":
+                cur = conn.execute("UPDATE sources SET enabled=0 WHERE id=? AND enabled=1", (eff["id"],))
+                if cur.rowcount:
+                    repo.audit(conn, "strategist", "source.disable", eff["id"], before={"enabled": True},
+                               after={"enabled": False, "reason": eff.get("reason")})
+                    repo.emit(conn, "log", f"Strategist turned off {eff.get('name') or eff['id']}: "
+                              f"{eff.get('reason')}", level="warn", agent_id=agent_id, task_id=task_id,
+                              data={"source_id": eff["id"], "reason": eff.get("reason")})
+            else:
+                v = eff["values"]
+                if v.get("kind") not in ("greenhouse", "lever", "ashby"):
+                    raise ValueError("the Strategist may only add ATS boards")
+                cur = conn.execute(
+                    "INSERT OR IGNORE INTO sources(id, name, kind, config_json, automation, tos_status, tos_url, "
+                    "tos_reviewed_at, poll_interval_min, enabled, added_by, created_at) "
+                    "VALUES (?,?,?,?, 'discover_only', 'allowed', ?, ?, ?, 1, 'strategist', ?)",
+                    (v["id"], v["name"], v["kind"], dumps(v.get("config") or {}), v.get("tos_url"), now,
+                     int(v.get("poll_interval_min") or 360), now))
+                if cur.rowcount:
+                    repo.audit(conn, "strategist", "source.add", v["id"], after={"name": v["name"],
+                                                                                "reason": eff.get("reason")})
+                    repo.emit(conn, "log", f"Strategist added {v['name']} ({eff.get('reason')})", agent_id=agent_id,
+                              task_id=task_id, data={"source_id": v["id"]})
         elif op == "event":
             if eff.get("type") not in EVENT_TYPES_ALLOWED:
                 raise ValueError(f"adapters may not emit event type {eff.get('type')!r}")

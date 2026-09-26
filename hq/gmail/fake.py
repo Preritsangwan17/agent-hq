@@ -12,11 +12,12 @@ from email import policy
 from typing import Any
 
 from hq.gmail.api import GmailError, GmailMessage, GmailNotFound, GmailTransient, b64url, parse_message
+from hq.profile.owner import email as _owner_email
 
 
 class FakeGmail:
-    def __init__(self, address: str = "sangwanprerit40@gmail.com", scopes: tuple[str, ...] = ("gmail.readonly",)):
-        self.address = address
+    def __init__(self, address: str | None = None, scopes: tuple[str, ...] = ("gmail.readonly",)):
+        self.address = address or _owner_email()
         self.scopes = scopes
         self._ids = itertools.count(1)
         self.history_id = 1000

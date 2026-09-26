@@ -34,6 +34,7 @@ cat >"$PLIST" <<PL
   <dict>
     <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
     <key>HOME</key><string>$HOME</string>
+    <key>PYTHONUTF8</key><string>1</string>
   </dict>
   <key>StandardOutPath</key><string>$LOG_DIR/launchd.out.log</string>
   <key>StandardErrorPath</key><string>$LOG_DIR/launchd.err.log</string>

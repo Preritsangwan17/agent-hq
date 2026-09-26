@@ -7,7 +7,7 @@ import { ArrowDownWideNarrow, CalendarClock, Coins, FlaskConical, Globe, Layers,
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 import { MIN_PAY_OPTIONS, DEFAULT_FILTERS, type PipelineFilters, type SimFilter, type SortKey } from './filters';
-import { Segmented, type SegmentedOption } from './Segmented';
+import { Segmented, type SegmentedOption } from '@/components/Segmented';
 
 const SIM_OPTIONS: readonly SegmentedOption<SimFilter>[] = [
   { value: 'all', label: 'All', icon: Layers },

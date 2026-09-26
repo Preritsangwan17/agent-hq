@@ -12,6 +12,8 @@ import type {
   AgentPatch,
   AgentValidation,
   AgentsMeta,
+  AnalyticsData,
+  AnalyticsScope,
   ApiErrorBody,
   AuditEntry,
   AuthStatus,
@@ -33,6 +35,7 @@ import type {
   OppDetail,
   OppQuery,
   OppSummary,
+  Owner,
   Profile,
   ProfileFact,
   ProfileField,
@@ -211,8 +214,8 @@ export const api = {
   reviewApplication: (id: string) => http.post<{ ok: boolean; reviewed: number }>(`/api/applications/${enc(id)}/review`),
 
   gmail: () => http.get<GmailInfo>('/api/gmail'),
-  saveGmailClient: (client_id: string, client_secret: string) =>
-    http.put<GmailInfo>('/api/gmail/client', { client_id, client_secret }),
+  saveGmailClient: (client: { client_id: string; client_secret: string } | { client_json: string }) =>
+    http.put<GmailInfo>('/api/gmail/client', client),
   connectGmail: (purpose: 'readonly' | 'send') =>
     http.post<{ auth_url: string; oauth: GmailInfo['oauth'] }>('/api/gmail/connect', { purpose }),
   disconnectGmail: () => http.post<GmailInfo>('/api/gmail/disconnect'),
@@ -233,6 +236,9 @@ export const api = {
   security: () => http.get<SecurityInfo>('/api/security'),
   audit: (q: { limit?: number; action?: string } = {}) => http.get<{ items: AuditEntry[] }>('/api/audit', { ...q }),
   strategyLatest: () => http.get<{ report: StrategyReport | null; next_run_at: string }>('/api/strategy/latest'),
+  strategyReports: (limit = 30) => http.get<{ items: StrategyReport[] }>('/api/strategy/reports', { limit }),
+  strategyRun: () => http.post<{ queued: boolean; task_id: string | null; detail?: string; paused?: boolean }>('/api/strategy/run'),
+  analytics: (scope: AnalyticsScope, days: number) => http.get<AnalyticsData>('/api/analytics', { scope, days }),
   models: () => http.get<ModelsResponse>('/api/models'),
   rescanModels: () => http.post<{ queued: boolean }>('/api/models/rescan'),
   benchmark: (suite: 'quick' | 'full', model_id?: string) =>
@@ -249,7 +255,7 @@ export const api = {
 
   auth: {
     status: () => http.get<AuthStatus>('/api/auth/status', undefined, { noAuthRedirect: true }),
-    me: () => http.get<{ ok: boolean }>('/api/auth/me', undefined, { noAuthRedirect: true }),
+    me: () => http.get<{ ok: boolean; owner?: Owner }>('/api/auth/me', undefined, { noAuthRedirect: true }),
     login: (passcode: string) => http.post<{ ok: boolean }>('/api/auth/login', { passcode }, { noAuthRedirect: true }),
     setup: (passcode: string) => http.post<{ ok: boolean }>('/api/auth/setup', { passcode }, { noAuthRedirect: true }),
     logout: () => http.post<{ ok: boolean }>('/api/auth/logout', {}, { noAuthRedirect: true }),

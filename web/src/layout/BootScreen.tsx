@@ -7,12 +7,14 @@ import { LogoMark } from './Logo';
 export interface BootScreenProps {
   label?: string;
   error?: string | null;
+  /** the server answered but failed (vs. not answering at all) */
+  serverError?: boolean;
   onRetry?: () => void;
   /** render inside the shell instead of full-screen */
   inline?: boolean;
 }
 
-export function BootScreen({ label = 'Starting Agent HQ…', error, onRetry, inline }: BootScreenProps) {
+export function BootScreen({ label = 'Starting Agent HQ…', error, serverError, onRetry, inline }: BootScreenProps) {
   return (
     <div className={cn('grid place-items-center', inline ? 'min-h-[60vh]' : 'min-h-dvh')}>
       {!inline && <div className="hq-backdrop" aria-hidden />}
@@ -25,13 +27,21 @@ export function BootScreen({ label = 'Starting Agent HQ…', error, onRetry, inl
           <>
             <div className="flex items-center gap-2 font-display text-lg font-semibold text-ink">
               <ServerCrash className="size-5 text-danger" aria-hidden />
-              HQ server unreachable
+              {serverError ? 'HQ hit an error' : 'HQ server unreachable'}
             </div>
             <p className="max-w-sm text-sm text-muted">{error}</p>
-            <p className="max-w-sm text-xs text-faint">
-              Start it with <code className="rounded bg-white/5 px-1 font-mono text-ink/80">./start.sh</code> — this page
-              retries automatically.
-            </p>
+            {serverError ? (
+              <p className="max-w-sm text-xs text-faint">
+                The server is running but this failed. Details are in{' '}
+                <code className="rounded bg-white/5 px-1 font-mono text-ink/80">data/logs/api.log</code> — this page retries
+                automatically.
+              </p>
+            ) : (
+              <p className="max-w-sm text-xs text-faint">
+                Start it with <code className="rounded bg-white/5 px-1 font-mono text-ink/80">./start.sh</code> — this page
+                retries automatically.
+              </p>
+            )}
             {onRetry && (
               <Button icon={RefreshCw} onClick={onRetry} size="sm">
                 Retry now

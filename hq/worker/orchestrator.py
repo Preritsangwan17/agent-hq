@@ -275,6 +275,13 @@ class Worker:
         try:
             prof = await gmail.profile()
             state.update(healthy=True, error=None, email=prof.get("emailAddress"), last_ok_at=now_iso())
+            from hq.profile import owner
+
+            if state["email"] and not owner.is_owner_address(state["email"]):
+                with tx(self.conn):
+                    notify.create(self.conn, "warn", f"Gmail is connected as {state['email']}",
+                                  f"HQ only sends as {owner.email()}. Disconnect in Settings › Gmail and connect "
+                                  "that account instead.", "/settings?tab=gmail", dedupe_open=True)
         except GmailAuthError as exc:
             state.update(healthy=False, error=str(exc))
             with tx(self.conn):

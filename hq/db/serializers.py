@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import statistics
 from datetime import datetime, time, timezone
@@ -14,6 +15,7 @@ from hq.db.seed import get_settings
 from hq.util.timeutil import IST, now_iso, parse_iso, to_iso, today_ist, utcnow
 
 WORKER_STALE_S = 30
+log = logging.getLogger(__name__)
 
 
 def _loads(value: Any, default: Any) -> Any:
@@ -83,9 +85,16 @@ def opp_summary(o: dict[str, Any], active_agent_id: str | None = None, needs_pre
 
 
 def opp_summaries(conn: sqlite3.Connection, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One unreadable row is logged and left out — it never takes the whole dashboard down."""
     active = repo.active_agents_by_opp(conn)
     needs = repo.opps_with_open_needs(conn)
-    return [opp_summary(o, active.get(o["id"]), o["id"] in needs) for o in rows]
+    out = []
+    for o in rows:
+        try:
+            out.append(opp_summary(o, active.get(o["id"]), o["id"] in needs))
+        except Exception:  # noqa: BLE001
+            log.exception("skipping unreadable opportunity %s", dict(o).get("id"))
+    return out
 
 
 def opp_summary_by_id(conn: sqlite3.Connection, opp_id: str) -> dict[str, Any] | None:

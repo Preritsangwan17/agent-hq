@@ -108,11 +108,12 @@ function ChecklistRow({ item, action }: { item: GoLiveItem; busy: string | null;
   return (
     <li className="flex flex-wrap items-center gap-3 px-3 py-2.5">
       <Icon className={cn('size-[18px] shrink-0', item.ok ? 'text-emerald-300' : 'text-faint')} aria-label={item.ok ? 'done' : 'to do'} />
-      <div className="min-w-0 flex-1">
+      {/* the text keeps a readable width; on a phone the action wraps under it instead of squeezing it */}
+      <div className="min-w-[12rem] flex-1">
         <div className={cn('text-[13.5px]', item.ok ? 'text-ink' : 'text-ink/80')}>{item.label}</div>
         <div className="truncate text-[12px] text-muted" title={item.detail}>{item.detail}</div>
       </div>
-      {!item.ok && action}
+      {!item.ok && action && <div className="ml-[30px] shrink-0 sm:ml-0">{action}</div>}
     </li>
   );
 }

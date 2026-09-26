@@ -83,6 +83,7 @@ export function AppShell() {
                 inline
                 label="Syncing with HQ…"
                 error={loadError ? `Can't load the snapshot: ${loadError}` : null}
+                serverError={!!loadError?.startsWith('server error:')}
                 onRetry={() => void loadSnapshot().catch(() => undefined)}
               />
             )}

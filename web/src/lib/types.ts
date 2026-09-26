@@ -690,6 +690,10 @@ export interface GmailInfo {
   oauth: { status: 'idle' | 'pending' | 'done' | 'error'; error: string | null; purpose: string | null; scopes: string[] };
   forced_dry_run: boolean;
   refusal: { reason: string; at: ISODate } | null;
+  /** the only account HQ reads and sends as */
+  owner_email: string;
+  /** the connected mailbox when it is not owner_email */
+  account_mismatch: string | null;
 }
 
 export interface GoLiveItem {
@@ -788,10 +792,19 @@ export interface ProfileFact {
   note: string | null;
 }
 
+/** Who HQ works for (config/resume.yaml). */
+export interface Owner {
+  name: string;
+  email: string;
+  linkedin: string | null;
+  github: string | null;
+}
+
 export interface Profile {
   facts: ProfileFact[];
   fields: ProfileField[];
   required_missing: string[];
+  owner: Owner;
 }
 
 export interface SecurityInfo {
@@ -830,6 +843,70 @@ export interface StrategyReport {
   proposed_actions: StrategyAction[];
   applied_actions: StrategyAction[];
   created_at: ISODate;
+}
+
+// ── analytics (GET /api/analytics) ───────────────────────────────────
+export type AnalyticsScope = 'all' | 'real' | 'sim';
+
+export interface AnalyticsRate {
+  key: string;
+  label: string;
+  applied: number;
+  replied: number;
+  interviews: number;
+  rate: number;
+}
+
+export interface SourceYield {
+  source_id: string;
+  name: string;
+  kind: string;
+  found: number;
+  filtered: number;
+  verified: number;
+  applied: number;
+  replies: number;
+  interviews: number;
+  median_pay_inr: number | null;
+  enabled: boolean | null;
+  errors: number;
+  last_ok_at: ISODate | null;
+}
+
+export interface AnalyticsData {
+  scope: AnalyticsScope;
+  days: number;
+  totals: {
+    opportunities: number;
+    history: number;
+    filtered: number;
+    applied: number;
+    replied: number;
+    reply_rate: number | null;
+    interviews: number;
+    offers: number;
+    simulated: number;
+  };
+  funnel: { stage: Stage; n: number }[];
+  applications_per_day: { date: string; dry_run: number; self_test: number; live: number; total: number }[];
+  found_per_day: { date: string; found: number }[];
+  reply_rates: Record<'source' | 'country' | 'role' | 'kind', AnalyticsRate[]>;
+  sources: SourceYield[];
+  gate_failures: { filtered: { reason: string; n: number }[]; drafts: { gate: string; rule: string | null; n: number }[] };
+  cloud_spend: { cap_usd: number; call_cap: number; days: { date: string; usd: number; calls: number }[] };
+  tokens_by_model: {
+    model_id: string;
+    label: string;
+    cloud: boolean;
+    simulated: boolean;
+    runs: number;
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+    avg_tok_s: number | null;
+  }[];
+  pay_histogram: { buckets: { label: string; min: number; max: number | null; n: number }[]; unknown: number; median: number | null; max: number | null };
+  pay_by_country: { country: string; n: number; median_inr: number | null; max_inr: number; median_ratio: number | null }[];
 }
 
 /** POST /api/agents/validate — dry run for the Add Agent wizard. */

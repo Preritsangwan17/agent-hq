@@ -24,6 +24,13 @@ def hf_cache_dir() -> Path:
     return Path(env) if env else Path.home() / ".cache" / "huggingface" / "hub"
 
 
+def mlx_installed() -> bool:
+    try:
+        return importlib.util.find_spec("mlx_lm") is not None
+    except (ImportError, ValueError):
+        return False
+
+
 def mlx_supports(model_type: str | None) -> bool:
     if not model_type:
         return False
@@ -126,7 +133,9 @@ def scan_repo(repo_dir: Path, supports: Callable[[str | None], bool] = mlx_suppo
     info.complete = info.incomplete_reason is None
     info.runtime_supported = supports(info.model_type) if info.modality in ("chat", "vision") else False
     if info.modality in ("chat",) and info.model_type and not info.runtime_supported and info.complete:
-        info.incomplete_reason = f"mlx_lm has no '{info.model_type}' model type"
+        missing = supports is mlx_supports and not mlx_installed()
+        info.incomplete_reason = ("MLX runs only on Apple Silicon Macs with macOS 14+ (mlx-lm is not installed here)"
+                                  if missing else f"mlx_lm has no '{info.model_type}' model type")
     info.est_ram_gb = estimate_ram_gb(info.size_bytes, info.params_b, bits)
     info.extra = {"qwen3": any(info.model_type and info.model_type.startswith(p) for p in QWEN3),
                   "bits": bits}

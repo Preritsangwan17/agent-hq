@@ -5,6 +5,8 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
+# Python reads config/*.yaml and writes logs as UTF-8 whatever the Terminal/launchd locale is
+export PYTHONUTF8=1
 
 FOREGROUND=0
 PREPARE_ONLY=0
@@ -51,7 +53,8 @@ avail_kb=$(df -Pk "$ROOT" | awk 'NR==2{print $4}')
 if [ "${avail_kb:-0}" -lt 1048576 ]; then warn "less than 1 GB of free disk"; else ok "disk $((avail_kb / 1048576)) GB free"; fi
 
 if [ "${HQ_SKIP_SYNC:-0}" != "1" ]; then
-  uv sync --quiet || fail "uv sync failed"
+  # --frozen: install exactly what uv.lock pins and never rewrite it (a rewritten lock blocks the next git pull)
+  uv sync --frozen --quiet || fail "uv sync failed"
   ok "python deps in sync"
 fi
 [ -x "$PY" ] || fail "$PY missing — run uv sync"
@@ -65,7 +68,9 @@ if [ "${HQ_SKIP_WEB_BUILD:-0}" != "1" ] && [ -f web/package.json ]; then
   fi
   if [ -n "$stale" ]; then
     echo "building web UI ($stale)…"
-    if ( cd web && { [ -d node_modules ] || npm install --no-audit --no-fund; } && npm run build ); then
+    # npm ci installs exactly package-lock.json (never rewrites it); only when node_modules is missing or older
+    if ( cd web && { { [ -d node_modules ] && [ ! package-lock.json -nt node_modules/.package-lock.json ]; } ||
+                     npm ci --no-audit --no-fund; } && npm run build ); then
       ok "web UI built"
     else
       warn "web build failed — the API will serve a placeholder page"

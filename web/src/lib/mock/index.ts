@@ -103,7 +103,10 @@ async function handle(url: URL, init: RequestInit | undefined): Promise<Response
     SS.set('hq-mock-auth', 'out');
     return json(200, { ok: true });
   }
-  if (path === '/api/auth/me') return loggedIn ? json(200, { ok: true }) : err(401, 'not authenticated');
+  if (path === '/api/auth/me')
+    return loggedIn
+      ? json(200, { ok: true, owner: { name: 'Prerit Sangwan', email: 'sangwanprerit40@gmail.com', linkedin: 'https://www.linkedin.com/in/prerit-sangwan-1b7572304', github: 'https://github.com/Preritsangwan17' } })
+      : err(401, 'not authenticated');
 
   // data
   if (path === '/api/snapshot') return json(200, s.snapshot());

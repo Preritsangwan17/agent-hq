@@ -33,17 +33,14 @@ def test_starting_team_is_valid_and_matches_contract():
         "followup": ("#FB923C", ["followup.schedule", "followup.send"]),
         "strategist": ("#E879F9", ["strategy.daily_review"]),
     }
-    phase_c = {"scout", "verifier", "writer", "factchecker", "reviewer", "resume", "applicant", "inbox", "followup"}
     found = {}
     for path in REPO_AGENTS.glob("*.yaml"):
         cfg, _ = parse_agent_file(path)
         found[cfg.id] = (cfg.color, cfg.capabilities)
         assert cfg.builtin
-        if cfg.id in phase_c:  # real modules; simulated opportunities are still handed to the simulator
-            assert cfg.adapter == "script" and cfg.adapter_config["module"].startswith("hq.pipeline.agents.")
-            assert cfg.adapter_config.get("sim_model")
-        else:
-            assert cfg.adapter == "sim"
+        # every starting agent is a real module; simulated opportunities are still handed to the simulator
+        assert cfg.adapter == "script" and cfg.adapter_config["module"].startswith("hq.pipeline.agents.")
+        assert cfg.adapter_config.get("sim_model")
     assert found == expected
 
 

@@ -21,6 +21,7 @@ import httpx
 
 from hq import settings as paths
 from hq.gmail.api import GmailAuthError, GmailTransient
+from hq.profile import owner
 from hq.util import netguard
 
 log = logging.getLogger(__name__)
@@ -164,7 +165,8 @@ class OAuthFlow:
         return AUTH_URL + "?" + urlencode({
             "client_id": cid, "redirect_uri": self._redirect, "response_type": "code", "scope": " ".join(scopes),
             "code_challenge": challenge, "code_challenge_method": "S256", "state": self._state,
-            "access_type": "offline", "prompt": "consent", "include_granted_scopes": "true"})
+            "access_type": "offline", "prompt": "consent", "include_granted_scopes": "true",
+            "login_hint": owner.email()})  # Google pre-selects Prerit's account
 
     async def _expire(self) -> None:
         await asyncio.sleep(FLOW_TIMEOUT_S)

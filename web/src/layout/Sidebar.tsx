@@ -3,6 +3,7 @@ import { LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { NavLink } from 'react-router';
 import { Tooltip } from '@/components/Tooltip';
 import { cn } from '@/lib/cn';
+import { useOwner } from '@/lib/queries';
 import { useAgentsList, useOpenNeedsCount } from '@/lib/store';
 import { withAlpha } from '@/theme/tokens';
 import { Logo } from './Logo';
@@ -50,6 +51,7 @@ export function Sidebar({ collapsed, onToggle, onLogout, className }: SidebarPro
       </nav>
 
       <TeamStrip collapsed={collapsed} />
+      <OwnerChip collapsed={collapsed} />
 
       <div className={cn('flex gap-1 border-t border-white/[.06] p-3', collapsed ? 'flex-col items-center' : 'items-center')}>
         <Tooltip content={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} side="top">
@@ -160,5 +162,47 @@ function TeamStrip({ collapsed }: { collapsed: boolean }) {
         })}
       </div>
     </div>
+  );
+}
+
+/** Whose HQ this is: initials, name and the Gmail address HQ reads and sends as. */
+function OwnerChip({ collapsed }: { collapsed: boolean }) {
+  const owner = useOwner();
+  if (!owner) return null;
+  const initials = owner.name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]!.toUpperCase())
+    .join('');
+  const badge = (
+    <span
+      aria-hidden
+      className="grid size-8 shrink-0 place-items-center rounded-full border border-cyan-300/25 bg-gradient-to-br from-cyan-400/20 to-violet-400/20 font-display text-[12px] font-semibold text-ink"
+    >
+      {initials}
+    </span>
+  );
+  if (collapsed) {
+    return (
+      <div className="mb-2 flex justify-center">
+        <Tooltip content={`${owner.name} · ${owner.email}`} side="top">
+          {badge}
+        </Tooltip>
+      </div>
+    );
+  }
+  return (
+    <NavLink
+      to="/settings?tab=profile"
+      className="mx-3 mb-2 flex items-center gap-2.5 rounded-xl px-2 py-1.5 transition-colors hover:bg-white/[.04]"
+      title="Profile & Facts"
+    >
+      {badge}
+      <span className="min-w-0">
+        <span className="block truncate text-[13px] font-medium text-ink">{owner.name}</span>
+        <span className="block truncate font-mono text-[10.5px] text-muted">{owner.email}</span>
+      </span>
+    </NavLink>
   );
 }

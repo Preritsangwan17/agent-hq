@@ -25,14 +25,15 @@ from typing import Any
 from hq.db import repo, serializers
 from hq.db.conn import dumps, tx
 from hq.db.seed import get_settings
+from hq.profile import owner as owner_profile
 from hq.util import netguard
 from hq.util.ids import new_id
 from hq.util.timeutil import IST, now_iso, parse_iso, to_iso, today_ist, utcnow
 
-PRERIT_EMAIL = "sangwanprerit40@gmail.com"
+PRERIT_EMAIL = owner_profile.email()  # sangwanprerit40@gmail.com (config/resume.yaml), fixed for the process lifetime
 DOMAIN_WINDOW_DAYS = 14
 LAB_DAILY_CAP = 3
-SIGNOFF_BLOCK = "Best regards,\nPrerit Sangwan\n"
+SIGNOFF_BLOCK = f"Best regards,\n{owner_profile.name()}\n"
 KINDS = ("application", "followup", "reply", "self_test")
 CHANNEL = {"application": "email", "followup": "followup", "reply": "reply", "self_test": "self_test"}
 OWNER = {"application": "applicant", "followup": "followup", "reply": "inbox"}
@@ -217,6 +218,10 @@ def prepare(conn: sqlite3.Connection, *, kind: str, to_addr: str, subject: str, 
             raise GuardBlocked(why, kind="recipient")
         if mode == "self_test" and to_addr.lower() != PRERIT_EMAIL:
             raise GuardBlocked("SELF-TEST only sends to Prerit's own address", kind="mode")
+        account = ((s.get("gmail_state") or {}).get("email") or "").strip().lower()
+        if mode != "dry_run" and account and account != PRERIT_EMAIL:
+            raise GuardBlocked(f"the connected Gmail account is {account}, not {PRERIT_EMAIL} — HQ only sends as "
+                               "Prerit (reconnect Gmail with the right account)", kind="mode")
         if kind != "self_test":
             check_caps(conn, s, to_addr, cold=kind == "application")
         out_id = new_id()

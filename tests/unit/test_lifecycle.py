@@ -216,3 +216,54 @@ def test_bootstrap_summary_is_friendly(hq_env, monkeypatch):
     assert summary([], 0, 11) == "database ready (data/hq.db, up to date) · 11 agents"
     monkeypatch.setattr(settings, "DB_PATH", Path("/elsewhere/hq.db"))
     assert summary([], 0, 1).startswith("database ready (/elsewhere/hq.db, up to date)")
+    assert summary([], 0, 10, 11) == "database ready (/elsewhere/hq.db, up to date) · 10 agents · 11 legacy applications imported"
+
+
+# ── macOS /bin/bash 3.2 ──────────────────────────────────────────────────────────────────────────────
+SHELL_SCRIPTS = [ROOT / "start.sh", ROOT / "stop.sh", ROOT / "install.sh", ROOT / "Makefile",
+                 ROOT / "Start Agent HQ.command", ROOT / "Stop Agent HQ.command", *sorted((ROOT / "scripts").glob("*.sh"))]
+
+
+def test_no_unbraced_variable_before_non_ascii():
+    """macOS bash 3.2 reads bytes of `…`, `—`, `→` as part of a variable name: "$PID…" is the unset variable
+    `PID\\xe2`, which under `set -u` killed stop.sh ("PID?: unbound variable"). Write "${PID}…" instead."""
+    import re
+
+    bad = re.compile(rb"\$[A-Za-z_][A-Za-z0-9_]*[\x80-\xff]")
+    hits = [f"{p.name}:{n}: {line.decode(errors='replace').strip()}" for p in SHELL_SCRIPTS
+            for n, line in enumerate(p.read_bytes().splitlines(), 1) if bad.search(line)]
+    assert not hits, "brace these variables:\n" + "\n".join(hits)
+
+
+def _latin1_env(tmp_path: Path) -> dict[str, str] | None:
+    """A locale where bytes ≥ 0x80 are letters, like macOS in UTF-8 — reproduces bash 3.2's name parsing."""
+    if sys.platform == "darwin":
+        return {"LC_ALL": "en_US.UTF-8"}
+    if not shutil.which("localedef"):
+        return None
+    out = tmp_path / "loc"
+    out.mkdir()
+    subprocess.run(["localedef", "-i", "en_US", "-f", "ISO-8859-1", str(out / "en_US.ISO-8859-1")],
+                   capture_output=True, timeout=60)
+    if not (out / "en_US.ISO-8859-1").exists():
+        return None
+    return {"LOCPATH": str(out), "LC_ALL": "en_US.ISO-8859-1"}
+
+
+def test_stop_sh_stops_a_running_supervisor_in_a_mac_like_locale(tmp_path):
+    loc = _latin1_env(tmp_path)
+    if loc is None:
+        pytest.skip("no Latin-1 locale available")
+    run = tmp_path / "run"
+    run.mkdir()
+    dummy = subprocess.Popen(["sleep", "60"])
+    try:
+        (run / "supervisor.pid").write_text(str(dummy.pid))
+        out = subprocess.run(["bash", str(ROOT / "stop.sh")], env={**os.environ, **loc, "HQ_RUN_DIR": str(run)},
+                             capture_output=True, timeout=40)
+        assert out.returncode == 0, out.stderr.decode(errors="replace")
+        assert b"stopping supervisor pid" in out.stdout and b"stopped" in out.stdout
+        assert dummy.wait(timeout=5) == -signal.SIGTERM   # stop.sh really sent SIGTERM
+    finally:
+        if dummy.poll() is None:
+            dummy.kill()
