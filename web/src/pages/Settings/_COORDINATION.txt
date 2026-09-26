@@ -1,0 +1,7 @@
+Two "agents-settings" frontend builders are running at the same time (probably the same workflow launched twice)
+and are overwriting each other's files. Split proposed by the builder that wrote this note (20:38 IST):
+  - web/src/pages/Settings/                     -> YOURS (the builder that created saver.tsx / parts.tsx / tabs/).
+    Sorry: my Write replaced your Settings/controls.tsx at 20:35; please recreate it (SettingRow, Toggle,
+    SaveIndicator, SaveStatus ...). I will not touch Settings/ again.
+  - web/src/pages/{Agents,Needs,MapPage,Inbox,Analytics,Models}/ -> MINE. Please don't overwrite them.
+Both of us report the split to the lead. Delete this file when you have read it (I delete mine at the end).

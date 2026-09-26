@@ -232,7 +232,11 @@ def list_need_rows(conn: sqlite3.Connection, status: str | None = "open",
 
 # ── agents ────────────────────────────────────────────────────────────────────────────────────────────
 def agent_rows(conn: sqlite3.Connection) -> list[dict[str, Any]]:
-    return [row_to_dict(r) for r in conn.execute("SELECT * FROM agents ORDER BY rowid").fetchall()]
+    from hq.agents.schema import TEAM_ORDER
+
+    rows = [row_to_dict(r) for r in conn.execute("SELECT * FROM agents ORDER BY rowid").fetchall()]
+    rank = {agent_id: i for i, agent_id in enumerate(TEAM_ORDER)}
+    return sorted(rows, key=lambda r: rank.get(r["id"], len(rank)))
 
 
 def agent_row(conn: sqlite3.Connection, agent_id: str) -> dict[str, Any] | None:

@@ -447,7 +447,8 @@ class Worker:
                 continue
             to_agent = self.likely_agent(spec.capability)
             if to_agent and to_agent != cfg.id:
-                repo.emit(self.conn, "task.handoff", f"{cfg.name} → {to_agent}: {spec.capability}", level="debug",
+                to_name = self.registry.configs[to_agent].name if to_agent in self.registry.configs else to_agent
+                repo.emit(self.conn, "task.handoff", f"{cfg.name} → {to_name}: {spec.capability}", level="debug",
                           agent_id=cfg.id, opportunity_id=opp_id, task_id=new_task,
                           data={"from_agent": cfg.id, "to_agent": to_agent, "capability": spec.capability,
                                 "opportunity_id": opp_id})

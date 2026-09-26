@@ -52,7 +52,8 @@ def test_snapshot_shape(authed, team, db):
     seed_opp(db)
     snap = authed.get("/api/snapshot").json()
     assert set(snap) == SNAPSHOT_KEYS
-    assert len(snap["agents"]) == 10
+    assert [a["id"] for a in snap["agents"]] == ["scout", "verifier", "writer", "factchecker", "reviewer", "resume",
+                                                 "applicant", "inbox", "followup", "strategist"]
     for agent in snap["agents"]:
         assert set(agent) == AGENT_KEYS
         assert set(agent["live"]) == LIVE_KEYS
@@ -128,16 +129,17 @@ def test_stats_counts_and_pay(authed, db):
 
 
 def test_control_pause_resume_freeze(authed, db):
+    assert authed.post("/api/control/pause-all", headers=MUTATE).json() == {"paused": True}  # body optional
     assert authed.post("/api/control/pause-all", json={"reason": "lunch"}, headers=MUTATE).json() == {"paused": True}
     assert authed.get("/api/settings").json()["settings"]["global_pause"] is True
     assert authed.post("/api/control/resume-all", json={"confirm": "yes"}, headers=MUTATE).status_code == 400
     assert authed.post("/api/control/resume-all", json={"confirm": "RESUME"}, headers=MUTATE).json() == {"paused": False}
     assert authed.post("/api/control/freeze-outbound", json={"on": True}, headers=MUTATE).json() == {
         "freeze_outbound": True}
-    kinds = [r[0] for r in db.execute("SELECT kind FROM commands ORDER BY ts")]
-    assert kinds == ["pause_all", "resume_all", "freeze_outbound"]
+    kinds = [r[0] for r in db.execute("SELECT kind FROM commands ORDER BY ts, rowid")]
+    assert kinds == ["pause_all", "pause_all", "resume_all", "freeze_outbound"]
     types = [r[0] for r in db.execute("SELECT type FROM events WHERE type LIKE 'control.%' ORDER BY id")]
-    assert types == ["control.pause", "control.pause", "control.freeze"]
+    assert types == ["control.pause", "control.pause", "control.pause", "control.freeze"]
 
 
 def test_settings_patch_whitelist(authed):

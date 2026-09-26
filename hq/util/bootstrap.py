@@ -22,13 +22,27 @@ def main() -> int:
         applied = migrate(conn)
         with tx(conn):
             seeded = seed_settings(conn)
-        changes = Registry(settings.AGENTS_DIR, conn).scan()
+        registry = Registry(settings.AGENTS_DIR, conn)
+        changes = registry.scan()
     finally:
         conn.close()
+    print(summary(applied, len(seeded), len(registry.configs)))
     errors = [agent for agent, kind in changes if kind == "error"]
-    print(f"db={settings.DB_PATH} migrations={applied or 'up to date'} settings_seeded={len(seeded)} "
-          f"agent_changes={len(changes)}" + (f" invalid_agent_files={errors}" if errors else ""))
+    if errors:
+        print(f"! invalid agent file(s): {', '.join(f'{e}.yaml' for e in errors)} — the last good config is kept; "
+              "details in the Activity feed", file=sys.stderr)
     return 0
+
+
+def summary(applied: list[int], seeded: int, agents: int) -> str:
+    """One friendly line for start.sh, e.g. `database ready (data/hq.db, up to date) · 10 agents`."""
+    try:
+        where = settings.DB_PATH.relative_to(settings.ROOT)
+    except ValueError:
+        where = settings.DB_PATH
+    schema = f"migrated to v{max(applied)}" if applied else "up to date"
+    extra = f", {seeded} default settings added" if seeded else ""
+    return f"database ready ({where}, {schema}{extra}) · {agents} agents"
 
 
 if __name__ == "__main__":

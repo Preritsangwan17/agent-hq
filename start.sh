@@ -15,7 +15,10 @@ for arg in "$@"; do
   esac
 done
 
-PORT="${HQ_PORT:-8765}"
+ENV_FILE="${HQ_ENV_FILE:-$ROOT/.env}"
+env_get() { [ -f "$ENV_FILE" ] && sed -n "s/^$1=//p" "$ENV_FILE" | tail -1 | tr -d "\"'" || true; }
+PORT="${HQ_PORT:-$(env_get HQ_PORT)}"
+PORT="${PORT:-8765}"
 RUN_DIR="${HQ_RUN_DIR:-$ROOT/data/run}"
 LOG_DIR="${HQ_LOG_DIR:-$ROOT/data/logs}"
 PY="$ROOT/.venv/bin/python"
@@ -37,7 +40,7 @@ if [ -f "$RUN_DIR/supervisor.pid" ] && kill -0 "$(cat "$RUN_DIR/supervisor.pid")
   exit 0
 fi
 if lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
-  fail "port $PORT is already in use ($(lsof -nP -iTCP:"$PORT" -sTCP:LISTEN | awk 'NR==2{print $1" pid "$2}'))"
+  fail "port $PORT is already in use ($(lsof -nP -iTCP:"$PORT" -sTCP:LISTEN | awk 'NR==2{print $1" pid "$2}')) — if that is a leftover Agent HQ, run ./stop.sh; or pick another HQ_PORT"
 fi
 ok "port $PORT free"
 avail_kb=$(df -Pk "$ROOT" | awk 'NR==2{print $4}')
@@ -68,7 +71,8 @@ if [ "${HQ_SKIP_WEB_BUILD:-0}" != "1" ] && [ -f web/package.json ]; then
   fi
 fi
 
-"$PY" -m hq.util.bootstrap || fail "bootstrap (migrate/seed/agents) failed"
+summary="$("$PY" -m hq.util.bootstrap)" || fail "database setup failed (migrate/seed/agents) — see the error above"
+ok "$summary"
 
 mkdir -p "$RUN_DIR" "$LOG_DIR"
 if [ "$FOREGROUND" = "1" ]; then

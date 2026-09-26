@@ -3,7 +3,6 @@ Mutations only write rows (settings, commands, audit, events, tasks); the worker
 from __future__ import annotations
 
 import sqlite3
-from datetime import timedelta
 from typing import Any, Iterator, Literal
 
 from fastapi import APIRouter, Depends, Query, Request, Response
@@ -18,7 +17,7 @@ from hq.db import repo, serializers
 from hq.db.conn import connect, tx
 from hq.db.seed import SettingError, get_settings, set_settings, validate_patch
 from hq.pipeline.state import priority_for
-from hq.util.timeutil import iso_in, now_iso, to_iso, utcnow
+from hq.util.timeutil import iso_in, now_iso, utcnow
 from hq.worker import queue
 
 

@@ -1,8 +1,9 @@
 """`python -m hq.supervisor`: keeps `hq.api` and `hq.worker` running.
 
 Restarts a child that exits with exponential backoff (1 s → 60 s, reset after 60 s of healthy uptime), writes
-`data/run/supervisor.pid`, holds `caffeinate -i -w <pid>` while the `keep_awake` setting is on, and on
-SIGTERM/SIGINT stops the children gracefully (SIGTERM, then SIGKILL after 15 s)."""
+`data/run/supervisor.pid` (plus `api.pid` / `worker.pid` for stop.sh), holds `caffeinate -i -w <pid>` while the
+`keep_awake` setting is on, and on SIGTERM/SIGINT stops the children gracefully (SIGTERM, then SIGKILL after 15 s).
+Children get HQ_SUPERVISOR_PID and exit on their own if the supervisor is killed (`hq/util/parentwatch.py`)."""
 from __future__ import annotations
 
 import logging
@@ -17,6 +18,7 @@ from pathlib import Path
 from typing import IO
 
 from hq import settings
+from hq.util import parentwatch
 
 log = logging.getLogger("hq.supervisor")
 BACKOFF_MIN_S, BACKOFF_MAX_S, HEALTHY_AFTER_S = 1.0, 60.0, 60.0
@@ -74,10 +76,24 @@ class Supervisor:
         if child.log_file is None:
             child.log_file = open(settings.LOG_DIR / f"{child.name}.log", "a", buffering=1)
         child.log_file.write(f"\n--- {time.strftime('%Y-%m-%d %H:%M:%S')} starting {child.name} ---\n")
+        env = {**os.environ, parentwatch.ENV_KEY: str(os.getpid())}  # child exits if we die (no orphans)
         child.proc = subprocess.Popen(child.argv, cwd=settings.ROOT, stdout=child.log_file, stderr=subprocess.STDOUT,
-                                      stdin=subprocess.DEVNULL, env=os.environ.copy())
+                                      stdin=subprocess.DEVNULL, env=env)
         child.started_at = time.monotonic()
+        self.child_pidfile(child).write_text(str(child.proc.pid))
         log.info("started %s pid=%s", child.name, child.proc.pid)
+
+    def child_pidfile(self, child: Child) -> Path:
+        """`data/run/<name>.pid` — lets stop.sh reap a child if this supervisor dies without cleaning up."""
+        return settings.RUN_DIR / f"{child.name}.pid"
+
+    def clear_child_pidfile(self, child: Child, pid: int) -> None:
+        path = self.child_pidfile(child)
+        try:
+            if path.read_text().strip() == str(pid):
+                path.unlink()
+        except OSError:
+            pass
 
     def record_exit(self, child: Child, code: int) -> None:
         uptime = time.monotonic() - child.started_at
@@ -90,6 +106,8 @@ class Supervisor:
         log.warning("%s exited with %s after %.1fs; restarting in %.0fs", child.name, code, uptime, delay)
         self._event(f"Supervisor: {child.name} exited ({_describe(code)}); restarting in {delay:.0f}s",
                     {"child": child.name, "exit_code": code, "restart_in_s": delay, "restarts": child.restarts})
+        if child.proc is not None:
+            self.clear_child_pidfile(child, child.proc.pid)
         child.proc = None
 
     def _event(self, message: str, data: dict) -> None:
@@ -182,6 +200,7 @@ class Supervisor:
                 log.warning("%s did not stop in time; killing", child.name)
                 child.proc.kill()
                 child.proc.wait()
+            self.clear_child_pidfile(child, child.proc.pid)
             if child.log_file:
                 child.log_file.close()
         if self.caffeinate and self.caffeinate.poll() is None:

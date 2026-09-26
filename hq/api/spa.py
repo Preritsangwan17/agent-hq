@@ -1,8 +1,10 @@
 """Serve the built SPA from web/dist with index.html fallback for client-side routes."""
 from __future__ import annotations
 
+from pathlib import PurePosixPath
+
 from fastapi import FastAPI
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, Response
 
 from hq import settings
 
@@ -30,4 +32,15 @@ def mount_spa(app: FastAPI) -> None:
                 immutable = "/assets/" in f"/{candidate.relative_to(dist).as_posix()}"
                 cache = "public, max-age=31536000, immutable" if immutable else "no-cache"
                 return FileResponse(candidate, headers={"Cache-Control": cache})
+            if _is_static_asset(full_path):  # a stale hashed bundle must 404, not come back as HTML
+                return PlainTextResponse("not found", status_code=404, headers={"Cache-Control": "no-cache"})
         return FileResponse(index, headers={"Cache-Control": "no-cache"})
+
+
+STATIC_SUFFIXES = {".js", ".mjs", ".css", ".map", ".json", ".webmanifest", ".txt", ".xml", ".wasm", ".png", ".jpg",
+                   ".jpeg", ".gif", ".svg", ".ico", ".webp", ".avif", ".woff", ".woff2", ".ttf", ".otf"}
+
+
+def _is_static_asset(path: str) -> bool:
+    """Requests for files (not client-side routes): anything under assets/ or with a static-file extension."""
+    return path.startswith("assets/") or PurePosixPath(path).suffix.lower() in STATIC_SUFFIXES

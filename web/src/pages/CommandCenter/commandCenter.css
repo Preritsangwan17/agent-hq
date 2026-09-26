@@ -1,0 +1,230 @@
+/* Command Center page styles: agent-network node states, edge glow, particle freeze and the typing now-line.
+   Everything animated here uses transform/opacity only; reduced motion turns the loops off. */
+
+@keyframes cc-breathe {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 0.95;
+    transform: scale(1.1);
+  }
+}
+@keyframes cc-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes cc-shake {
+  0%,
+  22%,
+  100% {
+    transform: translateX(0);
+  }
+  3%,
+  9%,
+  15% {
+    transform: translateX(-3px);
+  }
+  6%,
+  12%,
+  18% {
+    transform: translateX(3px);
+  }
+}
+@keyframes cc-burst {
+  from {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.9);
+  }
+}
+@keyframes cc-char {
+  to {
+    opacity: 1;
+  }
+}
+@keyframes cc-caret {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes cc-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(260%);
+  }
+}
+
+/* ── React Flow canvas: static, page scroll passes through ─────────── */
+.cc-network .react-flow__pane {
+  pointer-events: none;
+  touch-action: auto;
+  cursor: default;
+}
+.cc-network .react-flow__node {
+  cursor: pointer;
+}
+.cc-network .react-flow__handle {
+  opacity: 0;
+  width: 4px;
+  height: 4px;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  background: transparent;
+}
+.cc-network .react-flow__edges,
+.cc-network .react-flow__nodes {
+  transition: opacity 0.4s ease;
+}
+.cc-network[data-paused='true'] .react-flow__edges {
+  filter: grayscale(1);
+  opacity: 0.45;
+}
+
+/* ── nodes ──────────────────────────────────────────────────────────── */
+.cc-node {
+  --c: #94a3b8;
+}
+.cc-node .cc-orb {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--c) 55%, transparent);
+  background: radial-gradient(circle at 50% 32%, color-mix(in srgb, var(--c) 30%, transparent), color-mix(in srgb, var(--c) 6%, #070b14) 72%);
+  box-shadow:
+    0 0 22px -8px color-mix(in srgb, var(--c) 70%, transparent),
+    inset 0 0 14px color-mix(in srgb, var(--c) 16%, transparent);
+  transition: opacity 0.35s ease;
+}
+.cc-node .cc-orb-glyph {
+  line-height: 1;
+  user-select: none;
+}
+.cc-node[data-state='idle'] .cc-orb,
+.cc-node[data-state='off'] .cc-orb {
+  opacity: 0.55;
+}
+.cc-node[data-state='idle'] .cc-label,
+.cc-node[data-state='off'] .cc-label {
+  opacity: 0.72;
+}
+.cc-node[data-state='working'] .cc-orb {
+  border-color: color-mix(in srgb, var(--c) 90%, white 10%);
+  box-shadow:
+    0 0 30px -6px color-mix(in srgb, var(--c) 85%, transparent),
+    inset 0 0 18px color-mix(in srgb, var(--c) 28%, transparent);
+}
+.cc-node .cc-breath {
+  position: absolute;
+  inset: -34%;
+  border-radius: 9999px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--c) 55%, transparent) 0%, color-mix(in srgb, var(--c) 18%, transparent) 42%, transparent 70%);
+  opacity: 0.6;
+  animation: cc-breathe 2.6s ease-in-out infinite;
+  pointer-events: none;
+}
+.cc-node .cc-spin {
+  position: absolute;
+  inset: -5px;
+  border-radius: 9999px;
+  background: conic-gradient(from 0deg, transparent 0deg, transparent 220deg, color-mix(in srgb, var(--c) 95%, white 5%) 340deg, transparent 360deg);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
+  animation: cc-spin 1.8s linear infinite;
+  pointer-events: none;
+}
+.cc-node .cc-err-ring {
+  position: absolute;
+  inset: -4px;
+  border-radius: 9999px;
+  border: 2px solid #ef4444;
+  box-shadow: 0 0 22px -2px rgb(239 68 68 / 0.75);
+  pointer-events: none;
+}
+.cc-node[data-state='error'] .cc-orb,
+.cc-node[data-flash='true'] .cc-orb {
+  border-color: #ef4444;
+}
+.cc-node[data-state='error'] .cc-shaker,
+.cc-node[data-flash='true'] .cc-shaker {
+  animation: cc-shake 2.4s ease-in-out infinite;
+}
+.cc-node[data-flash='true'] .cc-shaker {
+  animation-iteration-count: 1;
+  animation-duration: 1.4s;
+}
+.cc-node[data-state='paused'] .cc-shaker {
+  filter: grayscale(1);
+}
+.cc-node[data-state='paused'] .cc-orb {
+  opacity: 0.5;
+}
+.cc-node[data-state='paused'] .cc-label {
+  opacity: 0.6;
+}
+.cc-node .cc-burst {
+  position: absolute;
+  inset: -2px;
+  border-radius: 9999px;
+  border: 1.5px solid var(--burst, var(--c));
+  opacity: 0;
+  animation: cc-burst 0.7s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+  pointer-events: none;
+}
+
+/* ── edges ──────────────────────────────────────────────────────────── */
+.cc-edge-glow {
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+.cc-edge-glow[data-on='true'] {
+  opacity: 1;
+  transition-duration: 0.12s;
+}
+
+/* ── typing now-line ────────────────────────────────────────────────── */
+.cc-ch {
+  opacity: 0;
+  animation: cc-char 0.01s linear forwards;
+  white-space: pre;
+}
+.cc-caret {
+  display: inline-block;
+  width: 6px;
+  height: 11px;
+  border-radius: 1px;
+  animation: cc-caret 1s steps(1) infinite;
+}
+.cc-sweep {
+  animation: cc-sweep 2.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cc-node .cc-breath,
+  .cc-node .cc-spin,
+  .cc-node .cc-shaker,
+  .cc-node .cc-burst,
+  .cc-caret,
+  .cc-sweep {
+    animation: none !important;
+  }
+  .cc-node .cc-burst {
+    display: none;
+  }
+}

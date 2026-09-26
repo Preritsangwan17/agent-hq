@@ -63,6 +63,10 @@ CAPABILITY_IDS = [c[0] for c in CAPABILITIES]
 SCHEDULABLE = ["discover.ats", "discover.program_page", "discover.feed", "discover.email_alerts",
                "inbox.poll", "strategy.daily_review"]
 
+# Display order of the starting team (CONTRACT §6); user-created agents follow in creation order.
+TEAM_ORDER = ["scout", "verifier", "writer", "factchecker", "reviewer", "resume", "applicant", "inbox", "followup",
+              "strategist"]
+
 PALETTE = ["#22D3EE", "#2DD4BF", "#A78BFA", "#F59E0B", "#FB7185", "#60A5FA", "#F472B6", "#A3E635",
            "#FB923C", "#E879F9", "#34D399", "#818CF8", "#FACC15", "#38BDF8", "#F87171", "#C084FC"]
 
