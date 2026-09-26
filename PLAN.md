@@ -1,8 +1,11 @@
 # Agent HQ — PLAN
 
 ## Context
-Prerit (2nd-year B.Tech CSE AI/ML, Bennett University) wants a local-first "mission control" website. A team of local LLMs
-plus Claude Code would find, check and apply to AI/ML/data/software internships, jobs and funded programs around the clock.
+Prerit (2nd-year B.Tech CSE AI/ML, Bennett University) wants a local-first "mission control" website: his own AI-powered internship
+and job agent. A team of local LLMs on his Mac (free, private) finds, checks and applies to AI/ML/data/software
+internships, jobs and funded programs around the clock. Cloud models are optional and used only when they add value:
+the Claude CLI and ChatGPT's Codex CLI on his subscriptions first, then pay-per-token Grok (see docs/CONTRACT_F.md,
+which supersedes this plan wherever they differ).
 
 The agents only apply when four safety gates pass:
 - **Fact:** every claim traces to Prerit's verified facts.
@@ -48,14 +51,14 @@ temporary workspace, and the fixtures in `/private/tmp/...scratchpad` are cleare
   - State and UI: zustand, TanStack Query, react-virtuoso, lucide.
   - Fonts, self-hosted: Space Grotesk, Inter, JetBrains Mono.
   - Node 26 with npm; node@22 is the fallback.
-- **Claude:** runs as `~/.local/bin/claude` v2.1.207 in headless mode.
+- **Cloud models (optional):** the Claude CLI (headless `claude -p`), ChatGPT's Codex CLI (`codex exec`) and Grok via xAI's API — each switchable; see docs/CONTRACT_F.md.
 - **Ports:** 8765 (app), 5173 (dev), 8799 (mock ATS), 8101–8120 (model servers).
 
 ## Architecture
 ```
 launchd (KeepAlive, RunAtLoad) → hq.supervisor (restarts children w/ backoff; caffeinate -i -w pid)
   ├─ hq-api    FastAPI :8765  REST commands · SSE /api/stream · serves built SPA · auth on every route
-  ├─ hq-worker asyncio: Scheduler · Dispatcher · Watchdog · Agent runners · ModelManager · ClaudeRunner
+  ├─ hq-worker asyncio: Scheduler · Dispatcher · Watchdog · Agent runners · ModelManager · CloudRunner
   │            · SideEffectGuard · BrowserWorker(Playwright, 1 at a time)
   ├─ mlx_lm.server ×N  (one process per hot model, OpenAI-compatible, managed by ModelManager)
   └─ mock-ats :8799 (dry-run/dev only)
@@ -69,7 +72,7 @@ SQLite (WAL) data/hq.db = state + task queue + event bus (worker writes events i
 ~/Documents/agent-hq/  start.sh stop.sh Makefile README.md PLAN.md .env.example pyproject.toml
   agents/*.yaml  agents/scripts/   prompts/*.md  schemas/*.json
   config/ sources.yaml manual_lane.yaml banned_claims.yaml tech_terms.yaml cliches.yaml scam_lexicon.yaml
-          known_mills.yaml answer_bank.yaml doc_types.yaml living_costs.csv claude_prices.yaml
+          known_mills.yaml answer_bank.yaml doc_types.yaml living_costs.csv cloud_prices.yaml
   hq/ supervisor.py settings.py db/ api/ worker/ agents/ adapters/ llm/ models/{discovery,benchmark}/
       pipeline/{discover,verify,gates,apply}/ profile/ resume/ gmail/ notify/ importer/ strategist/ util/
   mock_ats/  web/  tests/{unit,integration,fixtures}/  scripts/ launchd/  legacy/  data/ (gitignored, 700)
@@ -117,7 +120,7 @@ SQLite (WAL) data/hq.db = state + task queue + event bus (worker writes events i
 **Agents, models and runs**
 - `agents`, `agent_live` (now-line, progress, tok/s, heartbeat).
 - `models` (runtime, complete, reason, RAM est/measured), `model_servers`, `benchmarks`, `role_assignments` (auto/override).
-- `tasks` (queue: capability, priority, lease, heartbeat, attempts, backoff, escalation_level, idempotency_key), `agent_runs` (full input/output paths, model, tokens, tok/s, cost, duration), `events`, `claude_usage`.
+- `tasks` (queue: capability, priority, lease, heartbeat, attempts, backoff, escalation_level, idempotency_key), `agent_runs` (full input/output paths, model, tokens, tok/s, cost, duration), `events`, `cloud_usage`.
 
 **Email and alerts**
 - `email_threads` (classification, notify_only_lock), `email_messages`.
@@ -131,21 +134,21 @@ SQLite (WAL) data/hq.db = state + task queue + event bus (worker writes events i
 Each agent is one YAML file, pydantic-validated and hot-reloaded with watchfiles. An invalid file is rejected and the last good version kept.
 ```yaml
 id: writer  name: Writer  avatar: "✍️"  color: "#A78BFA"  role: writer
-adapter: openai_compatible   # openai_compatible|claude_code|script|http|browser|sim
+adapter: openai_compatible   # openai_compatible|cloud|script|http|browser|sim
 adapter_config: {managed: true, prompt: prompts/writer.md, schema: schemas/draft.json, max_tokens: 900}
 model: auto                  # leaderboard winner, or explicit id
 capabilities: [draft.cover_letter, draft.cold_email, draft.research_statement, draft.form_answers, draft.followup]
 cost_tier: local  concurrency: 1  schedule: {mode: on_demand}  enabled: true
 ```
 **Adapters** share `run(task, ctx)` and `health()`. The context offers `ctx.llm(role, msgs, schema)` (router, JSON repair,
-escalation), `ctx.claude()` (budgeted), `ctx.fetch()` (polite, with the manual-lane block), `ctx.emit()`, `ctx.progress()`,
+escalation), `ctx.cloud()` (budgeted), `ctx.fetch()` (polite, with the manual-lane block), `ctx.emit()`, `ctx.progress()`,
 `ctx.heartbeat()` and `ctx.check_cancel()`.
 - **openai_compatible:**
   - Streams to measure time-to-first-token and tok/s.
   - Always sends `model` (the served path) and `max_tokens`.
   - Strips `<think>` tags.
   - Validates against a JSON schema and does one repair retry. MLX has no `response_format`; llama.cpp, Ollama and LM Studio use it when present.
-- **claude_code:** `claude -p --output-format json --json-schema <s> --tools "" --strict-mcp-config --mcp-config '{"mcpServers":{}}' --settings '{"disableAllHooks":true}' --system-prompt <role> --no-session-persistence --max-budget-usd <cap> --model <m>`.
+- **Claude CLI provider (optional, via the `cloud` adapter/runner):** `claude -p --output-format json --json-schema <s> --tools "" --strict-mcp-config --mcp-config '{"mcpServers":{}}' --settings '{"disableAllHooks":true}' --system-prompt <role> --no-session-persistence --max-budget-usd <cap> --model <m>`.
   - Runs with an empty working directory and a minimal environment.
   - A result is accepted only when `subtype=success` and `structured_output` validates.
   - Records `total_cost_usd` (a client-side estimate) and usage.
@@ -159,7 +162,7 @@ escalation), `ctx.claude()` (budgeted), `ctx.fetch()` (polite, with the manual-l
   - `apply.*`, `reply.send` and `followup.send` belong only to the built-in Applicant, Inbox Watcher and Follow-up agents, and the loader enforces this.
   - Pausing an agent that owns a side effect pauses that capability system-wide; its tasks are not rerouted.
   - Wizard-created agents return data only. Creating script agents is loopback-only.
-- **Starting team (10 nodes):** Scout, Verifier, Writer, Fact-Checker, Reviewer (Claude), Résumé Builder, Applicant, Inbox Watcher, Follow-up, Strategist (Claude).
+- **Starting team (10 nodes):** Scout, Verifier, Writer, Fact-Checker, Reviewer, Résumé Builder, Applicant, Inbox Watcher, Follow-up, Strategist.
 - **Add Agent wizard:** adapter → identity → capabilities → config (endpoint probe, env-var name only) → schedule and concurrency → live test. The agent then appears in the graph with no restart. New agents run on probation (their outputs need approval) for 5 runs.
 
 ## Orchestrator
@@ -168,24 +171,24 @@ escalation), `ctx.claude()` (budgeted), `ctx.fetch()` (polite, with the manual-l
   - Idempotency keys stop duplicate work.
 - **Dispatcher (every 500 ms):**
   - Candidates are agents with the capability that are enabled, not paused, and below their concurrency.
-  - `score = role_score × availability(loaded 1 / loadable .7) × (1−0.3·load) − cost_penalty(Claude .5 unless escalation)`.
+  - `score = role_score × availability(loaded 1 / loadable .7) × (1−0.3·load) − cost_penalty(cloud .5 unless escalation)`.
   - Leases are atomic UPDATEs lasting 90 s, extended by a heartbeat every 15 s.
 - **Failures:**
   - Transient failures back off exponentially, honouring Retry-After.
-  - Quality failures (bad JSON, low confidence, disagreement) **escalate**: role model → next-ranked different local model → Claude (budget allowing) → Needs Prerit decision or dead.
+  - Quality failures (bad JSON, low confidence, disagreement) **escalate**: role model → next-ranked different local model → a cloud model when hq.llm.policy allows it (subscriptions first, then Grok within its budget) → Needs Prerit decision or dead.
   - Domain outcomes (404, ineligible, scam) are stage changes, not failures.
 - **Budget:**
-  - Reserve the EMA cost of that task type, then check today's spend + reserved + estimate ≤ cap. The call cap defaults to 40/day to leave headroom for Prerit's own use of Claude.
+  - Reserve the EMA cost of that task type, then check today's spend + reserved + estimate ≤ cap. Grok's call cap defaults to 40/day; each subscription CLI gets at most 30 HQ calls per 5-hour window so Prerit keeps the rest of his plan.
   - When over the cap, the task is set to `deferred_budget` until midnight IST, and local work continues.
   - Items due within 48 h that are blocked on the budget go to Needs Prerit.
-  - With `require_claude_signoff` on (default), nothing is submitted without sign-off.
+  - With `signoff_required` on (default), nothing is submitted without sign-off.
 - **PAUSE ALL / Freeze outbound / per-agent pause:**
   - Every send passes through `apply/guard.py`. In one transaction it re-reads pause, mode, approval sha, caps and idempotency, writes the intent row, then sends.
 - **Watchdog (every 30 s):**
   - Expired leases are re-queued.
   - Stuck agents (heartbeat older than 2× the interval) are cancelled and restarted.
   - Model servers are health-checked and restarted at most 3 times per 10 min, then marked broken.
-  - A repeated error signature (3 times in 1 h) sends a Claude `debug.failed_run` diagnosis. Only whitelisted actions are applied automatically.
+  - A repeated error signature (3 times in 1 h) sends a cloud `debug.failed_run` diagnosis. Only whitelisted actions are applied automatically.
 
 ## Model manager (phase b)
 - **Discovery** runs every 10 min, on a rescan button, and when a new model appears (which triggers a quick benchmark):
@@ -212,7 +215,7 @@ escalation), `ctx.claude()` (budgeted), `ctx.fetch()` (polite, with the manual-l
 - **Role assignment:**
   - `0.6·quality + 0.15·json_valid + 0.15·speed_vs_target + 0.10·(1−ram/pool)`, with per-role floors.
   - The fact-checker is assigned first.
-  - **Independence is enforced per document lineage:** the checker model must differ from every author model in that document's version history. This covers escalations, overrides and Claude polish; a Claude-polished letter is re-checked locally and signed off by a different Claude model, otherwise it goes to review.
+  - **Independence is enforced per document lineage:** the checker model must differ from every author model in that document's version history. This covers escalations, overrides and cloud polish; a cloud-polished letter is re-checked locally and signed off by a different model (a local checker or another cloud model), otherwise it goes to review.
   - Leaderboard overrides are kept; the validator rejects writer = checker.
   - Recommendation: add one non-Qwen model (e.g. a Llama or Gemma 8B MLX) for a more independent verifier. It needs Prerit's OK to download.
 - **Memory policy (48 GB, Metal wired limit about 36 GB):**
@@ -241,7 +244,7 @@ escalation), `ctx.claude()` (budgeted), `ctx.fetch()` (polite, with the manual-l
 3. **Verify:**
    - **Link live:** the job is still on the board, or a 200 response with no "closed" markers.
    - **Deadline:** conservative by 1 day. No deadline means rolling, re-verified every 3 days.
-   - **Eligibility:** a deterministic rule engine (grad-year, stage, semester, degree, CGPA, **work authorization / enrolment / visa**), time-aware because Prerit becomes a rising 3rd-year in May 2027. Then local LLM extraction with exact quotes; confidence = model accuracy × agreement × grounding. Below 0.80 it escalates to a different local model, then Claude.
+   - **Eligibility:** a deterministic rule engine (grad-year, stage, semester, degree, CGPA, **work authorization / enrolment / visa**), time-aware because Prerit becomes a rising 3rd-year in May 2027. Then local LLM extraction with exact quotes; confidence = model accuracy × agreement × grounding. Below 0.80 it escalates to a different local model, then a cloud model.
    - **Availability gate:** the role's dates and hours must fit Prerit's confirmed availability windows and hours cap. Unknown sends it to Needs Prerit.
    - **Pay:**
      - Parse the amount, currency and period, then convert to monthly and to INR (Frankfurter, cached daily).
@@ -252,7 +255,7 @@ escalation), `ctx.claude()` (budgeted), `ctx.fetch()` (polite, with the manual-l
    - **Scam:** fee lexicon (including application fees, e.g. OIST ¥5,000), a known-mill list (11 names), certificate-only wording, free-mail recruiters for brand names, lookalike domains, early requests for ID or bank details, crypto or cheque language.
 4. **Score fit (0–100):**
    - Role relevance 25, skills 20, eligibility confidence 15, pay ratio 15, source prior 10, deadline 5, location 5, program benefits 5.
-   - Draft if the score is ≥ 60; Claude polish if ≥ 75; at most 20 new drafts a day.
+   - Draft if the score is ≥ 60; cloud polish if ≥ 75; at most 20 new drafts a day.
 5. **Draft.** The Writer receives the atomic facts (with IDs), verified job quotes, doc-type rules and gold exemplars. It **never** sees legacy `angle` notes. It outputs one entry per sentence: `{text, kind, fact_ids, job_quote_ids}`.
 6. **Fact gate.** It runs on **every outbound string**: letters, résumé summary lines, form answers, subject lines, follow-ups and info replies.
    - (a) Deterministic rules:
@@ -261,8 +264,8 @@ escalation), `ctx.claude()` (budgeted), `ctx.fetch()` (polite, with the manual-l
      - `WRONG_PROJECT`: pipeline/YAML/Streamlit belong to the book project; RandomForest/one-hot/tenure belong to churn.
      - Also `TECH_NOT_WHITELISTED`, `PLURAL_OVERGEN`, `CITATION_MISSING`, `JOB_CLAIM_UNQUOTED`, and structural rules.
    - (b) An independent local verifier checks each sentence; a `partial` verdict counts as a fail.
-   - (c) Claude sign-off.
-   - On any failure: targeted feedback, a rewrite, and **all** layers re-run. After 3 loops, Claude polish. If it still fails, a review item goes to Needs Prerit.
+   - (c) final sign-off (a second local model, or a cloud model).
+   - On any failure: targeted feedback, a rewrite, and **all** layers re-run. After 3 loops, cloud polish. If it still fails, a review item goes to Needs Prerit.
    - Yes/no and numeric screening answers must map to a fact or a confirmed field, otherwise they go to Needs Prerit.
    - Résumé: approved bullets only. The PDF is checked for one page and approved text.
 7. **Quality gate:**
@@ -321,7 +324,7 @@ escalation), `ctx.claude()` (budgeted), `ctx.fetch()` (polite, with the manual-l
 - **Header:**
   - A big red **PAUSE ALL** button (resume needs a hold-to-confirm).
   - A mode badge: DRY RUN, SELF-TEST, LIVE or APPROVE-FIRST.
-  - A Claude budget gauge and worker/SSE status.
+  - A Grok budget gauge and worker/SSE status.
 - **Look:**
   - Background `#070B14`, glass panels (`white/4%`, blur, `white/10` border), and a glow in each agent's own accent colour: Scout cyan, Verifier teal, Writer violet, Fact-Checker amber, Reviewer coral, Résumé blue, Applicant pink, Inbox lime, Follow-up orange, Strategist fuchsia.
   - Red is reserved for errors and the kill switch; **gold** is reserved for money.
@@ -329,7 +332,7 @@ escalation), `ctx.claude()` (budgeted), `ctx.fetch()` (polite, with the manual-l
   - Fonts: Space Grotesk (display and numbers), Inter (UI), JetBrains Mono (logs).
   - Only transform and opacity are animated; reduced motion is respected.
 - **Command Center:**
-  - Count-up hero stats, including Claude $ today vs local tokens.
+  - Count-up hero stats, including Grok $ today vs local tokens.
   - **AgentNetwork:** React Flow with custom glowing nodes (breathing when working, dim when idle, red shake on error) and particle edges fired by `task.handoff` events in the source agent's colour.
   - Agent cards: live "now" line, progress, tok/s, tasks today.
   - Strategist daily report card.
@@ -368,23 +371,23 @@ escalation), `ctx.claude()` (budgeted), `ctx.fetch()` (polite, with the manual-l
   - LAN binding (`HQ_LAN=1`) is off by default. Self-signed HTTPS is optional (phase e).
 - **Secrets:**
   - Only in `.env`: passcode hash, session secret, Gmail client ID/secret and refresh token (written there by the OAuth step).
-  - A redaction filter covers logs, run records and anything sent to Claude. The phone number is never sent to Claude.
+  - A redaction filter covers logs, run records and anything sent to a cloud model. The phone number is never sent to any cloud model.
 - **Prompt-injection defence:**
   - Web and email text is treated as data. LLM outputs are validated values only.
   - Every send decision (recipient, URL, whether to send) is made by deterministic code.
-  - Claude runs with no tools and no hooks.
+  - The Claude and Codex CLIs run with no tools and no hooks in empty read-only sandboxes; Grok gets plain chat completions.
 - **Never:** paying, card details, creating accounts, entering passwords, solving CAPTCHAs, bypassing logins, attempting assessments, or acting on interviews, offers, money or legal matters.
 
 ## Reliability
 - **`./start.sh`:**
-  - A `doctor` check (uv, node, Chrome, claude, ports, disk).
+  - A `doctor` check (uv, node, Chrome, Ollama, optional claude/codex CLIs, ports, disk).
   - `uv sync`, then build the web app if it changed.
   - Migrate the database, start the supervisor, print the URL.
 - **`./stop.sh`:** drains the worker and stops the model servers.
 - **Make targets:** `make up/down/test/bench/screens/backup`.
 - **launchd:** `scripts/install_launchd.sh` installs a LaunchAgent (KeepAlive, RunAtLoad, ThrottleInterval 30, logs in `data/logs`).
   - It runs **after login**. With FileVault on, nothing runs after a reboot until Prerit logs in; the README says so and does not suggest disabling FileVault.
-  - The step verifies that `claude` Keychain auth and `osascript` notifications work from the launchd context.
+  - The step verifies that the optional `claude`/`codex` CLI logins and `osascript` notifications work from the launchd context.
 - **Keeping the Mac awake (README):**
   - AC power; `caffeinate -i` from the supervisor; optional `sudo pmset -c sleep 0` (Prerit runs it).
   - Closing the lid sleeps the Mac unless it's in clamshell mode.
@@ -428,15 +431,15 @@ escalation), `ctx.claude()` (budgeted), `ctx.fetch()` (polite, with the manual-l
   - A `kill -9` of the worker recovers within 30 s.
   - Auth and Host tests pass.
 
-**(b) Models, benchmarks, routing and Claude**
+**(b) Models, benchmarks, routing and cloud models**
 - Deliverables:
   - Discovery for 4 runtimes; ModelManager with the memory and usability policy.
   - Benchmark suite with gold fixtures; leaderboard with overrides.
-  - openai_compatible and claude_code adapters; escalation; budget.
+  - openai_compatible and cloud adapters; escalation; budget.
 - Acceptance:
   - 5 usable and 5 broken models shown with reasons; the leaderboard is filled.
   - Writer ≠ checker across the full document history (tests cover escalation and override).
-  - A forced escalation goes local → local → Claude and is logged with cost.
+  - A forced escalation goes local → local → a cloud model and is logged with cost.
   - Budget deferral works.
   - The memory pool is never exceeded.
 
@@ -480,15 +483,15 @@ escalation), `ctx.claude()` (budgeted), `ctx.fetch()` (polite, with the manual-l
 1. **Profile fields** in Settings (needed before go-live): phone, CGPA and marks since class X, grad year, semester, city, availability windows and hours cap, passport yes/no.
 2. **Confirmations:** the "more than 200 ratings" rewording, and which legacy applications (if any) were already sent.
 3. **Phase d:** create a Google Cloud OAuth *Desktop* client with the consent screen set to *In production*, put its values in `.env`, and approve consent.
-4. **Claude:** budget and model preferences (defaults are 40 calls/day and $5/day notional).
+4. **Cloud models:** which to switch on (Claude CLI, Codex CLI, Grok), the Grok budget (default $2/day) and HQ's share of each subscription window (default 30 calls / 5 h).
 5. **Optional downloads:** a non-Qwen verifier model; re-downloading the broken models.
 6. **Going live:** flip GO LIVE and work through the Needs Prerit lane.
 
 ## Risks and mitigations
 - **Little real auto-submission.** Most ATS and portal applications will be packs rather than automatic submissions. Mitigations: email channels, ATS matching for alert emails, and packs that take under 2 min.
-- **Local-model errors:** multi-layer gates, lineage independence, Claude sign-off, and golden tests.
+- **Local-model errors:** multi-layer gates, lineage independence, final sign-off (a second local model, or a cloud model), and golden tests.
 - **Laptop usability and heat:** the usability and battery mode plus quiet hours.
-- **Claude limits under the subscription:** a call cap, deferral, and local-only mode.
+- **Subscription limits (Claude, ChatGPT):** HQ's per-window cap, reported windows, pause until reset, and local-only mode.
 - **Gmail token expiry:** "In production" status plus a health alert.
 
 ## Verification (end to end)

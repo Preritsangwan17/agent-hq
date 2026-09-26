@@ -1,5 +1,7 @@
 # Agent HQ — Phase (c) contract: the real pipeline (DRY RUN)
 
+> **Update (Sept 2026):** the cloud layer described here was replaced by local-first routing with optional providers (Claude CLI, ChatGPT Codex CLI, Grok) and API-saving mode; the fit score by the career-plan match score. See `docs/CONTRACT_F.md`. Where this contract says "Claude" as HQ's cloud model, read "a cloud model per hq.llm.policy".
+
 Extends `docs/CONTRACT.md` and `docs/CONTRACT_B.md`. PLAN.md → "Pipeline and gates" is the design; this file pins
 interfaces. Phase (c) replaces the `sim` adapter for real opportunities while keeping sim available (setting
 `sim_enabled`). **Mode stays DRY_RUN**: outbound email goes to `mock_mailbox`, form submission only to the local mock
@@ -49,7 +51,7 @@ ATS (`mock_ats/`, port 8799). No Gmail code in this phase.
   PhD/Master's-only, CGPA/marks minima vs confirmed fields, enrolment-country and work-authorization/visa
   requirements; time-aware: Prerit is 2nd year in 2026-27 and a rising 3rd-year from May 2027) + `eligibility_llm.py`
   (role `eligibility`; exact quotes) → confidence = model accuracy × agreement(1.0/0.4) × grounding share; a
-  deterministic hard hit decides alone; < `eligibility_threshold` → escalate (alt local → Claude `verify.eligibility_hard`).
+  deterministic hard hit decides alone; < `eligibility_threshold` → escalate (alt local → a cloud model `verify.eligibility_hard`).
   Skill gaps lower fit, never eligibility. `availability.py` (role dates/hours vs confirmed availability windows +
   hours cap; unknown → needs_info → Needs Prerit decision). `pay.py`/`fx.py`/`living_cost.py` (already built) +
   `living_cost_research.py`: phase (c) replaces provisional living-cost rows with researched values (sources cited in
@@ -59,7 +61,7 @@ ATS (`mock_ats/`, port 8799). No Gmail code in this phase.
   crypto/cheque). Acceptance: pay_ratio ≥ `min_pay_ratio`, or funded program (housing+meals+travel + allowance ≥
   `funded_program_min_inr`); unpaid → filtered; unknown pay → decision item (setting `unknown_pay_policy`).
 - `score.py` fit 0–100 per PLAN (role 25, skills 20, eligibility conf 15, pay ratio 15, source prior 10, deadline 5,
-  location 5, program 5). Draft if ≥ `fit_draft_threshold`; Claude polish if ≥ `fit_polish_threshold`;
+  location 5, program 5). Draft if ≥ `fit_draft_threshold`; cloud polish if ≥ `fit_polish_threshold`;
   `daily_draft_cap`.
 
 ## 5. Draft + gates (Writer, Fact-Checker, Reviewer)
@@ -71,9 +73,9 @@ ATS (`mock_ats/`, port 8799). No Gmail code in this phase.
   job_quote_ids}]}` → `documents` + `document_sentences` (author_model + lineage).
 - Fact gate: (a) `fact_deterministic` (phase b), (b) local verifier (role `fact_checker`, model must satisfy
   `checker_allowed(checker, lineage)`), per sentence `{verdict: supported|unsupported|partial|na, unsupported_span,
-  explanation}` (partial = fail), (c) Claude sign-off (`factcheck.signoff`, `claude_signoff_model`, different from any
-  Claude model in lineage) when `require_claude_signoff`. Failure → targeted rewrite → ALL layers re-run; 3 loops →
-  Claude polish (budget) → re-verify → else `needs_prerit` review_letter. Results in `fact_checks`, `gate_results`.
+  explanation}` (partial = fail), (c) final sign-off (a second local model, or a cloud model) (`factcheck.signoff`, the strong cloud model, different from any
+  Claude model in lineage) when `signoff_required`. Failure → targeted rewrite → ALL layers re-run; 3 loops →
+  cloud polish (budget) → re-verify → else `needs_prerit` review_letter. Results in `fact_checks`, `gate_results`.
 - Quality gate (`gates/quality.py`): org named + ≥ 1 job quote; zero clichés (`config/cliches.yaml`); length /
   salutation / sign-off; specificity rubric ≥ 3/5 (local LLM, Claude on disagreement); shingle Jaccard < 0.6 vs last
   20 letters.

@@ -1,4 +1,6 @@
-# Agent HQ — Phase (b) contract: models, benchmarks, routing, Claude, budget
+# Agent HQ — Phase (b) contract: models, benchmarks, routing, cloud models, budget
+
+> **Update (Sept 2026):** the cloud layer described here was replaced by local-first routing with optional providers (Claude CLI, ChatGPT Codex CLI, Grok) and API-saving mode; the fit score by the career-plan match score. See `docs/CONTRACT_F.md`. Where this contract says "Claude" as HQ's cloud model, read "a cloud model per hq.llm.policy".
 
 Extends `docs/CONTRACT.md` (still authoritative for everything it covers). Read `PLAN.md` → "Model manager".
 Gold data (hand-labelled by the lead — do not relabel; report disagreements instead):
@@ -19,7 +21,7 @@ Gold data (hand-labelled by the lead — do not relabel; report disagreements in
   with the prompt on stdin, cwd `data/claude_sandbox` (empty dir), env = {PATH, HOME, USER, LANG} only, timeout 180 s.
   Never `--bare` (needs an API key), never permission-bypass flags. Accept a result only if `is_error=false`,
   `subtype=="success"` and `structured_output` validates against the schema. Record `total_cost_usd` (a client-side
-  estimate) + usage into `claude_usage`.
+  estimate) + usage into `cloud_usage`.
 - The standalone CLI is currently NOT logged in (`claude auth status` → loggedIn false). The runner must detect
   "Failed to authenticate"/not-logged-in, mark Claude `unavailable`, create ONE `needs_prerit` item (kind `decision`,
   title "Log in to the Claude CLI", instructions: run `claude auth login` in Terminal) and let local-only work continue.
@@ -56,19 +58,19 @@ Gold data (hand-labelled by the lead — do not relabel; report disagreements in
   tok_s}`. Always send `model` (served id) and `max_tokens`. Temperature from caller (0 for checks).
 - `hq/llm/json_utils.py`: strip `<think>…</think>` and code fences, extract first JSON object/array, validate with
   jsonschema, one repair retry ("Your previous output was invalid: <error>. Return only valid JSON matching the schema").
-- `hq/llm/claude.py`: the runner from §1 (+ availability probe, error classification: auth, budget
+- `hq/llm/claude_cli.py` (was `claude.py`): the runner from §1 (+ availability probe, error classification: auth, budget
   `error_max_budget_usd`, usage/rate limit → defer 1 h, structured-output failure).
-- `hq/llm/router.py`: `await route(role, messages, schema, *, exclude_models=frozenset(), lineage=(), allow_claude=True,
+- `hq/llm/router.py`: `await route(role, messages, schema, *, exclude_models=frozenset(), lineage=(), cloud_use="needed",
   max_tokens=..., temperature=0.0, task_type=...) -> LLMResult(model_id, output_json, usage..., escalation_level)`.
   Picks the highest-ranked assigned model for `role` not in `exclude_models ∪ lineage`; on invalid JSON after repair
   or `output.confidence < threshold` (when the schema has confidence) escalates: level 1 = next-ranked DIFFERENT local
-  model (prefer different family), level 2 = Claude (budget + availability permitting), else raise `EscalationExhausted`.
+  model (prefer different family), level 2 = a cloud model (policy, availability and limits permitting), else raise `EscalationExhausted`.
   Each attempt is an `agent_runs` child row linked by `escalated_from_run_id`.
-- `RunContext` gains `await ctx.llm(role, messages, schema, **kw)` and `await ctx.claude(task_type, prompt, schema, **kw)`
+- `RunContext` gains `await ctx.llm(role, messages, schema, **kw)` and `await ctx.cloud(task_type, prompt, schema, **kw)`
   (thin wrappers over the router / runner that also update `agent_live` model_id + tok/s).
 - `hq/worker/budget.py`: `reserve(task_type) -> Reservation | None` (EMA cost per task type seeded from
-  `config/claude_prices.yaml`; checks `spent_today + reserved + est ≤ claude_daily_budget_usd` and calls today ≤
-  `claude_daily_call_cap`), `commit(reservation, actual_cost)`, `release()`. Over cap → task `deferred_budget` with
+  `config/cloud_prices.yaml`; checks `spent_today + reserved + est ≤ cloud_daily_budget_usd` and calls today ≤
+  `cloud_daily_call_cap`), `commit(reservation, actual_cost)`, `release()`. Over cap → task `deferred_budget` with
   `not_before = next midnight IST` + event `budget.capped`. `budget_state()` for API/UI. Day boundary = IST.
 - `hq/models/roles.py`: roles and their benchmark tasks: `parser`←parse_job, `eligibility`←eligibility,
   `title_filter`←title_filter, `writer`←write_paragraph, `fact_checker`←factcheck, `classifier`←classify_email,
@@ -78,7 +80,7 @@ Gold data (hand-labelled by the lead — do not relabel; report disagreements in
   writer from remaining models with `writer ≠ fact_checker` (prefer a different family). Store ranked lists in
   `role_assignments`; overrides (`source='override'`) survive re-benchmarks. `validate_assignment()` rejects any
   state where writer == fact_checker. `checker_allowed(checker_model, lineage_models) -> bool` (lineage independence
-  used by phase c). If no local model meets the fact_checker floor → role marked `needs_claude_signoff` (local runs
+  used by phase c). If no local model meets the fact_checker floor → role marked `needs_cloud_signoff` (local runs
   as pre-screen only).
 - `hq/pipeline/gates/fact_deterministic.py` (moved up from phase c because the writer benchmark needs it):
   `check_sentence(text, cited_fact_ids, facts, *, context=None) -> list[Violation(rule, span, message)]` and
@@ -103,33 +105,33 @@ Gold data (hand-labelled by the lead — do not relabel; report disagreements in
   deterministic violations, word-count compliance, cliché count. Writes `benchmarks` rows; then `roles.assign()`.
   Events: `benchmark.started|progress|done`, `roles.updated`.
 - Adapters: `hq/adapters/openai_compatible.py` (managed via ModelManager when `adapter_config.managed` or explicit
-  `base_url`; runs a prompt file + schema with the task payload) and `hq/adapters/claude_code.py` (uses the runner +
+  `base_url`; runs a prompt file + schema with the task payload) and `hq/adapters/cloud.py` (uses the runner +
   budget). Register them in `build_adapters()`. Pipeline agents remain on `sim` in phase (b).
-- Config: `config/claude_prices.yaml` (seed EMA per task type, USD), settings keys `model_pool_budget_gb:30`,
-  `usability_mode:true`, `claude_model:"sonnet"`, `claude_signoff_model:"opus"`, `claude_per_call_cap_usd:0.5`,
-  `require_claude_signoff:true`, `benchmark_on_new_model:true`.
+- Config: `config/cloud_prices.yaml` (seed EMA per task type, USD), settings keys `model_pool_budget_gb:30`,
+  `usability_mode:true`, `claude_cli_model:"sonnet"`, `claude_cli_strong_model:"opus"`, `cloud_per_call_cap_usd:0.5`,
+  `signoff_required:true`, `benchmark_on_new_model:true`.
 
 ## 3. API additions (auth as CONTRACT §2)
 | Method | Path | Body | Returns |
 |---|---|---|---|
-| GET | /api/models | – | `{models: Model[], roles: RoleAssignment[], servers: Server[], memory: Memory, benchmark: BenchState, claude: ClaudeState}` |
+| GET | /api/models | – | `{models: Model[], roles: RoleAssignment[], servers: Server[], memory: Memory, benchmark: BenchState, cloud: CloudState, policy: AIPolicy}` |
 | POST | /api/models/rescan | – | `{queued:true}` |
 | POST | /api/models/benchmark | `{model_id?, suite:'quick'|'full'}` | `{queued:true}` |
 | PATCH | /api/roles | `{role, model_id}` (override) or `{role, reset:true}` | `{roles}`; 409 `{error:'independence'}` if writer == fact_checker |
 | POST | /api/models/{id}/pin | `{pinned: bool}` | `Model` |
 | POST | /api/models/{id}/unload | – | `{ok}` |
-| GET | /api/budget | – | `{date_ist, spent_usd, reserved_usd, budget_usd, calls, call_cap, by_task: {...}, deferred_tasks, claude_available, last_error}` |
+| GET | /api/budget | – | `{date_ist, spent_usd, reserved_usd, budget_usd, calls, call_cap, by_task: {...}, deferred_tasks, cloud_available, last_error}` |
 SSE: `model.discovered`, `model.status`, `benchmark.started|progress|done`, `roles.updated`, `budget.updated`,
-`claude.status`. Stats: `claude_cost_today_usd`, `claude_calls_today`, `local_tokens_today` become real.
+`cloud.status`. Stats: `cloud_cost_today_usd`, `cloud_calls_today`, `local_tokens_today` become real.
 ```ts
 type Model = { id; runtime:'mlx'|'ollama'|'lmstudio'|'llamacpp'; name; modality; complete; incomplete_reason; runtime_supported;
   size_gb; params_b; quant; ctx_len; est_ram_gb; measured_ram_gb; status:'available'|'loaded'|'broken'|'unsupported';
   pinned; roles: string[]; scores: Record<string /*task*/, {accuracy?, f1?, recall?, precision?, json_valid_first?, tok_s_gen?, peak_footprint_gb?}>;
   role_scores: Record<string /*role*/, number>; last_benchmark_at };
-type RoleAssignment = { role; ranked: {model_id; score; source:'auto'|'override'}[]; needs_claude_signoff?: boolean };
+type RoleAssignment = { role; ranked: {model_id; score; source:'auto'|'override'}[]; needs_cloud_signoff?: boolean };
 type Memory = { total_gb; available_gb; pool_used_gb; pool_budget_gb; pressure:'normal'|'warn'|'critical'; user_active; on_battery; usability_mode };
 type BenchState = { running: boolean; model_id?; task?; progress?: number; eta_s? };
-type ClaudeState = { available: boolean; logged_in: boolean; reason?: string; model; signoff_model };
+type CloudState = { available: boolean; logged_in: boolean; reason?: string; model; signoff_model };
 ```
 
 ## 4. UI (web/src/pages/Models/ + header budget gauge + Settings›Budget)
@@ -143,7 +145,7 @@ broken-models card with reasons, "Rescan" and "Benchmark (quick/full)" buttons w
 Fake HF cache trees (complete / index-with-missing-shard / `.incomplete` blob / ref-only / unsupported model_type /
 embedding / whisper); memory helpers (own PID footprint > 0); manager eviction + budget + waiting_memory with a fake
 spawner; client + json_utils (think tags, fences, repair) with respx; router escalation ladder (bad JSON → next model
-→ Claude shim → exhausted); roles assignment/floors/independence/override validation; budget reserve/commit/defer at
+→ a cloud model shim → exhausted); roles assignment/floors/independence/override validation; budget reserve/commit/defer at
 cap and IST day rollover; Claude runner with a fake `claude` shim on PATH (success, is_error, not logged in,
 `error_max_budget_usd`, invalid structured_output); fact_deterministic on the gold pairs (recall ≥ 0.80, zero false
 blocks). Slow (`-m slow`): one real mlx_lm.server round-trip on Qwen3-0.6B; quick benchmark of one model.

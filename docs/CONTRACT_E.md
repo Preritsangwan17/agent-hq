@@ -1,5 +1,7 @@
 # Agent HQ — Phase (e) contract: Strategist, analytics, hardening, launchd
 
+> **Update (Sept 2026):** the cloud layer described here was replaced by local-first routing with optional providers (Claude CLI, ChatGPT Codex CLI, Grok) and API-saving mode; the fit score by the career-plan match score. See `docs/CONTRACT_F.md`. Where this contract says "Claude" as HQ's cloud model, read "a cloud model per hq.llm.policy".
+
 Extends CONTRACT.md / _B / _C / _D.
 
 ## 1. Strategist (daily 07:30 IST, `strategy.daily_review`, Claude via runner; local summarizer fallback)
@@ -12,7 +14,7 @@ Prerit (new domains need robots + ToS approval). `strategy_reports` row + Comman
 
 ## 2. Analytics page (Recharts; load the `dataviz` skill before building charts)
 Applications per day/week, funnel found→offer, reply rate by source/country/role (always show n), source yield table
-("which sources work"), gate failure reasons, Claude spend vs cap, local tokens by model, pay histogram, pay by country.
+("which sources work"), gate failure reasons, Grok spend vs cap, local tokens by model, pay histogram, pay by country.
 
 ## 3. Sources added
 Remote feeds with attribution + link-back: Remotive (≤ 4 calls/day), Arbeitnow (`visa_sponsorship=true` filter),
@@ -25,7 +27,7 @@ ineligible(location).
   data/logs). Verify `claude` auth + osascript notifications from the launchd context.
 - Backups: nightly `sqlite3 .backup` to data/backups (keep 14), weekly VACUUM, hourly `wal_checkpoint(TRUNCATE)`;
   retention events 60 days / runs 90 days (gzip after 7).
-- `debug.failed_run`: repeated error signature (3×/1 h) → Claude diagnosis JSON; auto-apply only restart agent /
+- `debug.failed_run`: repeated error signature (3×/1 h) → a cloud model diagnosis JSON; auto-apply only restart agent /
   disable source / lower concurrency; else recommendation.
 - Per-source circuit breakers (5 errors → disabled 6 h, Strategist informed).
 - Optional: 3D globe toggle (react-globe.gl, desktop only), headed "open + prefill, Prerit clicks Submit" mode for

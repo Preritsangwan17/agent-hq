@@ -1,5 +1,7 @@
 # Agent HQ — Phase (a) build contract
 
+> **Update (Sept 2026):** the cloud layer described here was replaced by local-first routing with optional providers (Claude CLI, ChatGPT Codex CLI, Grok) and API-saving mode; the fit score by the career-plan match score. See `docs/CONTRACT_F.md`. Where this contract says "Claude" as HQ's cloud model, read "a cloud model per hq.llm.policy".
+
 Single source of truth for parallel builders. Backend = Python 3.11 (`.venv`, run with `uv run` or `.venv/bin/python`),
 FastAPI + SQLite (WAL). Frontend = `web/` (Vite + React 19 + TS + Tailwind v4 + motion). Read `PLAN.md` for the why.
 Schema: `hq/db/migrations/0001_init.sql` (do not change column names without updating this file).
@@ -64,7 +66,7 @@ Schema: `hq/db/migrations/0001_init.sql` (do not change column names without upd
 `global_pause:false, freeze_outbound:false, mode:"dry_run" (dry_run|self_test|live — UI read-only in phase a),
 autonomy:"auto" (auto|approve_first), sim_enabled:true, sim_speed:1.0 (0.25–4), keep_awake:true,
 eligibility_threshold:0.8, min_pay_ratio:1.0, funded_program_min_inr:5000, fit_draft_threshold:60,
-fit_polish_threshold:75, daily_draft_cap:20, claude_daily_budget_usd:5.0, claude_daily_call_cap:40,
+fit_polish_threshold:75, daily_draft_cap:20, cloud_daily_budget_usd:2.0, cloud_daily_call_cap:40,
 email_daily_cap:10, quiet_hours:{enabled:false,start:"23:00",end:"07:00"}, unknown_pay_policy:"decision"`.
 
 ## 4. SSE `/api/stream`
@@ -86,7 +88,7 @@ email_daily_cap:10, quiet_hours:{enabled:false,start:"23:00",end:"07:00"}, unkno
 
 ## 5. JSON shapes (TypeScript notation)
 ```ts
-type Agent = { id; name; avatar; color; role; adapter; model: string|null; capabilities: string[]; cost_tier: 'local'|'claude'|'external';
+type Agent = { id; name; avatar; color; role; adapter; model: string|null; capabilities: string[]; cost_tier: 'local'|'cloud'|'external';
   concurrency: number; schedule: {mode:'on_demand'|'interval'|'cron', minutes?, cron?}; enabled: boolean; paused: boolean;
   status: 'idle'|'working'|'paused'|'error'|'stuck'|'offline'|'disabled'; builtin: boolean; side_effects: string[];
   tasks_today: number; errors_today: number; tokens_today: number; restarts: number; last_error: string|null;
@@ -108,7 +110,7 @@ type Document = { id; kind; version; status; author_agent; author_model; content
 type Need = { id; opportunity_id; kind; title; instructions_md; answers: {label,value,copy?:boolean}[]; files: {name,path}[];
   direct_url; priority; due_at; est_minutes; status; created_at };
 type Stats = { found; verified; drafted; applied; replies; interviews; offers; rejected; filtered; success_rate: number|null;
-  needs_open; claude_cost_today_usd; claude_budget_usd; claude_calls_today; local_tokens_today;
+  needs_open; cloud_cost_today_usd; cloud_budget_usd; cloud_calls_today; local_tokens_today;
   pay: { pipeline_median_inr: number|null; pipeline_max_inr: number|null; best_offer_inr: number|null; median_applied_inr: number|null };
   by_stage: Record<string, number>; sim: boolean };
 type Snapshot = { settings; agents: Agent[]; opportunities: OppSummary[]; events: Event[] /* last 200 */; stats: Stats;
@@ -125,11 +127,11 @@ avatar: "🛰️"               # single emoji or lucide icon name
 color: "#22D3EE"
 role: scout                # free text role key (used for model auto-assign in phase b)
 description: Finds opportunities on ATS boards, program pages and alert emails.
-adapter: sim               # sim | script | openai_compatible | claude_code | http | browser
+adapter: sim               # sim | script | openai_compatible | cloud | http | browser
 adapter_config: {}         # adapter-specific
 model: null                # null|auto|"mlx:<repo>"
 capabilities: [discover.ats, discover.program_page, parse.job]
-cost_tier: local           # local|claude|external
+cost_tier: local           # local|cloud|external
 concurrency: 1
 schedule: {mode: interval, minutes: 1}   # on_demand | interval | cron
 enabled: true
@@ -156,12 +158,12 @@ followup.schedule* followup.send strategy.daily_review* debug.failed_run summari
 | verifier | Verifier | #2DD4BF | 🔎 | verify.link, verify.deadline, verify.eligibility, verify.pay, verify.scam, score.fit |
 | writer | Writer | #A78BFA | ✍️ | draft.cover_letter |
 | factchecker | Fact-Checker | #F59E0B | 🧪 | factcheck.deterministic, factcheck.sentence, check.quality |
-| reviewer | Reviewer (Claude) | #FB7185 | 🧠 | factcheck.signoff |
+| reviewer | Reviewer | #FB7185 | 🧠 | factcheck.signoff |
 | resume | Résumé Builder | #60A5FA | 📄 | build.resume |
 | applicant | Applicant | #F472B6 | 🚀 | apply.email_send, apply.manual_pack |
 | inbox | Inbox Watcher | #A3E635 | 📬 | inbox.poll, inbox.classify |
 | followup | Follow-up | #FB923C | ⏰ | followup.schedule |
-| strategist | Strategist (Claude) | #E879F9 | 🧭 | strategy.daily_review |
+| strategist | Strategist | #E879F9 | 🧭 | strategy.daily_review |
 
 ## 7. Orchestrator semantics (worker)
 - Loop every 500 ms: consume `commands`; read settings; if `global_pause` → do not lease, cancel running cooperatively

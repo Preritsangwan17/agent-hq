@@ -1,7 +1,7 @@
 [project]
 name = "agent-hq"
 version = "0.1.0"
-description = "Local-first mission control where a team of AI agents finds, vets and applies to AI/ML roles for Prerit."
+description = "Prerit's own AI-powered internship and job agent: local-first, finds, scores, vets and applies to AI/ML roles."
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "fastapi>=0.115",
@@ -32,7 +32,7 @@ dev = ["pytest>=8.3", "pytest-asyncio>=0.24", "respx>=0.21"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-markers = ["slow: real local model or claude calls"]
+markers = ["slow: real local model or cloud model calls"]
 
 [tool.uv]
 package = false

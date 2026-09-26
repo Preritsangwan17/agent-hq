@@ -1,5 +1,7 @@
 # Agent HQ — Phase (d) contract: Gmail, replies, follow-ups, notifications, go-live
 
+> **Update (Sept 2026):** the cloud layer described here was replaced by local-first routing with optional providers (Claude CLI, ChatGPT Codex CLI, Grok) and API-saving mode; the fit score by the career-plan match score. See `docs/CONTRACT_F.md`. Where this contract says "Claude" as HQ's cloud model, read "a cloud model per hq.llm.policy".
+
 Extends CONTRACT.md / _B / _C. PLAN.md → "Security and safety" (mode table) + "Pipeline and gates" §9–10.
 
 ## 1. Gmail connection (capability-based modes)
