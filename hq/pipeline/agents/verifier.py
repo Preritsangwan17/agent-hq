@@ -332,16 +332,20 @@ async def score(task: dict[str, Any], ctx: RunContext, opp: dict[str, Any]) -> R
     text = posting_text(opp)
     state, _ = deadline_state(opp.get("deadline_at"))
     opp_view = {**opp, "benefits": loads(opp.get("benefits_json"), {})}
+    threshold = int(s.get("fit_draft_threshold", 60))
+    mill = ctx.query("SELECT known_mill FROM companies WHERE id=?", (opp.get("company_id"),)) if opp.get("company_id") else []
+    opp_view["known_mill"] = bool(mill and mill[0]["known_mill"])
     fit, breakdown = fit_score(opp_view, text=text, eligibility_confidence=opp.get("eligibility_confidence"),
-                               eligibility_status=opp["eligibility_status"], deadline=state)
+                               eligibility_status=opp["eligibility_status"], deadline=state, draft_threshold=threshold)
     values: dict[str, Any] = {"fit_score": fit, "fit_breakdown_json": json.dumps(breakdown)}
     advance = False
     delay = 0.0
-    threshold = int(s.get("fit_draft_threshold", 60))
+    forced = bool((task.get("payload") or {}).get("force"))   # Prerit clicked "Apply anyway" on a parked match
     if holds:
         values["stage_reason"] = "Waiting for your decision (" + ", ".join(h.replace("_", " ") for h in holds) + ")"
-    elif fit < threshold:
-        values["stage_reason"] = f"Fit {fit} < {threshold} — parked"
+    elif fit < threshold and not forced:
+        values["stage_reason"] = (f"Match {fit}/100 — {breakdown['verdict']}: parked (below {threshold}). "
+                                  + ("; ".join(breakdown["concerns"][:2]) or ""))[:300]
     else:
         advance = True
         if _drafts_today(ctx) >= int(s.get("daily_draft_cap", 20)):
@@ -350,10 +354,10 @@ async def score(task: dict[str, Any], ctx: RunContext, opp: dict[str, Any]) -> R
             delay = max(0.0, (next_midnight_ist() - datetime.now(timezone.utc)).total_seconds())
             values["stage_reason"] = "Draft cap reached — drafting after midnight IST"
         else:
-            values["stage_reason"] = f"Fit {fit} — drafting"
+            values["stage_reason"] = f"Match {fit}/100 ({breakdown['track_label']}) — drafting"
     effects.append(_update(opp, values))
     return RunResult(output={"ok": True, "advance": advance, "draft_delay_s": delay, "fit": fit}, effects=effects,
-                     summary=f"{label(opp)}: fit {fit}/100" + ("" if advance else f" — {values['stage_reason']}"))
+                     summary=f"{label(opp)}: match {fit}/100" + ("" if advance else f" — {values['stage_reason']}"))
 
 
 def _filtered(opp: dict[str, Any], reason: str) -> RunResult:

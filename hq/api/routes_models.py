@@ -21,6 +21,7 @@ from hq.models import memory as mem
 from hq.models import roles as roles_mod
 from hq.util.timeutil import parse_iso, utcnow
 from hq.worker import budget as budget_mod
+from hq.worker import usage as usage_mod
 
 router = APIRouter(prefix="/api", dependencies=[Depends(auth.require_session)])
 
@@ -192,6 +193,12 @@ def unload(model_id: str, request: Request, conn: sqlite3.Connection = Conn) -> 
 def budget(conn: sqlite3.Connection = Conn) -> dict[str, Any]:
     s = get_settings(conn)
     return budget_mod.budget_state(conn, s, s.get("cloud_state") or {})
+
+
+@router.get("/usage")
+def usage(days: int = 30, conn: sqlite3.Connection = Conn) -> dict[str, Any]:
+    """Grok usage dashboard (hq.worker.usage): exact vs estimated figures are labelled."""
+    return usage_mod.grok_usage(conn, get_settings(conn), days=max(7, min(days, 90)))
 
 
 @router.post("/cloud/recheck")

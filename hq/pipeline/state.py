@@ -91,8 +91,11 @@ def next_tasks(stage: str, capability: str, result: dict[str, Any]) -> tuple[str
             return stage, []
         if not ok:
             return "filtered", []
+        # better matches are drafted first (priority 60–64 by match score; checks of work in flight still come first)
+        fit = int(result.get("fit") or 0)
         return "verified", [TaskSpec("draft.cover_letter", {"version": 1, "loop": 1},
-                                     delay_s=float(result.get("draft_delay_s") or 0))] if result.get("advance") else []
+                                     delay_s=float(result.get("draft_delay_s") or 0),
+                                     priority=60 + max(0, min(4, (fit - 60) // 10)))] if result.get("advance") else []
 
     if capability == "draft.cover_letter":
         if stage not in ("verified", "drafted"):

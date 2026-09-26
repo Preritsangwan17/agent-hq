@@ -1,0 +1,107 @@
+# Prerit's career plan — what the agent looks for, where, and how it ranks every opportunity.
+# Edit freely: HQ reloads this file on change. The Match score (0–100) on every opportunity is computed from the
+# factors below; each factor shows its score, weight and the reason on the opportunity's page.
+#
+# Long-term goal: AI/ML Engineer. Today: 2nd-year B.Tech CSE (AI/ML), no internship yet, Indian citizen (needs visa
+# sponsorship for on-site work outside India). So internships, research internships and funded summer programmes
+# are the realistic targets now; full-time roles only when they are genuinely open to current students.
+
+goal: "AI/ML Engineer"
+
+# ── where ──────────────────────────────────────────────────────────────────────────────────────────────────────
+# Tier 1 = first priority, tier 2 = second. Everything else is still searched and kept when it is unusually relevant
+# (see `global_exception`). Points feed the Location factor.
+regions:
+  - {tier: 1, label: "Europe", points: 100, countries: [DE, NL, IE, CH, GB, FR, SE, FI, DK, NO, BE, AT, LU, ES, PT, IT,
+                                                         PL, CZ, EE, LT, LV, HU, RO, GR]}
+  - {tier: 1, label: "Russia", points: 95, countries: [RU]}
+  - {tier: 1, label: "Canada", points: 100, countries: [CA]}
+  - {tier: 1, label: "Australia", points: 95, countries: [AU, NZ]}
+  - {tier: 2, label: "India", points: 80, countries: [IN]}
+other_region_points: 40
+remote_points: 85           # remote roles open to someone in India
+remote_region_words: {europe: 1, emea: 1, eu: 1, canada: 1, australia: 1, india: 2, apac: 2, asia: 2}
+
+# Within Europe: the order HQ prefers countries (AI hubs, English-friendly workplaces, student/visa routes).
+# Missing countries score 85. Reorder to taste.
+europe_country_points: {DE: 100, NL: 100, CH: 100, IE: 95, GB: 95, FR: 95, SE: 92, FI: 92, DK: 92, NO: 90,
+                        BE: 88, AT: 88, LU: 88, EE: 88, ES: 85, PT: 85, PL: 85, CZ: 85, IT: 82}
+
+# An opportunity outside tier 1–2 still advances when it is this relevant (AI/ML relevance and career value).
+global_exception: {min_ai_relevance: 90, min_career_value: 80, location_floor: 70}
+
+# ── what ───────────────────────────────────────────────────────────────────────────────────────────────────────
+# Target roles. `core` = directly on the path to AI/ML engineering. `stepping_stone` = adjacent roles that build the
+# same muscles (data pipelines, MLOps, backend at AI companies, research assistance) — still worth applying to.
+# Anything else scores low on AI/ML relevance and usually stays parked.
+tracks:
+  core:
+    label: "Core AI/ML"
+    points: 100
+    title_patterns: ["machine learning", "\\bml\\b", "\\bai\\b", "artificial intelligence", "applied scien",
+                     "applied ai", "ai engineer", "llm", "large language", "genai", "gen ai", "generative",
+                     "agentic", "\\bagents?\\b", "deep learning", "\\bnlp\\b", "natural language", "computer vision",
+                     "recommend", "ai research", "research intern", "ml research", "data scien"]
+  stepping_stone:
+    label: "Stepping stone"
+    points: 70
+    title_patterns: ["data engineer", "mlops", "ml ops", "ml platform", "ai platform", "analytics engineer",
+                     "data platform", "research assistant", "python developer", "backend", "back-end",
+                     "software engineer", "software developer", "\\bsde\\b", "\\bswe\\b", "data analyst",
+                     "quantitative", "search", "ranking", "platform engineer"]
+    why: "Adjacent role: builds data/engineering skills AI/ML teams hire for"
+  other:
+    label: "Other"
+    points: 20
+
+# Words in the posting body that raise AI/ML relevance (each hit +4, capped).
+ai_body_terms: ["machine learning", "deep learning", "pytorch", "tensorflow", "scikit-learn", "llm", "large language",
+                "transformer", "fine-tun", "rag", "retrieval", "embedding", "vector", "recommend", "nlp",
+                "computer vision", "model training", "inference", "mlops", "feature engineering", "evaluation",
+                "agent", "prompt", "hugging face", "data pipeline"]
+
+# Which of Prerit's projects a posting's topics connect to (Projects factor). Keys are fact projects.
+project_topics:
+  book: ["recommend", "collaborative filtering", "nearest neighbo", "knn", "similarity", "ranking", "personaliz",
+         "pipeline", "streamlit", "sparse", "scikit-learn", "sklearn", "pandas"]
+  churn: ["churn", "classification", "classifier", "random forest", "tabular", "customer", "retention",
+          "feature engineering", "one-hot", "predictive model", "scikit-learn", "pandas"]
+
+# ── who ────────────────────────────────────────────────────────────────────────────────────────────────────────
+# Company quality/relevance. `a` = top AI employers and research programmes, `b` = strong tech employers.
+# Matching is by substring of the company name (case-insensitive). Unlisted companies score 55.
+companies:
+  a: [DeepMind, Google, Microsoft Research, Meta, NVIDIA, Hugging Face, Mistral, Aleph Alpha, DeepL, Helsing,
+      Synthesia, ElevenLabs, PolyAI, Wayve, Cohere, Stability AI, Sarvam, Krutrim, Yandex, Sber, JetBrains,
+      Max Planck, EPFL, ETH, INRIA, CERN, Mitacs, DAAD, Vector Institute, Mila, IISc, IIT, Wadhwani AI,
+      Fraunhofer, Bosch Center for Artificial Intelligence, Amazon, Apple, IBM Research, Samsung Research]
+  b: [Zalando, Spotify, Booking.com, Adyen, SAP, Siemens, Bosch, Shopify, Canva, Atlassian, Klarna, Revolut, Wise,
+      Delivery Hero, N26, Celonis, Personio, Flipkart, Swiggy, Zomato, PhonePe, Razorpay, Freshworks, Fractal,
+      Tiger Analytics, Myntra, Juspay, CRED, Meesho, InMobi, Ola, Zoho, Kaspersky, Tinkoff, Ozon, VK]
+company_points: {a: 100, b: 80, unknown: 55, ats_listed: 60}
+
+# Funded programmes that fit a 2nd-year Indian student going abroad (visa usually arranged by the programme).
+programme_words: ["daad wise", "mitacs", "globalink", "summer@epfl", "ssrf", "summer research fellowship",
+                  "research internship programme", "charpak", "cern summer", "openlab", "max planck", "fellowship",
+                  "summer school", "srfp"]
+
+# ── how much each factor counts (sums to 100) ──────────────────────────────────────────────────────────────────
+weights:
+  skills: 12            # match with current skills
+  projects: 8           # match with projects
+  education: 7          # education requirements vs a 2nd-year B.Tech student
+  experience: 7         # experience requirements vs no prior internship
+  location: 12          # region priority (Europe/Russia/Canada/Australia → India → rest)
+  visa: 9               # visa / work authorisation
+  role_type: 6          # internship vs full-time
+  compensation: 7       # pay vs living cost
+  company: 8            # company quality / relevance
+  ai_relevance: 12      # how AI/ML the work is
+  eligibility: 6        # probability the current profile meets the stated requirements
+  career_value: 6       # how much it moves Prerit toward AI/ML engineering
+
+# ── decisions ──────────────────────────────────────────────────────────────────────────────────────────────────
+# apply ≥ fit_draft_threshold (Settings, default 60) — HQ drafts an application.
+# consider = 45–59 — parked; visible in the pipeline, one click to push it through.
+# skip < 45 — parked with the reason.
+consider_floor: 45

@@ -414,3 +414,70 @@ async def test_quick_benchmark_fills_leaderboard_and_assigns_roles(db, hq_env):
     assert roles.ranked(db, "classifier") == ["mlx:q/Qwen3-4B"]
     assert (hq_env.root / "artifacts" / "bench" / "mlx_q_Qwen3-4B" / "factcheck.json").exists()
     assert db.execute("SELECT 1 FROM events WHERE type='benchmark.done'").fetchone()
+
+
+# ── local-first switches, Grok usage dashboard, model downloads ──────────────────────────────────────
+async def test_switched_off_models_and_local_ai_are_never_loaded(db):
+    _add_model(db, "mlx:a/A-7B", 6.0)
+    _add_model(db, "mlx:b/B-4B", 3.0)
+    h = Harness(db)
+    await h.mgr.ensure("mlx:a/A-7B")
+    with tx(db):
+        db.execute("UPDATE models SET enabled=0 WHERE id='mlx:a/A-7B'")
+    with pytest.raises(ModelBroken, match="switched off"):
+        await h.mgr.ensure("mlx:a/A-7B")
+    await h.mgr.tick(force=True)
+    assert "mlx:a/A-7B" not in h.mgr.servers                                    # its memory is freed
+    from hq.db.seed import set_settings
+    with tx(db):
+        set_settings(db, {"local_ai_enabled": False})
+    with pytest.raises(ModelBroken, match="local AI is switched off"):
+        await h.mgr.ensure("mlx:b/B-4B")
+
+
+def test_engine_switch_and_per_model_switch_routes(authed, db):
+    _add_model(db, "mlx:q/Qwen3-30B", 17.0)
+    r = authed.post("/api/ai/engines", json={"engines": "local"}, headers=MUTATE)
+    assert r.status_code == 200 and r.json()["policy"]["engines"] == "local"
+    assert authed.get("/api/settings").json()["settings"]["grok_enabled"] is False
+    assert authed.post("/api/ai/engines", json={"engines": "some"}, headers=MUTATE).status_code == 400
+    assert authed.post("/api/ai/engines", json={"engines": "none"}, headers=MUTATE).json()["policy"]["engines"] == "none"
+    r = authed.post("/api/models/mlx:q/Qwen3-30B/enabled", json={"enabled": False}, headers=MUTATE)
+    assert r.status_code == 200 and r.json()["enabled"] is False
+    assert db.execute("SELECT kind FROM commands WHERE kind='model_unload'").fetchone()
+    body = authed.get("/api/models").json()
+    assert body["policy"]["engines"] == "none" and body["models"][0]["enabled"] is False
+
+
+def test_recommended_models_and_pull_only_from_the_catalog(authed, db):
+    rec = authed.get("/api/models/recommended").json()
+    names = [m["ollama"] for m in rec["models"]]
+    assert rec["mac"]["memory_gb"] == 48 and "qwen3:30b-a3b" in names
+    core = [m for m in rec["models"] if m["set"] == "core"]
+    assert len({m["family"] for m in core}) >= 3                                 # independent checkers exist
+    assert all(not m["installed"] for m in rec["models"])
+    r = authed.post("/api/models/pull", json={"name": "qwen3:4b"}, headers=MUTATE)
+    assert r.status_code == 200 and r.json()["queued"] is True
+    assert authed.post("/api/models/pull", json={"name": "random/evil:latest"}, headers=MUTATE).status_code == 400
+
+
+def test_grok_usage_labels_exact_and_estimated_figures(authed, db):
+    r1 = budget.reserve(db, "factcheck.signoff")
+    budget.commit(db, r1, cost_usd=0.03, model="xai:grok-4", input_tokens=1000, output_tokens=200,
+                  cost_source="reported")
+    r2 = budget.reserve(db, "polish.final")
+    budget.commit(db, r2, cost_usd=None, model="xai:grok-4-fast")                # no cost → the estimate stands
+    u = authed.get("/api/usage").json()
+    assert u["today"]["calls"] == 2 and u["today"]["spent_usd"] == pytest.approx(0.04)
+    assert u["cost_sources"] == {"reported": 1, "estimated": 1}
+    assert u["budget"]["is_estimate"] is False and u["budget"]["remaining_today_usd"] == pytest.approx(1.96)
+    assert u["credit"] is None                                                   # nothing entered yet
+    assert {m["model"] for m in u["by_model"]} == {"xai:grok-4", "xai:grok-4-fast"}
+    assert len(u["daily"]) == 30 and u["daily"][-1]["calls"] == 2
+    assert authed.patch("/api/settings", json={"grok_credit_usd": 25.0}, headers=MUTATE).status_code == 200
+    r3 = budget.reserve(db, "escalation.writer")
+    budget.commit(db, r3, cost_usd=0.5, model="xai:grok-4-fast", cost_source="reported")
+    c = authed.get("/api/usage").json()["credit"]
+    assert c["is_estimate"] is True and c["estimated_remaining_usd"] == pytest.approx(24.5)
+    assert authed.patch("/api/settings", json={"grok_credit_usd": None}, headers=MUTATE).status_code == 200
+    assert authed.get("/api/usage").json()["credit"] is None

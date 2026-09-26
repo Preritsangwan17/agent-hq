@@ -14,6 +14,7 @@ from typing import Any, Awaitable, Callable
 
 from hq.adapters.base import RunContext, RunResult, TransientError
 from hq.db.repo import TERMINAL_STAGES
+from hq.pipeline.verify.score import simulated_breakdown
 from hq.sim import texts
 from hq.sim.pool import CITIES, ROLES, SimRole, compute_pay, is_funded_program, role_for_canonical_key
 from hq.util.ids import new_id
@@ -344,9 +345,7 @@ class SimAdapter:
         since = to_iso(utcnow().astimezone(IST).replace(hour=0, minute=0, second=0, microsecond=0))
         drafts_today = ctx.query("SELECT COUNT(*) AS n FROM documents WHERE kind='cover_letter' AND version=1 "
                                  "AND created_at >= ?", (since,))[0]["n"]
-        breakdown = {"relevance": min(25, round(score * 0.25)), "skills": min(20, round(score * 0.2)),
-                     "eligibility": 15 if role.eligibility[0] == "eligible" else 10, "pay": 12, "source": 8,
-                     "deadline": 4, "location": 4, "benefits": 5 if role.pay.benefits else 2}
+        breakdown = simulated_breakdown(score, opp["id"], threshold)
         values: dict[str, Any] = {"fit_score": score, "fit_breakdown_json": breakdown}
         advance = score >= threshold and drafts_today < cap
         if score < threshold:

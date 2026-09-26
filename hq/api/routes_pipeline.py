@@ -29,6 +29,24 @@ from hq.pipeline.state import priority_for
 router = APIRouter(prefix="/api", dependencies=[Depends(auth.require_session)])
 
 
+# ── apply anyway ──────────────────────────────────────────────────────────────────────────────────────
+@router.post("/opportunities/{opp_id}/apply-anyway")
+def apply_anyway(opp_id: str, request: Request, conn: sqlite3.Connection = Conn) -> dict[str, Any]:
+    """A match parked below the draft threshold: Prerit decides it's worth it. Hard gates still apply."""
+    with tx(conn):
+        opp = conn.execute("SELECT stage, fit_score FROM opportunities WHERE id=?", (opp_id,)).fetchone()
+        if opp is None:
+            raise ApiError(404, "opportunity not found")
+        if opp["stage"] != "verified" or opp["fit_score"] is None:
+            raise ApiError(409, "only a scored match that is parked (stage verified) can be pushed through")
+        task_id = queue.enqueue(conn, "score.fit", opportunity_id=opp_id, payload={"force": True},
+                                priority=priority_for("score.fit"), source_agent="prerit",
+                                idempotency_key=f"apply-anyway:{opp_id}:{now_iso()[:16]}")
+        repo.audit(conn, "prerit", "opportunity.apply_anyway", opp_id, after={"fit_score": opp["fit_score"]},
+                   remote_addr=_addr(request))
+    return {"queued": bool(task_id)}
+
+
 # ── paste a link ──────────────────────────────────────────────────────────────────────────────────────
 class ManualIn(BaseModel):
     model_config = ConfigDict(extra="forbid")

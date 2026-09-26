@@ -13,6 +13,10 @@ COUNTRY_HINTS = {
     "england": "GB", "germany": "DE", "switzerland": "CH", "taiwan": "TW", "japan": "JP", "singapore": "SG",
     "canada": "CA", "united arab emirates": "AE", "uae": "AE", "netherlands": "NL", "france": "FR", "ireland": "IE",
     "spain": "ES", "poland": "PL", "australia": "AU", "israel": "IL", "sweden": "SE", "korea": "KR", "brazil": "BR",
+    "russia": "RU", "russian federation": "RU", "finland": "FI", "denmark": "DK", "norway": "NO", "austria": "AT",
+    "belgium": "BE", "czech republic": "CZ", "czechia": "CZ", "portugal": "PT", "italy": "IT", "estonia": "EE",
+    "luxembourg": "LU", "greece": "GR", "hungary": "HU", "romania": "RO", "lithuania": "LT", "latvia": "LV",
+    "scotland": "GB", "new zealand": "NZ", "deutschland": "DE", "nederland": "NL", "schweiz": "CH",
 }
 US_STATES = {"ca", "ny", "wa", "tx", "ma", "il", "co", "ga", "az", "nj", "pa", "va", "dc", "or", "fl", "nc", "ut", "mn"}
 ALIASES = {"bangalore": "Bengaluru", "gurgaon": "Gurugram", "new delhi": "Delhi", "bombay": "Mumbai", "sf": "San Francisco",
