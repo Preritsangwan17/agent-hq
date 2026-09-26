@@ -25,6 +25,8 @@ const EXTRA_EVENT_TYPES = [
   'profile.updated', 'source.updated', 'fetch.error', 'gate.result', 'document.created', 'application.updated',
   'mail.received', 'mail.classified', 'thread.locked', 'thread.unlocked', 'followup.scheduled', 'strategy.report',
   'golive.updated',
+  // phase (d): inbox, sends, mode
+  'inbox.updated', 'mail.sent', 'mode.changed',
 ];
 const STALE_MS = 75_000;
 

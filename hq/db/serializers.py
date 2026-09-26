@@ -103,7 +103,7 @@ def application_json(a: dict[str, Any]) -> dict[str, Any]:
             "submitted_at": a.get("submitted_at"), "created_at": a["created_at"],
             "submission_ref": a.get("submission_ref"), "doc_kind": a.get("doc_kind"),
             "approved_at": a.get("approved_at"), "message_id": a.get("message_id"),
-            "answers": _loads(a.get("answers_json"), [])}
+            "answers": _loads(a.get("answers_json"), []), "reviewed_at": a.get("reviewed_at")}
 
 
 def document_json(d: dict[str, Any]) -> dict[str, Any]:

@@ -327,6 +327,7 @@ export interface Application {
   approved_at?: ISODate | null;
   message_id?: string | null;
   answers?: NeedAnswer[];
+  reviewed_at?: ISODate | null;
 }
 
 export type DocumentKind = Open<
@@ -608,11 +609,116 @@ export interface Snapshot {
   needs: Need[];
   server_time: ISODate;
   last_event_id: number;
+  notifications_unacked?: number;
+}
+
+// ── phase (d): inbox, notifications, Gmail, go-live ──────────────────
+export interface InboxThread {
+  id: string;
+  gmail_thread_id: string | null;
+  subject: string | null;
+  counterpart: string | null;
+  classification: string | null;
+  locked: boolean;
+  lock_reason: string | null;
+  locked_at: ISODate | null;
+  unlocked_at: ISODate | null;
+  alert_ack_at: ISODate | null;
+  last_message_at: ISODate | null;
+  messages: number;
+  inbound: number;
+  drafts: number;
+  last: { direction: string; from_addr: string | null; snippet: string | null; date: ISODate | null; classification: string | null } | null;
+  opportunity: { id: string; company_name: string; title: string; stage: Stage; is_simulated: boolean } | null;
+  simulated: boolean;
+  gmail_url: string | null;
+}
+
+export interface InboxMessage {
+  id: string;
+  direction: 'inbound' | 'outbound';
+  from_addr: string | null;
+  to_addr: string | null;
+  date: ISODate | null;
+  subject: string | null;
+  classification: string | null;
+  confidence: number | null;
+  reason: string | null;
+  lock_terms: string[];
+  body: string;
+}
+
+export interface ReplyDraft {
+  id: string;
+  status: string;
+  subject: string | null;
+  text: string | null;
+  author: string | null;
+  created_at: ISODate;
+}
+
+export interface InboxThreadDetail extends InboxThread {
+  items: InboxMessage[];
+  reply_drafts: ReplyDraft[];
+}
+
+export interface InboxList {
+  items: InboxThread[];
+  counts: { all: number; locked: number; alerts: number; drafts: number };
+  unacked_alerts: string[];
+}
+
+export interface NotificationRow {
+  id: string;
+  severity: 'info' | 'warn' | 'alert';
+  title: string;
+  body: string | null;
+  url: string | null;
+  mac_delivered: number;
+  acknowledged_at: ISODate | null;
+  created_at: ISODate;
+}
+
+export interface GmailInfo {
+  client_configured: boolean;
+  connected: boolean;
+  scopes: string[];
+  send_scope: boolean;
+  compose_scope: boolean;
+  state: { connected?: boolean; healthy?: boolean; email?: string; error?: string | null; history_id?: string | null;
+    last_poll_at?: ISODate; last_ok_at?: ISODate; checked_at?: ISODate; last_full_sync_at?: ISODate };
+  oauth: { status: 'idle' | 'pending' | 'done' | 'error'; error: string | null; purpose: string | null; scopes: string[] };
+  forced_dry_run: boolean;
+  refusal: { reason: string; at: ISODate } | null;
+}
+
+export interface GoLiveItem {
+  id: string;
+  gate: boolean;
+  label: string;
+  ok: boolean;
+  detail: string;
+}
+
+export interface GoLiveState {
+  mode: RunMode;
+  live_since: ISODate | null;
+  items: GoLiveItem[];
+  ready_for_send_scope: boolean;
+  ready_for_env: boolean;
+  ready_for_live: boolean;
+  confirm_phrase: string;
+  env_file_live: boolean;
+  forced_dry_run: boolean;
+  restart_required?: boolean;
+  restart_command?: string;
 }
 
 // ── misc endpoints ────────────────────────────────────────────────────
 export interface Health {
   ok: boolean;
+  /** the worker refused to start for safety (send-capable Gmail grant while HQ_FORCE_DRY_RUN is on) */
+  worker_refusal?: string | null;
   worker_alive: boolean;
   worker_heartbeat_at: ISODate | null;
   version: string;

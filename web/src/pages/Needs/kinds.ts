@@ -17,6 +17,7 @@ import {
   ShieldAlert,
   Sparkles,
   Trophy,
+  Reply,
   type LucideIcon,
 } from 'lucide-react';
 import type { NeedKind } from '@/lib/types';
@@ -62,10 +63,12 @@ const KINDS: Record<string, KindMeta> = {
     label: 'Assessment',
     icon: ListChecks,
     color: '#F472B6',
-    done: 'Done',
-    note: 'Agents never attempt assessments or tests.',
+    done: 'I handled it',
+    note: 'Agents never attempt assessments or tests — the thread is notify-only.',
+    alert: 'red',
   },
   confirm_legacy: { label: 'Confirm legacy', icon: ClockArrowLeft, color: '#93C5FD', done: 'Done' },
+  approve_reply: { label: 'Reply draft', icon: Reply, color: '#22D3EE', done: 'Send reply' },
   interview: { label: 'Interview', icon: Handshake, color: ALERT_RED, done: 'I handled it', alert: 'red' },
   offer: { label: 'Offer', icon: Trophy, color: GOLD, done: 'I handled it', alert: 'gold' },
   legal: { label: 'Legal', icon: Gavel, color: ALERT_RED, done: 'I handled it', alert: 'red' },
@@ -88,6 +91,6 @@ export type NeedFilter = 'all' | 'alerts' | 'forms' | 'decisions' | 'other';
 export function filterOf(kind: string): Exclude<NeedFilter, 'all'> {
   if (isAlertKind(kind)) return 'alerts';
   if (kind === 'submit_form' || kind === 'captcha' || kind === 'login' || kind === 'assessment') return 'forms';
-  if (kind === 'decision' || kind === 'approve' || kind === 'review_letter' || kind === 'confirm_legacy') return 'decisions';
+  if (kind === 'decision' || kind === 'approve' || kind === 'approve_reply' || kind === 'review_letter' || kind === 'confirm_legacy') return 'decisions';
   return 'other';
 }

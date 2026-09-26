@@ -18,6 +18,11 @@ import type {
   BudgetState,
   EventsQuery,
   FetchLogResponse,
+  GmailInfo,
+  GoLiveState,
+  InboxList,
+  InboxThreadDetail,
+  NotificationRow,
   HQEvent,
   Model,
   ModelsResponse,
@@ -147,6 +152,8 @@ export const http = {
     request<T>(path, { ...opts, method: 'POST', body: body ?? {} }),
   patch: <T>(path: string, body?: unknown, opts?: Omit<RequestOptions, 'method' | 'body'>) =>
     request<T>(path, { ...opts, method: 'PATCH', body: body ?? {} }),
+  put: <T>(path: string, body?: unknown, opts?: Omit<RequestOptions, 'method' | 'body'>) =>
+    request<T>(path, { ...opts, method: 'PUT', body: body ?? {} }),
   del: <T>(path: string, opts?: Omit<RequestOptions, 'method'>) => request<T>(path, { ...opts, method: 'DELETE' }),
 };
 
@@ -189,6 +196,33 @@ export const api = {
   patchSource: (id: string, patch: { enabled?: boolean; tos_status?: Source['tos_status']; poll_interval_min?: number }) =>
     http.patch<Source>(`/api/sources/${id}`, patch),
   fetchLog: (q: { limit?: number; domain?: string } = {}) => http.get<FetchLogResponse>('/api/fetch-log', { ...q }),
+
+  inboxThreads: (filter: 'all' | 'locked' | 'alerts' | 'drafts' | 'real' = 'all') =>
+    http.get<InboxList>('/api/inbox/threads', { filter }),
+  inboxThread: (id: string) => http.get<InboxThreadDetail>(`/api/inbox/threads/${enc(id)}`),
+  unlockThread: (id: string) => http.post<InboxThreadDetail>(`/api/inbox/threads/${enc(id)}/unlock`, { confirm: 'UNLOCK' }),
+  ackThreadAlert: (id: string) => http.post<{ ok: boolean }>(`/api/inbox/threads/${enc(id)}/ack`),
+  editDraft: (id: string, text: string) => http.patch<{ ok: boolean }>(`/api/inbox/drafts/${enc(id)}`, { text }),
+  sendDraft: (id: string) => http.post<{ queued: boolean }>(`/api/inbox/drafts/${enc(id)}/send`),
+  discardDraft: (id: string) => http.del<{ ok: boolean }>(`/api/inbox/drafts/${enc(id)}`),
+  notifications: () => http.get<{ items: NotificationRow[]; unacked: number }>('/api/notifications'),
+  ackNotification: (id: string) => http.post<{ items: NotificationRow[]; unacked: number }>(`/api/notifications/${enc(id)}/ack`),
+  ackAllNotifications: () => http.post<{ items: NotificationRow[]; unacked: number }>('/api/notifications/ack-all'),
+  reviewApplication: (id: string) => http.post<{ ok: boolean; reviewed: number }>(`/api/applications/${enc(id)}/review`),
+
+  gmail: () => http.get<GmailInfo>('/api/gmail'),
+  saveGmailClient: (client_id: string, client_secret: string) =>
+    http.put<GmailInfo>('/api/gmail/client', { client_id, client_secret }),
+  connectGmail: (purpose: 'readonly' | 'send') =>
+    http.post<{ auth_url: string; oauth: GmailInfo['oauth'] }>('/api/gmail/connect', { purpose }),
+  disconnectGmail: () => http.post<GmailInfo>('/api/gmail/disconnect'),
+  recheckGmail: () => http.post<{ queued: boolean }>('/api/gmail/recheck'),
+  golive: () => http.get<GoLiveState>('/api/golive'),
+  runGolden: () => http.post<GoLiveState>('/api/golive/golden'),
+  writeLiveEnv: () => http.post<GoLiveState>('/api/golive/env'),
+  selfTest: () => http.post<GoLiveState>('/api/golive/self-test'),
+  confirmLive: (confirm: string) => http.post<GoLiveState>('/api/golive/confirm', { confirm }),
+  backToDryRun: (env = false) => http.post<GoLiveState>('/api/golive/dry-run', { env }),
 
   stats: () => http.get<Stats>('/api/stats'),
 

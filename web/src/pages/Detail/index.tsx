@@ -1,9 +1,10 @@
 /** /o/:id — everything HQ knows about one opportunity: header, gates, the letter with per-sentence fact checks,
  * the checks behind every verdict, its applications and Needs items, and the full timeline with runs/escalations. */
-import { ArrowLeft, ExternalLink, FileSearch, History, Inbox, MapPin, Send, Workflow } from 'lucide-react';
+import { ArrowLeft, CheckCheck, ExternalLink, FileSearch, History, Inbox, MapPin, Send, Workflow } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
-import { Badge, Countdown, EmptyState, GlassPanel, PayBadge, SectionHeader, SimTag, StageChip } from '@/components';
+import { Badge, Button, Countdown, EmptyState, GlassPanel, PayBadge, SectionHeader, SimTag, StageChip } from '@/components';
+import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { flagEmoji, formatDateTimeIST, formatRelative, formatUSD } from '@/lib/format';
 import { useOpportunityDetail } from '@/lib/queries';
@@ -113,6 +114,21 @@ export default function Detail() {
   );
 }
 
+function ReviewButton({ appId, reviewed }: { appId: string; reviewed: boolean }) {
+  const [done, setDone] = useState(reviewed);
+  const [n, setN] = useState<number | null>(null);
+  if (done) return <Badge color="#34D399" size="xs">reviewed{n != null ? ` · ${n}/5` : ''}</Badge>;
+  return (
+    <Button size="sm" variant="secondary" icon={CheckCheck} onClick={async () => {
+      const r = await api.reviewApplication(appId);
+      setN(r.reviewed);
+      setDone(true);
+    }}>
+      Mark dry run reviewed
+    </Button>
+  );
+}
+
 function Applications({ opp }: { opp: OppDetail }) {
   const openNeeds = opp.needs.filter((n) => n.status === 'open' || n.status === 'snoozed');
   if (!opp.applications.length && !openNeeds.length) return null;
@@ -139,6 +155,12 @@ function Applications({ opp }: { opp: OppDetail }) {
               </>
             )}
           </dl>
+          {a.mode === 'dry_run' && a.status === 'submitted' && !opp.is_simulated && (
+            <div className="mt-3 flex items-center gap-2 border-t border-white/[.06] pt-3 text-[12px] text-muted">
+              <ReviewButton appId={a.id} reviewed={!!a.reviewed_at} />
+              <span>Counts toward the go-live checklist (5 needed).</span>
+            </div>
+          )}
         </GlassPanel>
       ))}
       {openNeeds.length > 0 && (
