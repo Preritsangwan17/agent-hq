@@ -31,6 +31,9 @@ labels:
   offer:
     - "offer letter|pleased to offer|delighted to offer|happy to offer|extend an offer|your offer|we are offering"
     - "(?<!expected )(?<!current )\\bctc\\b"
+  selected:
+    - "you have been selected (?:for|to join)|pleased to inform you (?:that )?you (?:have been|are) selected"
+    - "congratulations[,! ]+you (?:have been|are) selected"
   legal:
     - "\\bnda\\b|non-disclosure|background (verification|check)|\\bbgv\\b"
   assessment:

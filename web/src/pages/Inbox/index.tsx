@@ -34,6 +34,7 @@ export const CLASS_META: Record<string, { label: string; color: string }> = {
   interview: { label: 'Interview', color: '#F87171' },
   assessment: { label: 'Assessment', color: '#FB923C' },
   offer: { label: 'Offer', color: '#F5C451' },
+  selected: { label: 'Selected', color: '#34D399' },
   legal: { label: 'Legal', color: '#F87171' },
   scam: { label: 'Scam', color: '#F43F5E' },
   info_request: { label: 'Info request', color: '#22D3EE' },
@@ -97,7 +98,7 @@ export default function Inbox() {
         <div className="flex items-center gap-2 rounded-xl border border-red-400/25 bg-red-500/[.08] px-4 py-2.5 text-[13px] text-red-100">
           <ShieldAlert className="size-4 shrink-0 text-red-300" aria-hidden />
           {counts?.locked} notify-only thread{counts?.locked === 1 ? '' : 's'} — interviews, assessments, offers, money and legal
-          mail are yours. HQ never writes on them.
+          mail need review. Automatic sending is blocked until you explicitly unlock a thread.
         </div>
       )}
 
@@ -193,6 +194,8 @@ function ThreadRow({ t, active, onClick }: { t: InboxThread; active: boolean; on
           <span className="mt-0.5 line-clamp-1 text-[12px] text-muted">{t.last?.snippet}</span>
           <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
             <Badge size="xs" color={meta.color}>{meta.label}</Badge>
+            {t.verification && <Badge size="xs" color={t.verification === 'Potentially Suspicious' ? '#F87171' :
+              t.verification === 'Verified Company' ? '#34D399' : '#FBBF24'}>{t.verification}</Badge>}
             {t.drafts > 0 && <Badge size="xs" color="#22D3EE">draft</Badge>}
             <SimTag show={t.simulated} />
           </span>
@@ -229,6 +232,8 @@ function ThreadView({ id, onBack }: { id: string; onBack?: () => void }) {
       <GlassPanel padding="lg" glow={meta.color} accentTop>
         <div className="flex flex-wrap items-center gap-2">
           <Badge color={meta.color}>{meta.label}</Badge>
+          {t.verification && <Badge color={t.verification === 'Potentially Suspicious' ? '#F87171' :
+            t.verification === 'Verified Company' ? '#34D399' : '#FBBF24'}>{t.verification}</Badge>}
           {t.opportunity && <StageChip stage={t.opportunity.stage} />}
           <SimTag show={t.simulated} />
           {t.gmail_url && (
@@ -237,6 +242,9 @@ function ThreadView({ id, onBack }: { id: string; onBack?: () => void }) {
             </a>
           )}
         </div>
+        {!!t.verification_reasons?.length && <ul className="mt-3 list-disc space-y-0.5 pl-5 text-[12px] text-muted">
+          {t.verification_reasons.map((reason, index) => <li key={index}>{reason}</li>)}
+        </ul>}
         <h2 className="mt-3 font-display text-xl font-semibold tracking-tight">{t.subject || '(no subject)'}</h2>
         <div className="mt-1 text-sm text-muted">
           {t.counterpart}
@@ -253,8 +261,8 @@ function ThreadView({ id, onBack }: { id: string; onBack?: () => void }) {
           <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-red-400/30 bg-red-500/[.1] px-4 py-3">
             <Lock className="size-4 text-red-300" aria-hidden />
             <div className="min-w-0 flex-1 text-[13px] text-red-100">
-              <b>Notify-only{t.lock_reason ? ` (${t.lock_reason})` : ''}.</b> HQ will never write on this thread — reply
-              yourself from Gmail.
+              <b>Notify-only{t.lock_reason ? ` (${t.lock_reason})` : ''}.</b> Review the message first. You can reply
+              in Gmail, or explicitly unlock this thread to approve a draft here.
             </div>
             <Button size="sm" variant="ghost" icon={LockOpen} onClick={() => setUnlocking(true)}>
               Unlock…

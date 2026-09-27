@@ -20,7 +20,7 @@ FREE_MAIL = {"gmail", "outlook", "hotmail", "yahoo", "rediffmail", "proton", "pr
 LOCK_NEED_KIND = {"interview": "interview", "assessment": "assessment", "offer": "offer", "legal": "legal",
                   "documents": "legal", "money": "money", "profile": "missing_info"}
 LOCK_PRIORITY = ["money", "offer", "legal", "documents", "assessment", "interview", "profile"]
-LABELS = ("interview_invite", "assessment", "info_request", "rejection", "auto_ack", "offer", "scam", "legal",
+LABELS = ("interview_invite", "assessment", "info_request", "rejection", "auto_ack", "offer", "selected", "scam", "legal",
           "job_alert", "other")
 
 
@@ -142,6 +142,8 @@ def classify(subject: str, body: str, from_addr: str = "") -> RuleResult:
         res.label, res.reasons = "rejection", rejection[:2]
     elif offer:
         res.label, res.reasons = "offer", offer[:2]
+    elif _hits(lab.get("selected"), text):
+        res.label, res.reasons = "selected", _hits(lab.get("selected"), text)[:2]
     elif _hits(lab.get("legal"), text):
         res.label, res.reasons = "legal", _hits(lab.get("legal"), text)[:2]
     elif _hits(lab.get("assessment"), text) or kind == "ats" and re.search(r"hackerrank|codesignal|codility",
@@ -161,6 +163,8 @@ def classify(subject: str, body: str, from_addr: str = "") -> RuleResult:
         res.lock_kinds.append("assessment")
     if res.label == "offer" and "offer" not in res.lock_kinds:
         res.lock_kinds.append("offer")
+    if res.label == "selected" and "offer" not in res.lock_kinds:
+        res.lock_kinds.append("offer")
     if res.label == "scam" and "money" not in res.lock_kinds:
         res.lock_kinds.append("money")
     if res.label == "info_request" or (res.label is None and res.lock_kinds):
@@ -171,5 +175,5 @@ def classify(subject: str, body: str, from_addr: str = "") -> RuleResult:
 def need_kind_for(lock_kind: str | None, label: str | None) -> str:
     if lock_kind:
         return LOCK_NEED_KIND.get(lock_kind, "missing_info")
-    return {"interview_invite": "interview", "assessment": "assessment", "offer": "offer", "legal": "legal",
+    return {"interview_invite": "interview", "assessment": "assessment", "offer": "offer", "selected": "offer", "legal": "legal",
             "scam": "money"}.get(label or "", "missing_info")

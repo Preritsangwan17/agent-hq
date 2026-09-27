@@ -27,6 +27,10 @@ def test_seed_is_idempotent_and_keeps_prerit_status(db):
     seed_all(db)
     assert db.execute("SELECT status FROM profile_facts WHERE id='F-BOOK-COSINE'").fetchone()[0] == "retired"
     assert db.execute("SELECT COUNT(*) FROM profile_fields").fetchone()[0] == len(pfields.FIELD_DEFS)
+    assert pfields.confirmed_value(db, "gender") == "male"
+    pfields.update_field(db, "gender", "prefer not to say")
+    seed_all(db)
+    assert pfields.confirmed_value(db, "gender") == "prefer not to say"
 
 
 def test_unconfirmed_and_never_fields_are_not_used_outbound(db):

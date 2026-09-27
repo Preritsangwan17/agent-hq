@@ -17,6 +17,7 @@ from hq.adapters.base import Services
 from hq.db.conn import tx
 from hq.db.seed import set_settings
 from hq.llm.claude import ClaudeResult
+from hq.llm.router import Router
 from hq.pipeline.discover.fetch import Fetcher
 from hq.util.timeutil import now_iso, to_iso, utcnow
 from hq.worker import effects, queue
@@ -55,7 +56,7 @@ async def _nosleep(_):
 
 def _worker(db, team, claude=None) -> Worker:
     return Worker(conn=db, agents_dir=team, loop_interval=0.01, watch=False, schedule=False,
-                  services=Services(claude=claude, fetcher=Fetcher(db, transport=httpx.MockTransport(_board),
+                  services=Services(claude=claude, router=Router(db, None, claude), fetcher=Fetcher(db, transport=httpx.MockTransport(_board),
                                                                    sleep=_nosleep)))
 
 

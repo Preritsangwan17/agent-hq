@@ -11,6 +11,8 @@ from hq.pipeline.agents.writer import application_for
 
 
 async def run(task: dict[str, Any], ctx: RunContext) -> RunResult:
+    if not ctx.settings.get("auto_followup_enabled", True):
+        return RunResult(output={"ok": True, "noop": True}, summary="Automatic follow-ups are off")
     if task["capability"] == "followup.send":
         results = await fu.run_due(ctx.conn, ctx.services.gmail, task_id=task["id"])
         if not results:

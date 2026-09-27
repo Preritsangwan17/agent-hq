@@ -16,7 +16,7 @@ from hq.llm.prompts import load_prompt, load_schema
 from hq.llm.router import EscalationExhausted
 from hq.util.timeutil import iso_in
 from hq.models import roles as roles_mod
-from hq.pipeline.agents.common import confirmed, label, load_opp, loads, need_effect, sim_or_none
+from hq.pipeline.agents.common import has_role_model, confirmed, label, load_opp, loads, need_effect, sim_or_none
 from hq.pipeline.agents.writer import job_quotes, latest_doc
 from hq.pipeline.draft.writer_input import facts_block
 from hq.pipeline.gates.fact_deterministic import check_document
@@ -61,7 +61,7 @@ def _carry(task: dict[str, Any], doc: dict[str, Any]) -> dict[str, Any]:
 
 
 async def _polish_allowed(ctx: RunContext) -> bool:
-    return await cloud.pick(ctx.services.claude, ctx.settings) is not None
+    return has_role_model(ctx, "writer") or await cloud.pick(ctx.services.claude, ctx.settings, task_type="polish.final") is not None
 
 
 async def _fail(task: dict[str, Any], ctx: RunContext, opp: dict[str, Any], doc: dict[str, Any], layer: str,
@@ -186,7 +186,7 @@ async def quality(task: dict[str, Any], ctx: RunContext, opp: dict[str, Any], do
     polish = (int(opp.get("fit_score") or 0) >= int(ctx.settings.get("fit_polish_threshold", 75))
               and not p.get("polished") and await _polish_allowed(ctx))
     return _pass(task, doc, "quality", [], f"{label(opp)} v{doc['version']}: quality gate passed"
-                 + (f" (specificity {rubric:.0f}/5)" if rubric else "") + (" — high fit, Claude polish next" if polish else ""),
+                 + (f" (specificity {rubric:.0f}/5)" if rubric else "") + (" — high fit, local-first polish next" if polish else ""),
                  extra={"polish": polish, "checks": report.checks}, model_id=rubric_model)
 
 

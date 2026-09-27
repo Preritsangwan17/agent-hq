@@ -130,6 +130,8 @@ def test_api_keys_are_redacted_even_without_env():
 
 
 async def test_provider_switch_and_independent_signoff(db, key, monkeypatch):
+    with tx(db):
+        set_settings(db, {"cloud_llm": "xai"})
     s = get_settings(db)
     assert cloud.provider(s) == "xai" and cloud.main_model(s) == "xai:grok-4-fast"
     assert cloud.signoff_candidates(s)[:2] == ["xai:grok-4", "xai:grok-4-fast"]

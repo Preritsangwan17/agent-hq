@@ -56,6 +56,7 @@ class GmailApi(Protocol):
     async def profile(self) -> dict[str, Any]: ...
     async def history(self, start_history_id: str, page_token: str | None = None) -> dict[str, Any]: ...
     async def list_messages(self, q: str, page_token: str | None = None, max_results: int = 100) -> dict[str, Any]: ...
+    async def get_metadata(self, message_id: str) -> GmailMessage: ...
     async def get_message(self, message_id: str) -> GmailMessage: ...
     async def send(self, raw: bytes, thread_id: str | None = None) -> dict[str, Any]: ...
     async def create_draft(self, raw: bytes, thread_id: str | None = None) -> dict[str, Any]: ...
@@ -84,6 +85,12 @@ def _walk(part: dict[str, Any], out: dict[str, list[str]]) -> None:
 def parse_message(raw: dict[str, Any]) -> GmailMessage:
     payload = raw.get("payload") or {}
     headers = {h.get("name", "").lower(): h.get("value", "") for h in payload.get("headers") or []}
+    # A sender can include its own Authentication-Results header. Gmail prepends the result from
+    # its own MX, so use only the first such header when its authserv-id is mx.google.com.
+    auth_headers = [h.get("value", "") for h in payload.get("headers") or []
+                    if h.get("name", "").lower() == "authentication-results"]
+    headers["authentication-results"] = (auth_headers[0] if auth_headers and
+                                          auth_headers[0].strip().lower().startswith("mx.google.com;") else "")
     bodies: dict[str, list[str]] = {}
     _walk(payload, bodies)
     if bodies.get("text/plain"):
@@ -106,7 +113,8 @@ def parse_message(raw: dict[str, Any]) -> GmailMessage:
         rfc822_id=_angle(headers.get("message-id")), in_reply_to=_angle(headers.get("in-reply-to")),
         references=headers.get("references"), snippet=raw.get("snippet") or text[:200], body_text=text.strip(),
         headers={k: v for k, v in headers.items() if k in ("from", "to", "cc", "subject", "date", "message-id",
-                                                           "in-reply-to", "references", "list-unsubscribe")})
+                                                           "in-reply-to", "references", "list-unsubscribe",
+                                                           "authentication-results")})
 
 
 def _angle(v: str | None) -> str | None:

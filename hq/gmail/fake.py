@@ -31,13 +31,15 @@ class FakeGmail:
     # ── test helpers ─────────────────────────────────────────────────────────────────────────────────
     def deliver(self, *, from_addr: str, subject: str, body: str, to_addr: str | None = None,
                 thread_id: str | None = None, in_reply_to: str | None = None, labels: tuple[str, ...] = ("INBOX",),
-                from_name: str = "", date_ms: int | None = None) -> str:
+                from_name: str = "", date_ms: int | None = None, auth_results: str | None = None) -> str:
         mid = f"m{next(self._ids):05d}"
         msg = email.message.EmailMessage()
         msg["From"] = f"{from_name} <{from_addr}>" if from_name else from_addr
         msg["To"] = to_addr or self.address
         msg["Subject"] = subject
         msg["Message-ID"] = f"<{mid}@fake.gmail>"
+        if auth_results:
+            msg["Authentication-Results"] = auth_results
         if in_reply_to:
             msg["In-Reply-To"] = in_reply_to
             msg["References"] = in_reply_to
@@ -98,6 +100,13 @@ class FakeGmail:
         if message_id not in self.messages:
             raise GmailNotFound(404, "Requested entity was not found.")
         return parse_message(self.messages[message_id])
+
+    async def get_metadata(self, message_id: str) -> GmailMessage:
+        self.calls.append(("metadata", message_id))
+        if message_id not in self.messages:
+            raise GmailNotFound(404, "Requested entity was not found.")
+        raw = self.messages[message_id]
+        return parse_message({**raw, "snippet": "", "payload": {"headers": raw["payload"]["headers"]}})
 
     async def send(self, raw: bytes, thread_id: str | None = None) -> dict[str, Any]:
         self.calls.append(("send", thread_id))

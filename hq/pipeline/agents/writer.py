@@ -160,7 +160,7 @@ async def polish(task: dict[str, Any], ctx: RunContext, opp: dict[str, Any]) -> 
                            feedback=fb if isinstance(fb, list) else ([fb] if fb else None), sheet=load_facts())
     system, user = msgs[0]["content"], msgs[1]["content"]
     res = await ctx.claude("polish.final", user, load_schema("draft"), system_prompt=system,
-                           model=await cloud.pick(ctx.services.claude, ctx.settings))
+                           model=None)
     model = res.model
     sentences = clean_sentences(res.output, quotes)
     if not sentences:

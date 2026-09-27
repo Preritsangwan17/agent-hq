@@ -56,12 +56,17 @@ async def recheck(ctx: RunContext, opp: dict[str, Any]) -> RunResult | None:
     last = parse_iso(opp.get("last_verified_at"))
     if not last or datetime.now(timezone.utc) - last > timedelta(hours=24):
         ctx.progress(0.2, f"Re-checking {label(opp)} is still open…")
-        try:
-            lk = await check_link(ctx.services.fetcher, canonical_key=opp["canonical_key"], url=opp.get("url"))
-            if lk.status == "dead":
-                reasons.append(f"posting closed ({lk.reason})")
-        except FetchBlocked:
-            pass
+        if ctx.services.fetcher is None:
+            reasons.append("posting could not be re-verified (fetcher unavailable)")
+        else:
+            try:
+                lk = await check_link(ctx.services.fetcher, canonical_key=opp["canonical_key"], url=opp.get("url"))
+                if lk.status != "live":
+                    reasons.append(f"posting not verified open ({lk.reason})")
+            except (FetchBlocked, LookupError, ValueError) as exc:
+                reasons.append(f"posting could not be re-verified ({type(exc).__name__})")
+    elif opp.get("link_status") != "live":
+        reasons.append("posting is not verified open")
     state, why = deadline_state(opp.get("deadline_at"))
     if state == "expired":
         reasons.append(why)

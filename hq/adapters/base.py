@@ -167,20 +167,40 @@ class RunContext:
         """One budgeted cloud call (Claude CLI, xAI or ChatGPT by the model id; default = the first switched-on
         provider that is reachable, preferred first). Over budget → Deferred(deferred_budget); unavailable or
         switched off → Deferred for 10 min."""
-        from hq.llm import cloud
-        from hq.llm.claude import ClaudeError, ClaudeRateLimited, ClaudeUnavailable
+        from hq.llm import cloud, modes
+        from hq.llm.claude import ClaudeResult
+        from hq.db.seed import get_settings
+        from hq.util.ids import new_id
+        from hq.llm.router import Router
+
+        # Every ordinary AI step uses the same local-first router. Explicit independent
+        # sign-off remains external because it follows local fact and quality checks.
+        if task_type != "factcheck.signoff":
+            role = "writer" if "polish" in task_type or "cod" in task_type else "summarizer"
+            res = await self.llm(role, [{"role": "system", "content": system_prompt},
+                                       {"role": "user", "content": prompt}], schema,
+                                 task_type=task_type, pinned_model=cloud.tag(model) if model else None,
+                                 max_tokens=1600)
+            return ClaudeResult(res.output, res.cost_usd, res.prompt_tokens, res.completion_tokens,
+                                None, 0, res.model_id, "success")
+        recorder = Router(self.conn, None)
+        run_id = new_id()
+        meta = {"ai_mode": modes.current(get_settings(self.conn)), "task_type": task_type,
+                "reason": "Independent external sign-off required by the application policy after local checks."}
+        started = time.monotonic()
+        from hq.llm.claude import ClaudeBadOutput, ClaudeBudgetExceeded, ClaudeError, ClaudeRateLimited, ClaudeUnavailable
         from hq.util.timeutil import iso_in
         from hq.worker import budget
 
-        s = self.settings
+        s = get_settings(self.conn)
         runner = self.services.claude
-        m = model or await cloud.pick(runner, s)
+        m = model or await cloud.pick(runner, s, task_type=task_type)
         if m is None:
             raise Deferred("queued", iso_in(600), cloud.why_none(runner, s))
-        if runner is None or not await cloud.is_available(runner, m):
+        if runner is None or not cloud.enabled(s, cloud.provider_of(m)) or not await cloud.is_available(runner, m):
             raise Deferred("queued", iso_in(600),
                            f"{cloud.label(m)} unavailable ({getattr(runner, 'reason', 'no runner')})")
-        r = budget.reserve(self.conn, task_type, s, run_id=self.run_id)
+        r = budget.reserve(self.conn, task_type, s, run_id=run_id)
         if r is None:
             raise Deferred("deferred_budget", budget.to_iso(budget.next_midnight_ist()),
                            "Cloud daily budget or call cap reached")
@@ -190,9 +210,12 @@ class RunContext:
                                    max_budget_usd=float(s.get("claude_per_call_cap_usd", 0.5)))
         except ClaudeError as exc:
             cost = getattr(exc, "cost_usd", None)
-            if cost is not None:
+            recorder._record(run_id, self.agent.id, self.task["id"], self.run_id, None, cloud.tag(m),
+                             None, "failed", str(exc), cost=cost,
+                             duration_ms=(time.monotonic() - started) * 1000, **meta)
+            if cost is not None or isinstance(exc, (ClaudeBadOutput, ClaudeBudgetExceeded)):
                 budget.commit(self.conn, r, cost_usd=cost, model=m, subtype=exc.kind)
-                self.cost_usd += cost
+                self.cost_usd += cost or r.estimate_usd
             else:
                 budget.release(self.conn, r)
             if isinstance(exc, ClaudeRateLimited):
@@ -200,6 +223,12 @@ class RunContext:
             if isinstance(exc, ClaudeUnavailable):
                 raise Deferred("queued", iso_in(600), str(exc)) from exc
             raise
+        except BaseException:
+            budget.release(self.conn, r)
+            raise
+        recorder._record(run_id, self.agent.id, self.task["id"], self.run_id, None, cloud.tag(m),
+                         None, "succeeded", None, cost=res.cost_usd, duration_ms=res.duration_ms,
+                         prompt_tokens=res.input_tokens, completion_tokens=res.output_tokens, **meta)
         budget.commit(self.conn, r, cost_usd=res.cost_usd, model=m, input_tokens=res.input_tokens,
                       output_tokens=res.output_tokens, cache_read_tokens=res.cache_read_tokens)
         self.model_id = cloud.tag(m)

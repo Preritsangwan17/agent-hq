@@ -9,7 +9,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from hq import __version__, settings
 from hq.api.jsonsafe import SafeJSONResponse as JSONResponse
-from hq.api import auth, routes, routes_insights, routes_gmail, routes_inbox, routes_models, routes_pipeline, routes_settings, spa, stream
+from hq.api import routes_ai, auth, routes, routes_career, routes_email_module, routes_insights, routes_gmail, routes_inbox, routes_models, routes_pipeline, routes_settings, spa, stream
 from hq.db.conn import connect, tx
 from hq.db.migrate import migrate
 from hq.db.seed import seed_all
@@ -62,9 +62,12 @@ def create_app() -> FastAPI:
     app.include_router(routes_settings.router)
     app.include_router(routes_insights.router)
     app.include_router(routes_models.router)
+    app.include_router(routes_ai.router)
     app.include_router(routes_pipeline.router)
     app.include_router(routes_gmail.router)
     app.include_router(routes_inbox.router)
+    app.include_router(routes_career.router)
+    app.include_router(routes_email_module.router)
     app.include_router(stream.router)
     spa.mount_spa(app)
     return app

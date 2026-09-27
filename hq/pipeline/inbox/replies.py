@@ -51,6 +51,25 @@ def followup_sentences(*, recipient: str, company: str, role: str) -> list[dict]
                   paragraph=1)]
 
 
+def acknowledgement_sentences(kind: str, *, recipient: str, company: str, role: str) -> list[dict]:
+    """Approval-only drafts. None accepts an offer, promises availability, or agrees to terms."""
+    message = {
+        "interview_invite": f"Thank you for inviting me to interview for the {role} role at {company}.",
+        "assessment": f"Thank you for sharing the assessment for the {role} role at {company}.",
+        "offer": f"Thank you for sending the offer for the {role} role at {company}.",
+        "joining": f"Thank you for sharing the joining instructions for the {role} role at {company}.",
+    }[kind]
+    next_line = {
+        "interview_invite": "Could you please confirm the available time slots and time zone?",
+        "assessment": "I have received the instructions and will review them carefully.",
+        "offer": "I will review the details carefully and respond separately.",
+        "joining": "I will review the steps and follow up if anything needs clarification.",
+    }[kind]
+    return [_sent(0, f"Dear {recipient},", "salutation"),
+            _sent(1, message, "logistics", paragraph=0),
+            _sent(2, next_line, "closing", paragraph=1)]
+
+
 def assemble(sentences: list[dict]) -> str:
     cfg = doc_config()
     paras: list[list[str]] = []

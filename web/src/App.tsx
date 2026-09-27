@@ -16,8 +16,10 @@ const MapPage = lazy(() => import('@/pages/MapPage'));
 const Detail = lazy(() => import('@/pages/Detail'));
 const Activity = lazy(() => import('@/pages/Activity'));
 const Inbox = lazy(() => import('@/pages/Inbox'));
+const EmailModule = lazy(() => import('@/pages/EmailModule'));
 const Needs = lazy(() => import('@/pages/Needs'));
 const Analytics = lazy(() => import('@/pages/Analytics'));
+const AIControl = lazy(() => import('@/pages/AIControl'));
 const Models = lazy(() => import('@/pages/Models'));
 const Agents = lazy(() => import('@/pages/Agents'));
 const Settings = lazy(() => import('@/pages/Settings'));
@@ -61,8 +63,10 @@ const router = createBrowserRouter([
       { path: 'o/:id', element: <Detail /> },
       { path: 'activity', element: <Activity /> },
       { path: 'inbox', element: <Inbox /> },
+      { path: 'email-module', element: <EmailModule /> },
       { path: 'needs', element: <Needs /> },
       { path: 'analytics', element: <Analytics /> },
+      { path: 'ai', element: <AIControl /> },
       { path: 'models', element: <Models /> },
       { path: 'agents', element: <Agents /> },
       { path: 'settings', element: <Settings /> },

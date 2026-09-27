@@ -418,11 +418,12 @@ def patch_settings(body: dict[str, Any], request: Request, conn: sqlite3.Connect
         before = get_settings(conn)
         set_settings(conn, cleaned, by="prerit")
         after = get_settings(conn)
-        repo.add_command(conn, "settings_changed", {"keys": sorted(cleaned)})
-        repo.audit(conn, "prerit", "settings.update", ",".join(sorted(cleaned)),
-                   before={k: before.get(k) for k in cleaned}, after=cleaned, remote_addr=_addr(request))
-        repo.emit(conn, "settings.updated", "Settings changed: " + ", ".join(sorted(cleaned)),
-                  data={"settings": after, "changed": sorted(cleaned)})
+        changed = sorted(k for k in after if before.get(k) != after[k])
+        repo.add_command(conn, "settings_changed", {"keys": changed})
+        repo.audit(conn, "prerit", "settings.update", ",".join(changed),
+                   before={k: before.get(k) for k in changed}, after={k: after[k] for k in changed}, remote_addr=_addr(request))
+        repo.emit(conn, "settings.updated", "Settings changed: " + ", ".join(changed),
+                  data={"settings": after, "changed": changed})
     return {"settings": after}
 
 

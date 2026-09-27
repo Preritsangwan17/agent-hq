@@ -60,6 +60,11 @@ class GmailClient:
     async def get_message(self, message_id: str) -> GmailMessage:
         return parse_message(await self._call("GET", f"/messages/{message_id}", params={"format": "full"}))
 
+    async def get_metadata(self, message_id: str) -> GmailMessage:
+        return parse_message(await self._call("GET", f"/messages/{message_id}", params={
+            "format": "metadata", "metadataHeaders": ["From", "To", "Cc", "Subject", "Message-ID",
+                                                 "In-Reply-To", "References"]}))
+
     async def send(self, raw: bytes, thread_id: str | None = None) -> dict[str, Any]:
         body: dict[str, Any] = {"raw": b64url(raw)}
         if thread_id:

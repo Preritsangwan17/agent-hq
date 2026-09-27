@@ -6,6 +6,7 @@ import socket
 import threading
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -66,7 +67,30 @@ async def test_browser_fills_only_what_it_may_and_stops_otherwise(db, mock_ats, 
         update_field(db, "phone", "+91 90000 11111")
     res = await browser.fill_and_submit("http://127.0.0.1:8799/jobs/1001", **kw)
     assert res["ref"].startswith("MOCK-1001-") and Path(res["screenshot"]).exists()
+    assert Path(res["confirmation_screenshot"]).exists()
     lines = (mock_ats / "submissions.jsonl").read_text().splitlines()
     assert len(lines) == 1 and '"email": "sangwanprerit40@gmail.com"' in lines[0] and '"resume": "r.pdf"' in lines[0]
     with pytest.raises(browser.Stop, match="only fills the local mock ATS"):
         await browser.fill_and_submit("https://boards.greenhouse.io/x/jobs/1", **kw)
+
+
+async def test_unconfirmed_submit_needs_verification_and_cannot_retry(db, monkeypatch):
+    calls = []
+
+    async def unconfirmed(*args, **kwargs):
+        calls.append(1)
+        raise browser.SubmissionUnconfirmed("submit was attempted but ATS confirmation could not be verified")
+
+    monkeypatch.setattr(browser, "fill_and_submit", unconfirmed)
+    ctx = SimpleNamespace(conn=db, progress=lambda *_: None)
+    opp = {"id": "opp-1", "company_name": "Acme", "title": "ML Intern", "url": "http://127.0.0.1:8799/jobs/1"}
+    app = {"id": "app-1", "status": "queued"}
+    doc = {"id": "doc-1", "content_text": "Hello"}
+    result = await browser.submit_mock_ats({}, ctx, opp, app, doc)
+    assert result.output["submission_attempted"] is True and "fallback_pack" not in result.output
+    assert any(e["op"] == "application.update" and e["values"]["status"] == "submission_attempted"
+               for e in result.effects)
+    assert any(e["op"] == "need.create" for e in result.effects)
+    app["status"] = "submission_attempted"
+    again = await browser.submit_mock_ats({}, ctx, opp, app, doc)
+    assert again.output["ok"] is False and len(calls) == 1

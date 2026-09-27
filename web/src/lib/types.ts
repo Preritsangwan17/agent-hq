@@ -619,6 +619,8 @@ export interface InboxThread {
   subject: string | null;
   counterpart: string | null;
   classification: string | null;
+  verification: string | null;
+  verification_reasons: string[];
   locked: boolean;
   lock_reason: string | null;
   locked_at: ISODate | null;
@@ -666,6 +668,39 @@ export interface InboxList {
   items: InboxThread[];
   counts: { all: number; locked: number; alerts: number; drafts: number };
   unacked_alerts: string[];
+}
+
+export interface CareerDossier {
+  opportunity_id: string;
+  company: { name: string; website: string | null; posting_url: string | null; apply_url: string | null;
+    title: string; kind: string; description: string | null; location: string | null; city: string | null;
+    country: string | null; work_mode: string | null; pay: string | null; application_source: string | null;
+    notes: string | null };
+  application: { id: string; status: string; submitted_at: ISODate | null; channel: string;
+    submission_ref: string | null } | null;
+  communication_stage: string;
+  verification: 'Verified Company' | 'Likely Legitimate' | 'Needs Review' | 'Potentially Suspicious';
+  verification_reasons: string[];
+  verification_sources: { kind: string; url: string; checked: boolean }[];
+  recruiter: { name: string | null; email: string | null };
+  offer_details: Record<string, { value: string; source_message_id: string; source_date: ISODate; official: boolean;
+    conflicts?: { value: string; source_message_id: string; source_date: ISODate; official: boolean }[] }>;
+  selected: boolean;
+  onboarding_mode: boolean;
+  acceptance_company_confirmed: boolean;
+  checklist: { id: string; item_key: string; title: string; detail: string | null; source_message_id: string;
+    source_subject: string | null; source_date: ISODate | null; due_text: string | null;
+    status: 'pending' | 'done'; completed_at: ISODate | null }[];
+  timeline: { id: string; stage: string; action: string; source: string; detail: string | null;
+    occurred_at: ISODate; message_id: string | null; source_subject?: string | null; model_id?: string | null }[];
+  activity: { at: ISODate | null; action: string; detail: string | null; source: string; model_id?: string | null }[];
+  threads: { id: string; subject: string | null; counterpart_addr: string | null; classification: string | null;
+    last_message_at: ISODate | null; notify_only_lock: number }[];
+  messages: { id: string; thread_id: string; direction: 'inbound' | 'outbound'; from_addr: string | null;
+    to_addr: string | null; date: ISODate | null; subject: string | null; classification: string | null;
+    body: string }[];
+  last_company_communication: ISODate | null;
+  next_expected_action: string | null;
 }
 
 export interface NotificationRow {

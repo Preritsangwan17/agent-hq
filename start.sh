@@ -38,7 +38,7 @@ if command -v node >/dev/null 2>&1; then ok "node $(node --version)"; else warn 
 if [ -d "/Applications/Google Chrome.app" ]; then ok "Google Chrome"; else warn "Google Chrome not found — résumé PDFs need it (phase c)"; fi
 if command -v claude >/dev/null 2>&1 || [ -x "$HOME/.local/bin/claude" ]; then ok "claude CLI"; else warn "no claude CLI — cloud work (sign-off, polish) uses xAI when HQ_XAI_API_KEY is in .env"; fi
 if [ -n "$(env_get HQ_XAI_API_KEY)" ]; then ok "xAI key in .env"; else warn "no HQ_XAI_API_KEY in .env (optional if the claude CLI is logged in)"; fi
-if curl -fsS -m 2 http://127.0.0.1:11434/api/tags >/dev/null 2>&1 || curl -fsS -m 2 http://127.0.0.1:1234/v1/models >/dev/null 2>&1; then ok "local model server answering (Ollama / LM Studio)"; else warn "no Ollama / LM Studio server answering — local models are optional (MLX models are started by HQ)"; fi
+if curl -fsS -m 2 http://127.0.0.1:11434/api/tags >/dev/null 2>&1 || curl -fsS -m 2 http://127.0.0.1:1234/v1/models >/dev/null 2>&1; then ok "local model server answering (Ollama / LM Studio)"; else warn "no Ollama / LM Studio server answering — configure Local AI in Models (MLX models are started by HQ)"; fi
 
 if [ -f "$RUN_DIR/supervisor.pid" ] && kill -0 "$(cat "$RUN_DIR/supervisor.pid")" 2>/dev/null; then
   ok "already running (supervisor pid $(cat "$RUN_DIR/supervisor.pid"))"

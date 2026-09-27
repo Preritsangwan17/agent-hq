@@ -1,3 +1,4 @@
+import type { AIControl, AIRun, AIPlan } from './ai';
 /**
  * Typed REST client for the Agent HQ API (CONTRACT §2–§3).
  * - Same-origin fetch with `credentials: 'include'` (session cookie `hq_session`).
@@ -18,6 +19,7 @@ import type {
   AuditEntry,
   AuthStatus,
   BudgetState,
+  CareerDossier,
   EventsQuery,
   FetchLogResponse,
   GmailInfo,
@@ -164,6 +166,9 @@ const enc = encodeURIComponent;
 
 /** One function per endpoint in CONTRACT §3. */
 export const api = {
+  aiControl: () => http.get<AIControl>('/api/ai/control'),
+  aiRuns: (offset = 0, task = '') => http.get<{ items: AIRun[]; total: number }>(`/api/ai/runs?offset=${offset}${task ? `&task_id=${encodeURIComponent(task)}` : ''}`),
+  aiPlan: (workflow = 'job_search') => http.get<AIPlan>(`/api/ai/plan?workflow=${encodeURIComponent(workflow)}`),
   health: () => http.get<Health>('/api/health', undefined, { noAuthRedirect: true }),
   snapshot: () => http.get<Snapshot>('/api/snapshot'),
   events: (q: EventsQuery = {}) => http.get<{ events: HQEvent[] }>('/api/events', { ...q }),
@@ -208,6 +213,11 @@ export const api = {
   editDraft: (id: string, text: string) => http.patch<{ ok: boolean }>(`/api/inbox/drafts/${enc(id)}`, { text }),
   sendDraft: (id: string) => http.post<{ queued: boolean }>(`/api/inbox/drafts/${enc(id)}/send`),
   discardDraft: (id: string) => http.del<{ ok: boolean }>(`/api/inbox/drafts/${enc(id)}`),
+  careerDossier: (id: string) => http.get<CareerDossier>(`/api/career/${enc(id)}`),
+  updateCareerItem: (opportunityId: string, itemId: string, status: 'pending' | 'done') =>
+    http.patch<CareerDossier>(`/api/career/${enc(opportunityId)}/checklist/${enc(itemId)}`, { status }),
+  recordCareerProgress: (id: string, action: 'accepted' | 'joined', confirm: string) =>
+    http.post<CareerDossier>(`/api/career/${enc(id)}/progress`, { action, confirm }),
   notifications: () => http.get<{ items: NotificationRow[]; unacked: number }>('/api/notifications'),
   ackNotification: (id: string) => http.post<{ items: NotificationRow[]; unacked: number }>(`/api/notifications/${enc(id)}/ack`),
   ackAllNotifications: () => http.post<{ items: NotificationRow[]; unacked: number }>('/api/notifications/ack-all'),

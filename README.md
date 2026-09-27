@@ -14,7 +14,8 @@ Mac until you go live.
 | Checks | Title filter, eligibility rules + quoted model check, availability, scam/fee check, pay → ₹/month vs living cost, fit score. Unclear cases become one-click keep/drop decisions. |
 | Writing | Cover letters built only from your verified facts, checked by fact rules, an independent local checker, a quality gate and a cloud sign-off. One-page résumé from approved bullets. |
 | Applying | Email (only to an address quoted on the posting), or a pre-filled pack for ATS forms and LinkedIn/Internshala-type sites. Approve-first is on for your first live applications. |
-| Inbox | Reads Gmail (read-only until you go live). Interview / assessment / offer / money / legal mail locks the thread (HQ never writes there), raises an alert, a macOS banner and a Needs item. Simple info requests get a gated draft. One follow-up at day 10 if nobody replied. |
+| Inbox | Reads Gmail through Google's OAuth (read-only until you go live). It fetches headers first and only fetches bodies for job-related mail. Interview / assessment / offer / money / legal mail locks automatic sending, raises an alert and gets a reviewable draft when safe. One gated follow-up at day 10 if enabled and nobody replied. |
+| Company communication | Each opportunity has a **Company** tab with sender and link checks, a source-linked email timeline, offer facts, onboarding checklist and full correspondence. Selected, accepted and joining are tracked separately from application submission. |
 | Safety | PAUSE ALL, Freeze outbound, forced dry run, typed GO LIVE from the Mac only, audit log, redaction of secrets and your phone number from anything sent to a model. |
 | Strategist | A daily review at 07:30 IST (or **Run review now**): what worked, what didn't, best-paying roles, budget. It turns off sources that keep failing (never while every source fails, e.g. no Wi-Fi) and adds Greenhouse/Lever/Ashby boards only after checking they exist; everything else is a proposal for you. Works without any model (built-in summary); a cloud or local model words it when available. |
 | Analytics | Funnel found → offer, found vs applied per day, reply rate by source / country / role (with n), which sources work, why roles were stopped, cloud spend vs cap, local tokens by model, pay histogram and pay by country. Every chart has a table view. |
@@ -59,48 +60,67 @@ make uninstall-launchd     # undo
 
 Day to day: `make up` starts, `make down` stops (it also unloads the LaunchAgent until your next login).
 
-## The models it uses
+### Application Email lab
 
-HQ works with whatever you give it, and **every source has an on/off switch** in Settings › Models & Budget ›
-Models on/off. A source that is off is never called (not even for a login check):
+Open **http://localhost:8765/email-module** to test the separate email workflow and its dashboard. It starts in a local sandbox mailbox, so draft approval, send, reply detection and follow-up tracking can be checked without contacting a company. The Gmail tab uses the OAuth connection configured under Settings → Gmail when available. See [the email module guide](docs/EMAIL_MODULE.md) for the test command, limits and live access requirements.
 
-1. **Local models** (free): Ollama or LM Studio running, or MLX models in the Hugging Face cache. HQ finds them
-   (Models page), benchmarks them and assigns roles. Rescan from the Models page. Off: nothing is loaded and running
-   models are unloaded; steps that only use local models fall back to their built-in rules. They never move to the
-   cloud, so switching local off doesn't spend your cloud limits.
-2. **Claude CLI**: `claude auth login` in Terminal.
-3. **xAI (Grok)**: add your key to `.env` (never paste it into chat or code):
-   ```
-   HQ_XAI_API_KEY=xai-…
-   ```
-   Keep credit on the account (console.x.ai). No restart needed.
-4. **ChatGPT (Codex CLI)**: `npm install -g @openai/codex`, then `codex login` and sign in with your ChatGPT account.
-   Calls use your plan's Codex allowance. HQ runs it read-only, with shell and browser tools off and no session files.
+## AI Control: local first
 
+Open **http://localhost:8765/ai** for the active mode, recommendation, provider switches, usage, model memory,
+and task/subtask routing history. Every mode includes Local AI; it cannot be disabled. Auto and all eight explicit
+combinations of Local AI with Claude CLI, ChatGPT/Codex CLI and Grok are available. Changes apply to the next
+provider dispatch without restarting; already-running calls finish normally. Auto respects switches set to OFF.
 
-**Preferred cloud** (Auto / Claude / xAI / ChatGPT) picks which switched-on provider is tried first for sign-off,
-polish and escalations. If it can't be reached, the next switched-on one is used. Auto means xAI when its key is in
-`.env`, else Claude, then ChatGPT. Provider checks are free: they read the login or key status and never call a model.
-A provider that reports a usage or rate limit gets no calls for an hour while the others carry on, so limits aren't
-spent on retries. If an account runs out, you get one Needs item, not failing tasks.
+1. **Local AI (required)**: run Ollama or LM Studio, or use cached MLX models on Apple Silicon. Discover and
+   benchmark them on Models, then assign roles. Required means enabled, not that an unavailable model is magically
+   running: missing assignments and loaded models are shown separately.
+2. **Claude CLI (optional)**: sign in with `claude auth login`.
+3. **ChatGPT / Codex CLI (optional)**: install the Codex CLI and sign in with `codex login`. The integration uses a
+   read-only sandbox with shell/browser tools disabled and no persistent sessions.
+4. **Grok API (optional)**: set `HQ_XAI_API_KEY` privately in `.env`. Never paste keys into chat or commit them.
 
-Spending is capped per day (Settings › Models & Budget, default $5) and per call, across all cloud providers
-together; over the cap, cloud tasks wait until midnight IST.
+The router tries local role assignments first, validates JSON/schema and confidence, and checks available benchmark
+quality. If local attempts fail, enabled providers are ranked by task: Codex for coding, Claude for writing/planning,
+Grok for explicit external reasoning. Routine tasks prefer CLI assistance before metered API. These are explainable
+capability rules, not a claim of measured universal provider superiority. Every attempt records model, task, parent
+run, mode, reason, status, duration and available token/cost data. Existing job workflows split discovery, eligibility,
+writing, local checking and storage into separate tasks. The coding preview describes routing; AI proposals do not
+execute code or modify your files.
+
+Independent external application sign-off remains a separate policy after local fact/quality checks. With all external
+providers off, required sign-off waits. Change the requirement explicitly in Settings › Models & Budget if desired;
+choosing Local AI Only never silently weakens application gates.
+
+Daily dollar and call caps apply across external providers, and rate-limited providers rest for one hour. AI Control
+shows HQ usage for today and the current month in IST, including Grok separately. Costs are estimates, not invoices;
+CLI subscription quotas and account-wide remaining limits are unavailable through this integration. Login/key checks
+do not perform generation. No extra paid calls are made to produce recommendations or telemetry.
 
 ## Connect Gmail (read-only)
 
 Settings › Gmail walks you through it (sign in to Google as **sangwanprerit40@gmail.com** throughout):
 
 1. Create a Google Cloud project and enable the Gmail API.
-2. OAuth consent screen: External, add sangwanprerit40@gmail.com as a test user, then **Publish app** ("In
-   production"). Testing mode expires the token after 7 days. Google's "unverified app" warning is expected for a
-   single user.
+2. OAuth consent screen: External, add sangwanprerit40@gmail.com as a test user. Google's Testing mode can expire
+   refresh tokens after 7 days. Publishing beyond private testing may require Google's OAuth verification, especially
+   because reading Gmail uses a restricted scope. If Google shows an unverified-app warning, check that it names the
+   project you created before continuing. [Google's Gmail scope guide](https://developers.google.com/workspace/gmail/api/auth/scopes).
 3. Credentials › OAuth client ID › **Desktop app** › **Download JSON**. In Settings › Gmail choose that
    `client_secret_….json` file (or paste the client ID and secret instead). It is saved to `.env` only.
 4. **Connect sangwanprerit40@gmail.com (read-only)** — Google opens in a new tab with your account pre-selected;
    approve and come back. If a different account gets connected, HQ says so and will not send from it.
 
-HQ stores only mail related to your applications, companies you applied to, ATS senders and job alerts.
+HQ stores only mail related to your applications, known company and ATS senders, job alerts, or clearly job-related
+subjects. It checks headers first; unrelated mail bodies are not fetched. The classifier can use earlier messages in the
+same thread as context, while every extracted joining fact keeps a link to the message that stated it. Settings › Gmail has independent switches
+for reading, classification, drafting, routine sending, approval before sending, and follow-ups. All outgoing mail
+still requires the separate send grant and GO LIVE gates. **Ask Before Sending** starts ON.
+
+The **Company** tab on each opportunity shows what arrived, why a sender or link needs review, the exact email source
+for each offer fact, and a checklist based on stated instructions. A matching domain and a live posting do not alone
+prove a company is legitimate. The strongest label also requires aligned Gmail authentication and a live posting on
+a supported ATS. Unknown or suspicious cases stay for review; emailed links are not followed automatically. Public
+LinkedIn profiles and documents are not treated as verified unless independently checked.
 
 ## Go live (sending for real)
 
@@ -125,7 +145,7 @@ refuses to start and a red banner says why.
   decisions, interview/offer alerts. Mark each done when handled.
 - **Inbox**: replies, locks, reply drafts (edit / send / discard).
 - **Opportunity page** (click any card): the letter with per-sentence fact checks, eligibility quotes, scam
-  signals, fit breakdown, timeline.
+  signals, fit breakdown, timeline, and the **Company** tab for communication and onboarding.
 - **Settings › Sources**: turn boards on/off, paste a link, see every request HQ made.
 - **Settings › Simulation**: the simulator adds fictional `SIM` opportunities for demo — turn it **off** for real use.
 - **Rules**: fit threshold, pay ratio, daily caps. **Agents**: pause/edit agents or add your own.

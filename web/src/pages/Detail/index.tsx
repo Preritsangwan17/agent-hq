@@ -13,9 +13,10 @@ import type { OppDetail } from '@/lib/types';
 import { KIND_LABEL, agentColor } from '@/theme/tokens';
 import { FitRing } from '../Pipeline/FitRing';
 import { ChecksPanel, GatesStrip } from './ChecksPanel';
+import { CareerPanel } from './CareerPanel';
 import { LetterPanel } from './LetterPanel';
 
-type Tab = 'letter' | 'checks' | 'timeline';
+type Tab = 'letter' | 'checks' | 'timeline' | 'company';
 
 export default function Detail() {
   const { id } = useParams();
@@ -67,6 +68,9 @@ export default function Detail() {
                     Posting <ExternalLink className="size-3.5" />
                   </a>
                 )}
+                <Link to={`/email-module?opportunity=${encodeURIComponent(opp.id)}`} className="inline-flex items-center gap-1 text-cyan-300 hover:underline">
+                  Application Email <ExternalLink className="size-3.5" />
+                </Link>
               </div>
               {opp.stage_reason && <p className="mt-3 text-sm text-muted">{opp.stage_reason}</p>}
             </div>
@@ -83,7 +87,7 @@ export default function Detail() {
       {d && <Applications opp={d} />}
 
       <div role="tablist" aria-label="Detail sections" className="flex gap-1 rounded-xl border border-white/[.08] bg-white/[.03] p-1 sm:w-fit">
-        {(['letter', 'checks', 'timeline'] as const).map((t) => (
+        {(['letter', 'checks', 'timeline', 'company'] as const).map((t) => (
           <button
             key={t}
             role="tab"
@@ -103,6 +107,8 @@ export default function Detail() {
         <GlassPanel>
           <EmptyState icon={FileSearch} title={q.isError ? 'Could not load details' : 'Loading details…'} />
         </GlassPanel>
+      ) : tab === 'company' ? (
+        <CareerPanel opportunityId={opp.id} />
       ) : tab === 'letter' ? (
         <LetterPanel opp={d} />
       ) : tab === 'checks' ? (

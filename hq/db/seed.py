@@ -52,6 +52,12 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "benchmark_on_new_model": True,
     # phase (d): Gmail, inbox, notifications, go-live
     "gmail_poll_minutes": 3,
+    "read_job_emails": True,
+    "classify_job_emails": True,
+    "generate_email_replies": True,
+    "auto_send_routine_replies": False,
+    "ask_before_sending": True,
+    "auto_followup_enabled": True,
     "auto_reply_enabled": False,     # effective only in LIVE and ≥ 14 days after going live (CONTRACT_D §2)
     "mac_notifications": True,
     "signoff_policy_ack": False,     # go-live without a cloud sign-off model, acknowledged by Prerit
@@ -157,6 +163,12 @@ EDITABLE: dict[str, Callable[[Any], Any]] = {
     "llm_xai_enabled": _bool,
     "llm_codex_enabled": _bool,
     "gmail_poll_minutes": _num(1, 60, integer=True),
+    "read_job_emails": _bool,
+    "classify_job_emails": _bool,
+    "generate_email_replies": _bool,
+    "auto_send_routine_replies": _bool,
+    "ask_before_sending": _bool,
+    "auto_followup_enabled": _bool,
     "auto_reply_enabled": _bool,
     "mac_notifications": _bool,
     "signoff_policy_ack": _bool,

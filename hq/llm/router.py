@@ -146,7 +146,7 @@ class Router:
             why = f"no local model for {role} succeeded"
             raise EscalationExhausted(f"{why} and this step doesn't use the cloud", attempts)
         return await self._claude(role, messages, schema, task_type or f"escalation.{role}", agent_id, task_id,
-                                  parent_run_id, prev_run, attempts, s, claude_model, lineage)
+                                  parent_run_id, prev_run, attempts, s, claude_model, exclude, threshold)
 
     async def _local(self, model_id: str, messages: list[dict[str, str]], schema: dict[str, Any] | None,
                      max_tokens: int, temperature: float,
@@ -178,7 +178,7 @@ class Router:
     async def _claude(self, role: str, messages: list[dict[str, str]], schema: dict[str, Any] | None, task_type: str,
                       agent_id: str, task_id: str | None, parent_run_id: str | None, prev_run: str | None,
                       attempts: list[dict[str, Any]], s: dict[str, Any], claude_model: str | None,
-                      lineage: tuple[str, ...] | list[str]) -> LLMResult:
+                      lineage: tuple[str, ...] | list[str] | set[str], threshold: float | None) -> LLMResult:
         assert self.claude is not None
         excluded = {cloud.tag(m) for m in lineage if m}
         tried: set[str] = set()
@@ -235,7 +235,6 @@ class Router:
                               cache_read_tokens=res.cache_read_tokens)
             # Enforce the same output/confidence gate for external providers too.
             output, errors = parse_and_validate(json.dumps(res.output), schema)
-            threshold = float(s.get("eligibility_threshold", 0.8)) if schema_has_confidence(schema) else None
             if not errors and threshold is not None and isinstance(output, dict):
                 confidence = output.get("confidence")
                 if isinstance(confidence, (int, float)) and confidence < threshold:

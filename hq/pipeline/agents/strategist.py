@@ -172,35 +172,22 @@ def _valid(out: Any) -> dict[str, Any] | None:
 
 
 async def model_review(ctx: RunContext, data: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None, float]:
-    """(review, model id, cost). Cloud first, then the local summarizer; (None, None, 0) when neither can."""
+    """Local-first wording, with optional external help and a deterministic fallback."""
+    if ctx.services.router is None:
+        return None, None, 0.0
     prompt = "PIPELINE DATA (JSON):\n" + json.dumps(data, ensure_ascii=False, default=str)
-    system = load_prompt("strategist")
-    schema = load_schema("strategy")
-    if ctx.services.claude is not None:
-        try:
-            res = await ctx.claude("strategy.daily_review", prompt, schema, system_prompt=system)
-            review = _valid(res.output)
-            if review:
-                return review, ctx.model_id, res.cost_usd or 0.0
-        except (Cancelled, KeyboardInterrupt):
-            raise
-        except Deferred as exc:
-            ctx.emit("log", f"Strategist: cloud model skipped ({exc.reason}); using the local summary", level="debug")
-        except Exception as exc:  # noqa: BLE001 — a failed wording never costs the day's report
-            ctx.emit("log", f"Strategist: cloud review failed ({str(exc)[:160]}); using the local summary",
-                     level="warn")
-    if ctx.services.router is not None and has_role_model(ctx, "summarizer"):
-        try:
-            res = await ctx.llm("summarizer", [{"role": "system", "content": system},
-                                               {"role": "user", "content": prompt}], schema, allow_claude=False,
-                                max_tokens=1200, now_line="Writing the daily review…")
-            review = _valid(res.output)
-            if review:
-                return review, res.model_id, 0.0
-        except (Cancelled, KeyboardInterrupt):
-            raise
-        except Exception as exc:  # noqa: BLE001
-            ctx.emit("log", f"Strategist: local summarizer failed ({str(exc)[:160]})", level="debug")
+    try:
+        res = await ctx.llm("summarizer", [{"role": "system", "content": load_prompt("strategist")},
+                                           {"role": "user", "content": prompt}], load_schema("strategy"),
+                            task_type="strategy.daily_review", max_tokens=1200,
+                            now_line="Writing the daily review…")
+        review = _valid(res.output)
+        if review:
+            return review, res.model_id, res.cost_usd or 0.0
+    except (Cancelled, KeyboardInterrupt):
+        raise
+    except Exception as exc:
+        ctx.emit("log", f"Strategist: AI review unavailable ({str(exc)[:160]}); using the built-in report", level="debug")
     return None, None, 0.0
 
 

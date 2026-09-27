@@ -21,7 +21,7 @@ from hq.util.timeutil import now_iso
 from hq.worker import queue
 
 router = APIRouter(prefix="/api", dependencies=[Depends(auth.require_session)])
-ALERT_KINDS = ("interview_invite", "assessment", "offer", "legal", "scam")
+ALERT_KINDS = ("interview_invite", "assessment", "offer", "selected", "legal", "scam")
 
 
 def _thread_json(conn: sqlite3.Connection, t: dict[str, Any]) -> dict[str, Any]:
@@ -35,6 +35,8 @@ def _thread_json(conn: sqlite3.Connection, t: dict[str, Any]) -> dict[str, Any]:
     return {"id": t["id"], "gmail_thread_id": t.get("gmail_thread_id"), "subject": t.get("subject"),
             "counterpart": t.get("counterpart_addr") or t.get("counterpart_domain"),
             "classification": t.get("classification"), "locked": bool(t.get("notify_only_lock")),
+            "verification": t.get("verification"),
+            "verification_reasons": serializers._loads(t.get("verification_reasons_json"), []),
             "lock_reason": t.get("lock_reason"), "locked_at": t.get("locked_at"), "unlocked_at": t.get("unlocked_at"),
             "alert_ack_at": t.get("alert_ack_at"), "last_message_at": t.get("last_message_at"),
             "messages": counts["n"] or 0, "inbound": counts["inbound"] or 0, "drafts": drafts,
@@ -85,7 +87,7 @@ def thread(thread_id: str, conn: sqlite3.Connection = Conn) -> dict[str, Any]:
              "date": m["date"], "subject": m["subject"], "classification": m["classification"],
              "confidence": m["confidence"], "reason": m["reason"],
              "lock_terms": serializers._loads(m["lock_terms_json"], []),
-             "body": _body(m["body_path"], m["snippet"])}
+             "body": m["body_text"] or _body(m["body_path"], m["snippet"])}
             for m in conn.execute("SELECT * FROM email_messages WHERE thread_id=? ORDER BY COALESCE(date,'')",
                                   (thread_id,))]
     drafts = [{"id": d["id"], "status": d["status"], "subject": d["subject"], "text": d["content_text"],
@@ -233,4 +235,3 @@ def review(app_id: str, request: Request, conn: sqlite3.Connection = Conn) -> di
         n = conn.execute("SELECT COUNT(*) FROM applications WHERE reviewed_at IS NOT NULL AND mode='dry_run'"
                          ).fetchone()[0]
     return {"ok": True, "reviewed": n}
-

@@ -18,11 +18,13 @@ import hashlib
 import json
 import re
 import sqlite3
+from contextlib import closing
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any
 
 from hq.db import repo, serializers
+from hq import settings as paths
 from hq.db.conn import dumps, tx
 from hq.db.seed import get_settings
 from hq.profile import owner as owner_profile
@@ -135,6 +137,20 @@ def check_caps(conn: sqlite3.Connection, s: dict[str, Any], to_addr: str, *, col
     marks = ",".join("?" * len(COUNTED))
     sent_today = conn.execute(f"SELECT COUNT(*) FROM outbound_log WHERE channel IN ({marks}) AND status IN "
                               "('intent','sent','ambiguous') AND ts >= ?", (*COUNTED, since)).fetchone()[0]
+    lab_path = paths.DATA / "email-module" / "live.db"
+    lab_today = lab_cold = lab_school = 0
+    if lab_path.exists():
+        try:
+            with closing(sqlite3.connect(lab_path)) as lab:
+                states = "('sending','sent','ambiguous')"
+                lab_today = lab.execute(f"SELECT COUNT(*) FROM drafts WHERE status IN {states} AND sent_at>=?", (since,)).fetchone()[0]
+                if cold:
+                    window = to_iso(utcnow() - timedelta(days=DOMAIN_WINDOW_DAYS))
+                    lab_cold = lab.execute(f"SELECT COUNT(*) FROM drafts d JOIN applications a ON a.id=d.application_id WHERE d.kind='application' AND d.status IN {states} AND d.sent_at>=? AND lower(substr(a.email,instr(a.email,'@')+1))=?", (window, to_addr.split('@')[-1].lower())).fetchone()[0]
+                    lab_school = lab.execute(f"SELECT COUNT(*) FROM drafts d JOIN applications a ON a.id=d.application_id WHERE d.kind='application' AND d.status IN {states} AND d.sent_at>=? AND (a.email LIKE '%.edu%' OR a.email LIKE '%.ac.%')", (since,)).fetchone()[0]
+        except sqlite3.Error as exc:
+            raise GuardBlocked(f"cannot read the email module ledger ({type(exc).__name__})", kind="cap") from None
+    sent_today += lab_today
     if sent_today >= int(s.get("email_daily_cap", 10)):
         raise GuardBlocked(f"daily email cap reached ({sent_today}/{s.get('email_daily_cap')})", kind="cap")
     if not cold:
@@ -144,10 +160,13 @@ def check_caps(conn: sqlite3.Connection, s: dict[str, Any], to_addr: str, *, col
     if conn.execute("SELECT 1 FROM outbound_log WHERE channel='email' AND recipient_domain=? AND status IN "
                     "('intent','sent','ambiguous') AND ts >= ?", (dom, window)).fetchone():
         raise GuardBlocked(f"already emailed {dom} in the last {DOMAIN_WINDOW_DAYS} days", kind="cap")
+    if lab_cold:
+        raise GuardBlocked(f"email module already contacted {dom} in the last {DOMAIN_WINDOW_DAYS} days", kind="cap")
     if re.search(r"\.(edu|ac)(\.[a-z]{2})?$|\.edu\.[a-z]{2}$", dom):
         labs = conn.execute("SELECT COUNT(*) FROM outbound_log WHERE channel='email' AND status IN "
                             "('intent','sent','ambiguous') AND ts >= ? AND (recipient_domain LIKE '%.edu%' OR "
                             "recipient_domain LIKE '%.ac.%')", (since,)).fetchone()[0]
+        labs += lab_school
         if labs >= LAB_DAILY_CAP:
             raise GuardBlocked(f"daily cap of {LAB_DAILY_CAP} lab emails reached", kind="cap")
 
@@ -300,9 +319,10 @@ def _record_sent(conn: sqlite3.Connection, p: Prepared, *, gmail_id: str | None,
                           now, now))
     if thread_row:
         conn.execute("INSERT INTO email_messages(id, gmail_message_id, thread_id, direction, from_addr, to_addr, date, "
-                     "subject, snippet, rfc822_message_id, in_reply_to) VALUES (?,?,?, 'outbound', ?,?,?,?,?,?,?)",
+                     "subject, snippet, rfc822_message_id, in_reply_to, body_text) "
+                     "VALUES (?,?,?, 'outbound', ?,?,?,?,?,?,?,?)",
                      (new_id(), gmail_id or f"mock-{p.outbound_id}", thread_row, PRERIT_EMAIL, p.to_addr, now,
-                      p.subject[:300], p.body[:200], p.message_id, p.in_reply_to))
+                      p.subject[:300], p.body[:200], p.message_id, p.in_reply_to, p.body))
         conn.execute("UPDATE email_threads SET last_message_at=? WHERE id=?", (now, thread_row))
     if p.kind == "application" and p.application_id:
         conn.execute("UPDATE applications SET status='submitted', submitted_at=?, message_id=?, mode=?, "

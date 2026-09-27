@@ -53,8 +53,13 @@ answers:
     pattern: 'salary|compensation expectation|expected stipend|expected pay|ctc'
     template: "Flexible — the standard rate for the role and location."
     policy: auto
+  - id: gender
+    pattern: '\bgender\b'
+    fields: [gender]
+    template: "{gender}"
+    policy: confirmed_choice
   - id: eeo
-    pattern: 'gender|race|ethnicity|veteran|disability|sexual orientation|pronouns|hispanic|latino'
+    pattern: 'race|ethnicity|veteran|disability|sexual orientation|pronouns|hispanic|latino'
     template: "Prefer not to say"
     policy: auto_if_option
   - id: sensitive_ids

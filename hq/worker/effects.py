@@ -58,7 +58,9 @@ REQUESTABLE = {"inbox.classify", "reply.send"}
 THREAD_COLS = {"id", "gmail_thread_id", "opportunity_id", "application_id", "subject", "counterpart_domain",
                "counterpart_addr"}
 MSG_COLS = {"id", "gmail_message_id", "direction", "from_addr", "to_addr", "date", "subject", "snippet", "body_path",
-            "rfc822_message_id", "in_reply_to"}
+            "rfc822_message_id", "in_reply_to", "auth_results", "sender_name"}
+CAREER_STAGES = ("Applied", "Confirmation", "Assessment", "Interview", "HR Discussion", "Selected", "Offer", "Accepted",
+                 "Joining/Onboarding", "Joined")
 
 
 def apply_effects(conn: sqlite3.Connection, effects: list[dict[str, Any]], *, agent_id: str, task_id: str,
@@ -158,12 +160,94 @@ def apply_effects(conn: sqlite3.Connection, effects: list[dict[str, Any]], *, ag
             # a lock is sticky: only Prerit can lift it (audited, in the Inbox)
             conn.execute("UPDATE email_threads SET classification=?, notify_only_lock=MAX(notify_only_lock, ?), "
                          "lock_reason=CASE WHEN ? THEN COALESCE(lock_reason, ?) ELSE lock_reason END, "
-                         "locked_at=CASE WHEN ? AND locked_at IS NULL THEN ? ELSE locked_at END WHERE id=?",
+                         "locked_at=CASE WHEN ? AND locked_at IS NULL THEN ? ELSE locked_at END, "
+                         "verification=?, verification_reasons_json=? WHERE id=?",
                          (eff["classification"], int(bool(eff.get("lock"))), int(bool(eff.get("lock"))),
-                          eff.get("lock_reason"), int(bool(eff.get("lock"))), now, eff["thread_id"]))
+                          eff.get("lock_reason"), int(bool(eff.get("lock"))), now,
+                          (eff.get("verification") or {}).get("verification"),
+                          dumps((eff.get("verification") or {}).get("reasons") or []), eff["thread_id"]))
             repo.emit(conn, "inbox.updated", f"Classified: {eff['classification'].replace('_', ' ')}"
                       + (" — notify-only lock" if eff.get("lock") else ""), level="debug", agent_id=agent_id,
                       task_id=task_id, opportunity_id=opportunity_id, data={"thread_id": eff["thread_id"]})
+        elif op == "career.update":
+            oid = eff["opportunity_id"]
+            prev = conn.execute("SELECT * FROM career_profiles WHERE opportunity_id=?", (oid,)).fetchone()
+            fresh = not prev or eff["occurred_at"] >= (prev["last_message_at"] or "")
+            old_stage = prev["communication_stage"] if prev else "Applied"
+            incoming = eff.get("stage")
+            stage = (incoming if (incoming == "Rejected" and fresh) or (incoming in CAREER_STAGES and
+                     (old_stage not in CAREER_STAGES or CAREER_STAGES.index(incoming) > CAREER_STAGES.index(old_stage)))
+                     else old_stage)
+            if old_stage == "Rejected" and incoming != "Rejected":
+                stage = old_stage
+            if stage != old_stage and stage in ("Selected", "Offer", "Accepted", "Joining/Onboarding", "Joined", "Rejected"):
+                verdict = eff["verification"]["verification"]
+                conn.execute("UPDATE opportunities SET stage_reason=?, updated_at=? WHERE id=?",
+                             (f"Email reports {stage} — {verdict}", now, oid))
+            old_facts = serializers._loads(prev["offer_details_json"], {}) if prev else {}
+            conflicts: list[str] = []
+            for key, fact in (eff.get("facts") or {}).items():
+                previous = old_facts.get(key)
+                if not previous:
+                    old_facts[key] = fact
+                elif previous.get("value") == fact.get("value"):
+                    if fact.get("official") and not previous.get("official"):
+                        old_facts[key] = fact
+                else:
+                    candidates = previous.setdefault("conflicts", [])
+                    if not any(x.get("value") == fact.get("value") for x in candidates):
+                        candidates.append(fact)
+                        conflicts.append(key)
+            check = eff["verification"] if fresh else {
+                "verification": prev["verification"],
+                "reasons": serializers._loads(prev["verification_reasons_json"], []),
+                "sources": serializers._loads(prev["verification_sources_json"], [])}
+            conn.execute("INSERT INTO career_profiles(opportunity_id, communication_stage, verification, "
+                         "verification_reasons_json, verification_sources_json, recruiter_name, recruiter_email, "
+                         "offer_details_json, last_message_id, last_message_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?) "
+                         "ON CONFLICT(opportunity_id) DO UPDATE SET communication_stage=excluded.communication_stage, "
+                         "verification=excluded.verification, verification_reasons_json=excluded.verification_reasons_json, "
+                         "verification_sources_json=excluded.verification_sources_json, "
+                         "recruiter_name=COALESCE(excluded.recruiter_name,career_profiles.recruiter_name), "
+                         "recruiter_email=excluded.recruiter_email, offer_details_json=excluded.offer_details_json, "
+                         "last_message_id=excluded.last_message_id, last_message_at=excluded.last_message_at, "
+                         "updated_at=excluded.updated_at",
+                         (oid, stage, check["verification"], dumps(check["reasons"]), dumps(check["sources"]),
+                          (eff.get("recruiter_name") if fresh else prev["recruiter_name"]),
+                          (eff.get("recruiter_email") if fresh else prev["recruiter_email"]), dumps(old_facts),
+                          (eff["message_id"] if fresh else prev["last_message_id"]),
+                          (eff["occurred_at"] if fresh else prev["last_message_at"]), now))
+            conn.execute("INSERT OR IGNORE INTO career_events(id, opportunity_id, application_id, message_id, "
+                         "stage, action, source, model_id, detail, occurred_at, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                         (new_id(), oid, eff.get("application_id"), eff["message_id"], incoming or stage,
+                          "email_classified", "gmail", eff.get("model_id"), check["verification"], eff["occurred_at"], now))
+            if eff.get("research"):
+                conn.execute("INSERT OR IGNORE INTO career_events(id, opportunity_id, application_id, message_id, "
+                             "stage, action, source, detail, occurred_at, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                             (new_id(), oid, eff.get("application_id"), eff["message_id"], stage,
+                              "company_researched", "public_posting", eff["research"]["reason"],
+                              eff["occurred_at"], now))
+            for item in eff.get("checklist") or []:
+                due_field = {"acceptance": "offer_deadline", "assessment": "assessment_deadline",
+                             "interview": "interview_date", "joining_date": "joining_date"}.get(item["key"])
+                due = (old_facts.get(due_field) or {}).get("value") if due_field else None
+                conn.execute("INSERT OR IGNORE INTO onboarding_items(id, opportunity_id, item_key, title, detail, "
+                             "source_message_id, due_text, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                             (new_id(), oid, item["key"], item["title"], None, item["source_message_id"],
+                              due, now, now))
+            if conflicts:
+                title = "Conflicting offer details need review"
+                conn.execute("INSERT INTO notifications(id, severity, title, body, url, created_at) "
+                             "VALUES (?, 'alert', ?, ?, ?, ?)",
+                             (new_id(), title, "New email differs on: " + ", ".join(conflicts), f"/o/{oid}", now))
+                repo.emit(conn, "notification", title, level="alert", agent_id=agent_id, task_id=task_id,
+                          opportunity_id=oid, data={"fields": conflicts, "message_id": eff["message_id"]})
+            repo.audit(conn, "inbox", "career.email_classified", oid,
+                       after={"message_id": eff["message_id"], "stage": incoming, "verification": check["verification"],
+                              "model_id": eff.get("model_id"),
+                              "facts": list(eff.get("facts") or {}), "checklist": [x["key"] for x in
+                                                                    eff.get("checklist") or []]})
+            out.touched_opps.add(oid)
         elif op == "email.store":
             t, m = dict(eff["thread"]), dict(eff["message"])
             if set(t) - THREAD_COLS or set(m) - MSG_COLS:

@@ -1,14 +1,6 @@
-"""Cloud models behind one runner: the Claude CLI, xAI's API (Grok) and ChatGPT through the Codex CLI.
-
-Model ids carry their provider — Claude aliases are bare ("sonnet", tagged "claude:sonnet"), xAI models are
-"xai:<model>" and Codex models "codex:<model>" ("codex:default" = Codex's own default). Every source has an on/off
-switch (`llm_local_enabled`, `llm_claude_enabled`, `llm_xai_enabled`, `llm_codex_enabled`): a source that is off is
-never called, not even for a login/key check. `cloud_llm` names the preferred cloud provider (auto = xAI when
-HQ_XAI_API_KEY is in .env, otherwise Claude, then ChatGPT); when it can't be reached, the next switched-on provider
-is used. Every call still goes through the same daily budget, per-call cap and redaction.
-
-Limits are not spent twice: a provider that reports a usage/rate limit rests for REST_S (no calls at all) while the
-others carry on. Independence: a sign-off model is never one that wrote any version of the text (`signoff_model`).
+"""Optional external assistants; every dispatch checks the current mode and provider switch.
+Local AI remains required. Auto ranks providers by task, preferring CLI assistance before metered API.
+Rate-limited providers rest for one hour. All callers reserve the shared budget before dispatch.
 """
 from __future__ import annotations
 
@@ -19,7 +11,7 @@ from typing import Any
 from hq.llm import modes, policy
 from hq.llm.claude import ClaudeRateLimited, ClaudeResult, ClaudeRunner, ClaudeUnavailable
 from hq.llm.codex import CodexRunner
-from hq.llm.xai import XaiRunner, api_key
+from hq.llm.xai import XaiRunner
 
 PROVIDERS = ("claude", "xai", "codex")
 LABELS = {"claude": "Claude", "xai": "xAI", "codex": "ChatGPT", "local": "Local models"}
@@ -65,7 +57,7 @@ def is_cloud(model_id: str | None) -> bool:
 
 
 def label(model: str) -> str:
-    return LABELS.get(provider_of(model), "Claude")
+    return LABELS.get(provider_of(model), "Local AI")
 
 
 def model_for(s: dict[str, Any], p: str) -> str:

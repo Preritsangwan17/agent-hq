@@ -1,3 +1,4 @@
+import { Link } from 'react-router';
 /** Models & Budget: an on/off switch per model source (local, Claude CLI, xAI, ChatGPT via the Codex CLI) and the
  * preferred cloud provider; cloud $/day and call cap with a live gauge (spend today vs the budget being edited); which
  * models each provider uses. */
@@ -38,6 +39,7 @@ export function BudgetTab() {
 
   return (
     <div className="space-y-5">
+      <Link to="/ai" className="block rounded-xl border border-cyan-300/20 bg-cyan-300/5 p-4 text-sm text-cyan-200">Open AI Control → modes, recommendations, routing history and usage</Link>
       <SourcesSection live={live} />
 
       <GlassPanel padding="lg" glow={CLAUDE} accentTop>
@@ -298,7 +300,7 @@ type Status = { text: string; color: string };
 const OFF: Status = { text: 'off', color: '#5B6577' };
 const SOURCES = [
   { key: 'llm_local_enabled', id: 'local', title: 'Local models', icon: Cpu, color: '#22D3EE',
-    description: 'Ollama, LM Studio and MLX models on this Mac. Free. Off: nothing is loaded and running ones are unloaded. Steps that only use local models (title filter, parsing, local fact check) then use their built-in rules; they never move to the cloud.' },
+    description: 'Ollama, LM Studio and MLX models on this Mac. Always ON and required in every mode. Local models are tried first; optional external assistants help only when needed.' },
   { key: 'llm_claude_enabled', id: 'claude', title: 'Claude CLI', icon: Sparkles, color: CLAUDE,
     description: 'Claude Code on this Mac (claude auth login in Terminal). Runs with no tools and a per-call cap.' },
   { key: 'llm_xai_enabled', id: 'xai', title: 'xAI · Grok', icon: Zap, color: '#A5B4FC',
@@ -329,7 +331,7 @@ function SourcesSection({ live }: { live: Live }) {
     <Section kicker="Sources" title="Models on/off" icon={Power} color={CLAUDE}>
       {SOURCES.map((src) => {
         const enabled = on(src.key);
-        const st = !enabled ? OFF : src.id === 'local' ? { text: 'on', color: '#34D399' } : providerStatus(src.id, live?.[src.id]);
+        const st = !enabled ? OFF : src.id === 'local' ? { text: 'Always ON / Required', color: '#34D399' } : providerStatus(src.id, live?.[src.id]);
         const reason = enabled && src.id !== 'local' && st.text !== 'no key in .env' ? live?.[src.id]?.reason : null;
         return (
           <SettingRow
@@ -347,7 +349,7 @@ function SourcesSection({ live }: { live: Live }) {
             control={
               <div className="flex items-center gap-3">
                 <Badge color={st.color}>{st.text}</Badge>
-                <Toggle id={src.key} label={`Use ${src.title}`} checked={enabled} onChange={(v) => save({ [src.key]: v })} color={src.color} />
+                <Toggle disabled={src.id === 'local'} id={src.key} label={`Use ${src.title}`} checked={enabled} onChange={(v) => save({ [src.key]: v })} color={src.color} />
               </div>
             }
           />
@@ -357,7 +359,7 @@ function SourcesSection({ live }: { live: Live }) {
         icon={Cloud}
         color={CLAUDE}
         title="Preferred cloud"
-        description="Tried first for escalations, polish, sign-off and the Strategist. If it can't be reached (not logged in, no key, or resting after hitting its usage limit) the next switched-on one is used. Auto: xAI when its key is in .env, else Claude, then ChatGPT. Status checks are free: they never call a model."
+        description="Tried first for escalations, polish, sign-off and the Strategist. If it can't be reached (not logged in, no key, or resting after hitting its usage limit) the next switched-on one is used. Auto ranks enabled providers by task capability and prefers CLI assistance before metered API for routine work. Status checks are free: they never call a model."
         control={
           <Segmented
             aria-label="Preferred cloud provider"
@@ -387,7 +389,6 @@ function SourcesSection({ live }: { live: Live }) {
           {signoff
             ? 'Letters wait at sign-off until you switch one on, or turn off Require sign-off below (then only the rules and the local checker decide).'
             : 'Sign-off is off, so letters are decided by the rules and the local checker only.'}
-          {!on('llm_local_enabled') && ' Local models are off too, so nothing can be drafted.'}
         </Callout>
       )}
       <p className="pt-3 text-xs text-faint">

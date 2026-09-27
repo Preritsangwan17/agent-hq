@@ -81,13 +81,13 @@ def test_order_puts_the_preferred_provider_first_and_drops_switched_off_ones(db,
     s = get_settings(db)
     assert cloud.order(s) == ["claude", "codex", "xai"] and cloud.main_model(s) == "sonnet"
     monkeypatch.setenv("HQ_XAI_API_KEY", "xai-" + "k" * 40)
-    assert cloud.order(get_settings(db))[0] == "xai"                      # auto: the key decides, as before
+    assert cloud.order(get_settings(db))[0] == "claude"                   # API key alone does not prioritize paid work
     put(db, cloud_llm="codex")
-    assert cloud.order(get_settings(db)) == ["codex", "xai", "claude"]
+    assert cloud.order(get_settings(db)) == ["codex", "claude", "xai"]
     assert cloud.main_model(get_settings(db)) == "codex:default"
     put(db, llm_codex_enabled=False)                                        # preferred but off → next one
     s = get_settings(db)
-    assert cloud.provider(s) == "xai" and "codex:default" not in cloud.signoff_candidates(s)
+    assert cloud.provider(s) == "claude" and "codex:default" not in cloud.signoff_candidates(s)
     put(db, llm_xai_enabled=False, llm_claude_enabled=False)
     s = get_settings(db)
     assert cloud.order(s) == [] and cloud.provider(s) is None and cloud.main_model(s) is None
@@ -139,30 +139,17 @@ async def test_a_usage_limit_rests_the_provider_so_no_more_calls_are_spent(db):
 
 
 # ── router ───────────────────────────────────────────────────────────────────────────────────────────
-class CountingManager:
-    def __init__(self) -> None:
-        self.used: list[str] = []
-
-    def use(self, model_id: str):
-        self.used.append(model_id)
-        raise AssertionError("local models are off; the manager must not be asked")
-
-
-async def test_local_off_skips_local_models_and_never_moves_local_only_steps_to_the_cloud(db):
-    from hq.models.discovery.base import ModelInfo, upsert_models
-
-    with tx(db):
-        upsert_models(db, [ModelInfo(id="mlx:tiny", runtime="mlx", name="tiny", complete=True, runtime_supported=True)])
-        db.execute("INSERT INTO role_assignments(role, model_id, rank, score, source, created_at) VALUES "
-                   "('summarizer', 'mlx:tiny', 0, 0.9, 'auto', 'now')")
+async def test_legacy_local_off_still_runs_local_and_never_spends_cloud(db):
+    from tests.unit.test_llm import FakeManager, make_chat, _setup_roles
+    _setup_roles(db)
     put(db, llm_local_enabled=False)
-    mgr, claude = CountingManager(), Fake()
-    router = Router(db, mgr, runner(db, claude=claude))  # type: ignore[arg-type]
-    with pytest.raises(EscalationExhausted, match="local models are switched off"):
-        await router.route("summarizer", MSGS, SCHEMA, allow_claude=False)
-    assert claude.calls == 0 and mgr.used == []
-    res = await router.route("summarizer", MSGS, SCHEMA)                    # a step that allows the cloud
-    assert res.model_id == "claude:sonnet" and res.escalation_level == 2 and mgr.used == []
+    mgr, claude = FakeManager(), Fake()
+    chat = make_chat({"mlx:q/Qwen3-4B": ['{"verdict":"yes"}']})
+    router = Router(db, mgr, runner(db, claude=claude), chat_fn=chat)
+    res = await router.route("eligibility", MSGS, SCHEMA, allow_claude=False)
+    assert res.model_id == "mlx:q/Qwen3-4B"
+    assert claude.calls == 0 and mgr.used == ["mlx:q/Qwen3-4B"]
+    assert get_settings(db)["llm_local_enabled"] is True
 
 
 async def test_router_escalates_to_chatgpt_when_claude_is_off(db):
@@ -182,14 +169,12 @@ async def test_everything_off_means_no_cloud_call(db):
     assert all(f.calls == 0 and f.checks == 0 for f in fakes.values())
 
 
-async def test_local_off_stops_the_model_manager_loading(db):
-    from hq.models.manager import ModelBroken, ModelManager
-
+def test_local_cannot_be_disabled(db):
+    from hq.models.manager import ModelManager
+    with pytest.raises(SettingError, match="always ON"):
+        validate_patch({"llm_local_enabled": False})
     put(db, llm_local_enabled=False)
-    mgr = ModelManager(db)
-    assert mgr.local_off()
-    with pytest.raises(ModelBroken, match="switched off"):
-        await mgr.ensure("mlx:anything")
+    assert not ModelManager(db).local_off()
 
 
 # ── the Codex runner (fake `codex`) ─────────────────────────────────────────────────────────────────

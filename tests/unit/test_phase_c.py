@@ -164,7 +164,10 @@ def test_answers_use_only_confirmed_values_and_never_sensitive_ids(db):
     for q in ("Aadhaar number", "PAN card number", "Passport number"):
         a = resolve(db, q)
         assert a.status == "never" and not a.value, q
-    assert resolve(db, "Gender", options=["Male", "Female", "Prefer not to say"]).value == "Prefer not to say"
+    assert resolve(db, "Gender", options=["Male", "Female", "Prefer not to say"]).value == "Male"
+    assert resolve(db, "Gender", options=["Female", "Prefer not to say"]).status == "needs_prerit"
+    assert resolve(db, "Gender").value == "Male"
+    assert resolve(db, "Race", options=["Prefer not to say"]).value == "Prefer not to say"
     assert resolve(db, "Resume/CV", qtype="file").status == "file"
 
 

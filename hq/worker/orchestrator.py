@@ -128,6 +128,17 @@ class Worker:
             # the go-live checklist reads this to know HQ really restarted with the new .env
             set_settings(self.conn, {"worker_env_mode": netguard.current_mode()}, by="worker")
             orphans = queue.recover_orphans(self.conn)
+            if get_settings(self.conn).get("classify_job_emails", True):
+                historical = self.conn.execute("SELECT m.id, t.opportunity_id FROM email_messages m JOIN "
+                    "email_threads t ON t.id=m.thread_id WHERE m.direction='inbound' AND "
+                    "m.classification IS NOT NULL AND t.opportunity_id IS NOT NULL AND NOT EXISTS "
+                    "(SELECT 1 FROM career_events e WHERE e.message_id=m.id AND e.action='email_classified') "
+                    "ORDER BY m.date LIMIT 2000").fetchall()
+                for mail in historical:
+                    queue.enqueue(self.conn, "inbox.classify", type_="maintenance",
+                                  payload={"message_id": mail["id"], "backfill": True},
+                                  opportunity_id=mail["opportunity_id"], priority=priority_for("inbox.classify"),
+                                  idempotency_key=f"career-backfill:{mail['id']}", emit_event=False)
             self.conn.execute("UPDATE agent_live SET now_line=NULL, progress=NULL, current_task_id=NULL, "
                               "opportunity_id=NULL, tok_s=NULL, seq=seq+1, updated_at=?", (now_iso(),))
             repo.emit(self.conn, "worker.started",

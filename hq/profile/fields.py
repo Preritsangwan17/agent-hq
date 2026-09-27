@@ -31,6 +31,8 @@ class FieldDef:
 
 FIELD_DEFS: tuple[FieldDef, ...] = (
     FieldDef("phone", "Phone number", "text", "forms", True, "With country code, e.g. +91 98xxxxxxx. Never sent to Claude."),
+    FieldDef("gender", "Gender", "choice", "forms", False, "Used only when an application asks for gender.",
+             ("male", "female", "non-binary", "prefer not to say")),
     FieldDef("cgpa", "CGPA (current)", "number", "forms", True, "Out of 10, as on your latest grade sheet."),
     FieldDef("marks_x", "Class X marks", "text", "on_request", False, "Percentage or CGPA, e.g. 92%."),
     FieldDef("marks_xii", "Class XII marks", "text", "on_request", False, "Percentage, e.g. 88%."),
@@ -121,9 +123,12 @@ def validate_value(key: str, value: Any) -> str | None:
 def seed_fields(conn: sqlite3.Connection) -> int:
     added = 0
     for d in FIELD_DEFS:
+        # The owner explicitly confirmed Male. Seed only missing rows so later profile edits always win.
+        initial = "male" if d.key == "gender" else None
         cur = conn.execute(
             "INSERT OR IGNORE INTO profile_fields(key, label, value, share_policy, confirmed_by_prerit, required_for_live) "
-            "VALUES (?,?,NULL,?,0,?)", (d.key, d.label, d.share_policy, int(d.required_for_live)))
+            "VALUES (?,?,?,?,?,?)", (d.key, d.label, initial, d.share_policy, int(initial is not None),
+                                     int(d.required_for_live)))
         added += cur.rowcount
     return added
 

@@ -1,0 +1,22 @@
+{
+  "type": "object",
+  "required": ["fields"],
+  "properties": {
+    "fields": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "required": ["key", "value", "evidence"],
+        "properties": {
+          "key": {"enum": ["salary_or_stipend", "location", "reporting_location", "work_mode",
+            "start_date", "joining_date", "reporting_time", "reporting_manager", "offer_deadline",
+            "documents_required", "background_verification", "hr_contact", "employee_portal",
+            "onboarding_link", "orientation_link", "orientation", "equipment", "travel_or_accommodation"]},
+          "value": {"type": "string", "minLength": 2, "maxLength": 300},
+          "evidence": {"type": "string", "minLength": 2, "maxLength": 500}
+        }
+      }
+    }
+  }
+}

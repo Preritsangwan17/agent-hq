@@ -1,6 +1,6 @@
 /**
  * Settings › Gmail (CONTRACT_D §1): the Desktop OAuth client wizard (loopback only), read-only connection status,
- * inbox polling, macOS notifications and the auto-reply switch. Send permission is granted only in the go-live
+ * inbox polling, macOS notifications and separate communication controls. Send permission is granted only in the go-live
  * checklist (Autonomy & Mode).
  */
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -23,8 +23,8 @@ const steps = (email: string) => [
   { title: 'Create a Google Cloud project and enable the Gmail API',
     note: `Sign in to Google Cloud as ${email}. Any project name works (e.g. “Agent HQ”).`,
     href: 'https://console.cloud.google.com/apis/library/gmail.googleapis.com' },
-  { title: `OAuth consent screen: External, add ${email} as a test user, then Publish app (“In production”)`,
-    note: 'Testing mode expires the refresh token after 7 days. Google shows an “unverified app” warning for a single-user app — that is expected; continue as yourself.',
+  { title: `OAuth consent screen: External, add ${email} as a test user`,
+    note: 'Testing mode can expire refresh tokens after 7 days. If Google shows an unverified-app warning, check the project name and permissions before continuing. Wider public use may require Google verification.',
     href: 'https://console.cloud.google.com/apis/credentials/consent' },
   { title: 'Credentials › Create credentials › OAuth client ID › Desktop app, then Download JSON',
     note: 'Pick “Desktop app” (not “Web application”). The download is a client_secret_….json file.',
@@ -141,9 +141,31 @@ export function GmailTab() {
         <SettingRow icon={Bell} color="#FBBF24" title="macOS notifications" htmlFor="mac-notify"
           description="A banner for interview, offer, money and legal mail (and Gmail problems). Uses terminal-notifier if installed, otherwise osascript."
           control={<Toggle id="mac-notify" label="macOS notifications" checked={s.mac_notifications !== false} onChange={(v) => save({ mac_notifications: v })} color="#FBBF24" />} />
-        <SettingRow icon={Reply} color="#22D3EE" title="Auto-reply to simple info requests" htmlFor="auto-reply"
-          description="Only résumé / GitHub / LinkedIn / repository requests, only when the rules and the model agree with ≥ 90 % confidence and every gate passes — and never before 14 days in LIVE. Otherwise HQ drafts and asks you."
-          control={<Toggle id="auto-reply" label="Auto-reply" checked={!!s.auto_reply_enabled} onChange={(v) => save({ auto_reply_enabled: v })} color="#22D3EE" />} />
+        <SettingRow icon={Mail} color="#60A5FA" title="Read job emails" htmlFor="read-job-emails"
+          description="Monitor related company, recruiter, ATS and job-alert mail. Personal mail stays out of the saved Inbox."
+          control={<Toggle id="read-job-emails" label="Read job emails" checked={s.read_job_emails !== false}
+            onChange={(v) => save({ read_job_emails: v })} color="#60A5FA" />} />
+        <SettingRow icon={Mail} color="#A78BFA" title="Automatically classify emails" htmlFor="classify-job-emails"
+          description="Update stages and the company timeline using inbox rules and your active AI mode."
+          control={<Toggle id="classify-job-emails" label="Classify job emails" checked={s.classify_job_emails !== false}
+            onChange={(v) => save({ classify_job_emails: v })} color="#A78BFA" />} />
+        <SettingRow icon={Reply} color="#22D3EE" title="Generate replies" htmlFor="generate-email-replies"
+          description="Prepare professional drafts for safe information requests. You can edit each draft before sending."
+          control={<Toggle id="generate-email-replies" label="Generate replies" checked={s.generate_email_replies !== false}
+            onChange={(v) => save({ generate_email_replies: v })} color="#22D3EE" />} />
+        <SettingRow icon={Reply} color="#34D399" title="Automatically send routine replies" htmlFor="auto-routine-replies"
+          description="Only verified-company, low-risk replies may send automatically after 14 days LIVE, with model agreement and all existing gates. High-impact threads stay locked."
+          control={<Toggle id="auto-routine-replies" label="Automatically send routine replies"
+            checked={!!s.auto_send_routine_replies || !!s.auto_reply_enabled}
+            onChange={(v) => save({ auto_send_routine_replies: v, auto_reply_enabled: false })} color="#34D399" />} />
+        <SettingRow icon={Bell} color="#F5C451" title="Ask Before Sending" htmlFor="ask-before-sending"
+          description="Keep this on to approve every AI-prepared reply. High-impact communication always needs your approval."
+          control={<Toggle id="ask-before-sending" label="Ask Before Sending" checked={s.ask_before_sending !== false}
+            onChange={(v) => save({ ask_before_sending: v })} color="#F5C451" />} />
+        <SettingRow icon={RefreshCw} color="#FBBF24" title="Automatically follow up" htmlFor="auto-followup"
+          description="Send one gated follow-up after 10 days only if no person replied. Turn off to pause existing scheduled follow-ups."
+          control={<Toggle id="auto-followup" label="Automatically follow up" checked={s.auto_followup_enabled !== false}
+            onChange={(v) => save({ auto_followup_enabled: v })} color="#FBBF24" />} />
       </Section>
     </div>
   );

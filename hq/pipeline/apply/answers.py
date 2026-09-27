@@ -1,6 +1,6 @@
 """Form answers from the answer bank (config/answer_bank.yaml, CONTRACT_C §2). Values come only from verified
-facts or fields Prerit confirmed; anything else is left for him. Sensitive IDs are never answered; EEO questions
-get "Prefer not to say" only when that option exists."""
+facts or fields Prerit confirmed; anything else is left for him. Sensitive IDs are never answered. Gender uses the
+confirmed profile choice; other EEO questions use "Prefer not to say" only when that option exists."""
 from __future__ import annotations
 
 import re
@@ -95,6 +95,16 @@ def resolve(conn: sqlite3.Connection, label: str, *, required: bool = False, opt
             missing = [f for f, v in values.items() if v is None]
             return Answer(label, "", "needs_prerit", required,
                           note=f"confirm {', '.join(missing)} in Settings › Profile" if missing else None)
+        if policy == "confirmed_choice":
+            value = values[fields[0]]
+            if options is not None:
+                match = next((o for o in options if o.strip().casefold() == value.casefold()), None)
+                if match is None:
+                    return Answer(label, "", "needs_prerit", required, note="confirmed answer is not an available option")
+                value = match
+            else:
+                value = value.capitalize()
+            return Answer(label, value, "filled", required, source=a["id"])
         template = a.get("template") or ""
         try:
             value = template.format(**values)

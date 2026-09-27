@@ -1,10 +1,4 @@
-"""Inbox sync (CONTRACT_D §2): new message ids since the stored historyId (404 → full sync of the last 30 days),
-the scope filter, and linking a message to an application.
-
-Scope is deliberately narrow — only these are ever stored: threads HQ already knows, replies to HQ's own Message-IDs,
-mail from the domains of organisations Prerit applied to, ATS / assessment senders and job-alert senders. Everything
-else in the mailbox is never read past its headers and never written anywhere.
-"""
+"""Gmail history sync and narrow job-mail scope. Unrelated messages are not stored."""
 from __future__ import annotations
 
 import re
@@ -20,6 +14,9 @@ from hq.util import netguard
 
 FULL_SYNC_QUERY = "newer_than:30d -in:chats -in:drafts"
 FULL_SYNC_MAX = 500
+JOB_SUBJECT = re.compile(r"\b(?:your application|application (?:received|status|for|update)|interview (?:invitation|"
+                         r"request|schedule)|assessment (?:invitation|link|deadline)|offer letter|job offer|"
+                         r"internship offer|joining instructions|onboarding instructions)\b", re.I)
 
 
 def mail_dir() -> Path:
@@ -111,7 +108,7 @@ def in_scope(msg: GmailMessage, sc: Scope) -> str | None:
     if _registrable(sender_parts(msg.from_addr)[1] or "x.invalid") in sc.domains:
         return "company"
     kind = sender_kind(msg.from_addr)
-    return kind  # "ats" / "alert" / None
+    return kind or ("job_subject" if JOB_SUBJECT.search(msg.subject) else None)
 
 
 def link(conn: sqlite3.Connection, msg: GmailMessage, sc: Scope) -> tuple[str | None, str | None, str | None]:

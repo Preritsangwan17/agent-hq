@@ -124,7 +124,7 @@ async def test_interview_email_alerts_notifies_locks_and_nobody_replies(db, inbo
     gmail.deliver(from_addr="careers@fakeco.ai", from_name="Asha Rao", subject="Re: Application: ML Intern",
                   body="Hi Prerit, we'd like to invite you to a 30-minute interview. Please pick a slot: "
                        "https://calendly.com/fakeco/30min", in_reply_to=our_id)
-    gmail.deliver(from_addr="friend@example.org", subject="Dinner?", body="Pizza tonight?")   # out of scope
+    personal_id = gmail.deliver(from_addr="friend@example.org", subject="Dinner?", body="Pizza tonight?")
     await _poll(w, db, lambda: db.execute("SELECT stage FROM opportunities WHERE id=?", (oid,)).fetchone()[0]
                 == "interview")
     await w.shutdown()
@@ -136,6 +136,7 @@ async def test_interview_email_alerts_notifies_locks_and_nobody_replies(db, inbo
     note = db.execute("SELECT * FROM notifications WHERE severity='alert'").fetchone()
     assert note and note["title"].startswith("Interview request")
     assert db.execute("SELECT COUNT(*) FROM email_messages WHERE from_addr='friend@example.org'").fetchone()[0] == 0
+    assert ("metadata", personal_id) in gmail.calls and ("get", personal_id) not in gmail.calls
     assert db.execute("SELECT COUNT(*) FROM mock_mailbox").fetchone()[0] == 1        # only the original application
     assert not gmail.sent() and not [c for c in gmail.calls if c[0] in ("send", "draft")]
     with pytest.raises(guard.GuardBlocked) as e:                                     # and nothing can write there
@@ -143,6 +144,52 @@ async def test_interview_email_alerts_notifies_locks_and_nobody_replies(db, inbo
                       content_sha="r", thread_id=t["id"])
     assert e.value.kind == "locked"
     assert get_settings(db)["gmail_state"]["history_id"]
+
+
+async def test_offer_email_creates_source_linked_dossier_and_approval_draft(db, inbox, authed):
+    w, gmail, oid, our_id = inbox
+    w.startup()
+    gmail.deliver(from_addr="careers@fakeco.ai", from_name="Asha Rao", subject="Offer letter: ML Intern",
+                  body="Offer letter\nSalary: INR 40,000 per month\nJoining date: 12 October 2026\n"
+                       "Offer deadline: 30 September 2026\nDocuments required: degree certificate",
+                  in_reply_to=our_id, auth_results="mx.google.com; dmarc=pass header.from=fakeco.ai")
+    await _poll(w, db, lambda: db.execute("SELECT 1 FROM career_profiles WHERE opportunity_id=? AND "
+                                         "communication_stage='Offer'", (oid,)).fetchone() is not None)
+    await w.shutdown()
+    d = authed.get(f"/api/career/{oid}").json()
+    assert d["selected"] and d["communication_stage"] == "Offer"
+    assert d["offer_details"]["joining_date"]["value"] == "12 October 2026"
+    assert d["offer_details"]["joining_date"]["official"] is False  # fixture posting was not checked live
+    assert any(i["item_key"] == "documents" for i in d["checklist"])
+    assert any(e["source"] == "gmail" and e["stage"] == "Offer" for e in d["timeline"])
+    thread = db.execute("SELECT id, notify_only_lock FROM email_threads WHERE opportunity_id=? AND "
+                        "gmail_thread_id NOT LIKE 'mock-%'", (oid,)).fetchone()
+    assert thread["notify_only_lock"] == 1
+    draft = db.execute("SELECT id FROM documents WHERE email_thread_id=? AND kind='reply' AND status='draft'",
+                       (thread["id"],)).fetchone()
+    assert draft is not None
+    assert authed.post(f"/api/inbox/drafts/{draft['id']}/send", headers=MUTATE).status_code == 409
+    assert not gmail.sent()
+
+
+async def test_historical_offer_backfills_without_generating_a_reply(db, inbox):
+    w, gmail, oid, _ = inbox
+    with tx(db):
+        db.execute("INSERT INTO email_threads(id, gmail_thread_id, opportunity_id, application_id, subject, "
+                   "last_message_at) VALUES ('old-t','old-gmail-t',?, 'app1','Offer letter','2026-09-10T10:00:00Z')",
+                   (oid,))
+        db.execute("INSERT INTO email_messages(id, gmail_message_id, thread_id, direction, from_addr, date, "
+                   "subject, snippet, classification) VALUES ('old-m','old-gmail-m','old-t','inbound',"
+                   "'hr@fakeco.ai','2026-09-10T10:00:00Z','Offer letter',"
+                   "'Offer letter. Joining date: 12 October 2026','offer')")
+    w.startup()
+    assert await drive(w, lambda: db.execute("SELECT 1 FROM career_events WHERE message_id='old-m'").fetchone()
+                       is not None, timeout=20)
+    await w.shutdown()
+    assert db.execute("SELECT communication_stage FROM career_profiles WHERE opportunity_id=?", (oid,)).fetchone()[0] \
+        == "Offer"
+    assert db.execute("SELECT COUNT(*) FROM documents WHERE email_thread_id='old-t' AND kind='reply'").fetchone()[0] == 0
+    assert not gmail.sent()
 
 
 async def test_history_404_falls_back_to_a_30_day_full_sync(db, inbox):
@@ -290,6 +337,7 @@ async def test_notifications_are_stored_and_mac_delivery_uses_argv(db, monkeypat
     with tx(db):
         notify.create(db, "alert", 'Interview: "Fakeco"', "reply yourself; $(rm -rf ~)", "/inbox")
         assert notify.create(db, "alert", 'Interview: "Fakeco"', "dup", dedupe_open=True) is None
+    monkeypatch.setattr(sys, "platform", "linux")
     assert await notify.deliver_pending(db) == 0                    # not macOS here → marked not applicable
     assert db.execute("SELECT mac_delivered FROM notifications").fetchone()[0] == 2
     monkeypatch.setattr(sys, "platform", "darwin")

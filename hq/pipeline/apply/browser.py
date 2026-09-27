@@ -3,7 +3,7 @@
 Playwright with a request filter that aborts everything not on loopback (so third-party scripts such as a CAPTCHA
 widget never load). It stops and hands over a pack at the first sign of anything HQ must never do: a CAPTCHA, a login
 or account wall, a password field, a sensitive-ID field (national ID/SSN/Aadhaar/PAN/passport/bank), a fee, or a
-required question it has no confirmed answer for. A screenshot of the filled form is kept with the application."""
+required question it has no confirmed answer for. Filled-form and confirmation screenshots are kept as evidence."""
 from __future__ import annotations
 
 import re
@@ -12,7 +12,7 @@ from typing import Any
 
 from hq import settings as paths
 from hq.adapters.base import RunContext, RunResult
-from hq.pipeline.agents.common import label
+from hq.pipeline.agents.common import label, need_effect
 from hq.pipeline.apply.answers import resolve
 from hq.util import netguard
 from hq.util.timeutil import now_iso
@@ -29,6 +29,10 @@ class Stop(Exception):
     def __init__(self, reason: str):
         super().__init__(reason)
         self.reason = reason
+
+
+class SubmissionUnconfirmed(Exception):
+    """The submit action may have reached the ATS, but no trustworthy confirmation was observed."""
 
 
 def allowed_url(url: str) -> bool:
@@ -135,16 +139,27 @@ async def fill_and_submit(url: str, *, conn, letter: str, resume_path: str | Non
             await page.screenshot(path=str(shot), full_page=True)
             if not submit:
                 return {"ref": None, "filled": filled, "screenshot": str(shot)}
-            await page.click("button[type=submit]")
-            await page.wait_for_selector("#confirmation", timeout=10_000)
-            ref = (await page.inner_text("#ref")).strip()
-            return {"ref": ref, "filled": filled, "screenshot": str(shot)}
+            try:
+                await page.click("button[type=submit]")
+                await page.wait_for_selector("#confirmation", timeout=10_000)
+                ref = (await page.inner_text("#ref")).strip()
+                if not re.fullmatch(r"MOCK-[A-Za-z0-9-]+", ref):
+                    raise ValueError("confirmation has no valid application reference")
+                confirmation_shot = shot.with_name("ats_confirmation.png")
+                await page.screenshot(path=str(confirmation_shot), full_page=True)
+            except Exception as exc:
+                raise SubmissionUnconfirmed("submit was attempted but ATS confirmation could not be verified") from exc
+            return {"ref": ref, "filled": filled, "screenshot": str(shot),
+                    "confirmation_screenshot": str(confirmation_shot)}
         finally:
             await browser.close()
 
 
 async def submit_mock_ats(task: dict[str, Any], ctx: RunContext, opp: dict[str, Any], app: dict[str, Any],
                           doc: dict[str, Any]) -> RunResult:
+    if app.get("status") in ("submission_attempted", "submitted"):
+        return RunResult(output={"ok": False, "stage_reason": "application already attempted; verify before retrying"},
+                         summary=f"{label(opp)}: submission already attempted — check ATS evidence first")
     url = opp.get("apply_url") or opp.get("url") or ""
     resume = None
     if app.get("resume_doc_id"):
@@ -154,6 +169,19 @@ async def submit_mock_ats(task: dict[str, Any], ctx: RunContext, opp: dict[str, 
     ctx.progress(0.3, f"Filling the mock ATS form for {label(opp)}…")
     try:
         res = await fill_and_submit(url, conn=ctx.conn, letter=doc["content_text"] or "", resume_path=resume, shot=shot)
+    except SubmissionUnconfirmed as exc:
+        reason = str(exc)
+        need = need_effect(opp, kind="decision", title=f"Verify submission: {label(opp)}",
+                           instructions=("The mock ATS submit action may have succeeded, but no application reference "
+                                         "was verified. Check the ATS submission record before trying again. "
+                                         "Do not submit a second application until the first attempt is resolved."),
+                           application_id=app["id"], direct_url=url, priority=85,
+                           payload={"decision": "ats_submission_ambiguous"})
+        return RunResult(output={"ok": False, "submission_attempted": True, "stage_reason": reason},
+                         effects=[{"op": "application.update", "id": app["id"],
+                                   "values": {"status": "submission_attempted"}},
+                                  {"op": "opp.update", "id": opp["id"], "values": {"stage_reason": reason}}, need],
+                         summary=f"{label(opp)}: submission attempted; confirmation needs verification")
     except Stop as exc:
         return RunResult(output={"ok": False, "fallback_pack": True, "stage_reason": exc.reason},
                          summary=f"{label(opp)}: stopped at the form ({exc.reason}) — building a pack instead")
@@ -164,5 +192,6 @@ async def submit_mock_ats(task: dict[str, Any], ctx: RunContext, opp: dict[str, 
                 "values": {"status": "submitted", "submitted_at": now_iso(), "submission_ref": f"mock_ats:{res['ref']}",
                            "answers_json": res["filled"]}},
                {"op": "document.update", "id": doc["id"], "values": {"status": "sent"}}]
-    return RunResult(output={"ok": True, "ref": res["ref"], "screenshot": res["screenshot"]}, effects=effects,
+    return RunResult(output={"ok": True, "ref": res["ref"], "screenshot": res["screenshot"],
+                             "confirmation_screenshot": res["confirmation_screenshot"]}, effects=effects,
                      summary=f"{label(opp)}: submitted on the mock ATS (ref {res['ref']}, {len(res['filled'])} fields)")
