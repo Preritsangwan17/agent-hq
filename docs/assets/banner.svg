@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="240" viewBox="0 0 1200 240" role="img" aria-label="Agent HQ">
+<rect width="1200" height="240" rx="14" fill="#101722"/>
+<rect x="48" y="48" width="5" height="144" rx="2" fill="#7c6ef6"/>
+<text x="80" y="78" fill="#7c6ef6" font-family="Arial,sans-serif" font-size="14" letter-spacing="3">PRERIT SANGWAN / PROJECT PORTFOLIO</text>
+<text x="80" y="133" fill="#f4f7fb" font-family="Arial,sans-serif" font-size="39" font-weight="bold">Agent HQ</text>
+<text x="80" y="173" fill="#adbdcf" font-family="Arial,sans-serif" font-size="21">Local-first application workflows</text>
+<circle cx="1120" cy="120" r="56" fill="none" stroke="#7c6ef6" stroke-width="2" opacity="0.45"/>
+<circle cx="1120" cy="120" r="33" fill="none" stroke="#7c6ef6" stroke-width="2" opacity="0.8"/>
+</svg>

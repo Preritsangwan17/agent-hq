@@ -1,10 +1,16 @@
+![Agent HQ](docs/assets/banner.svg)
+
 # Agent HQ
 
-Agent HQ is a local mission control that runs on your Mac and you use in Safari. A team of agents finds AI/ML/data/
-software internships, jobs and funded programmes; checks each for eligibility, pay (₹/month vs living cost) and
-scams; drafts fact-checked applications; and sends only when every gate passes. Anything a site won't let a bot do
-lands in **Needs Prerit**, pre-filled so it takes a couple of minutes. It starts in **DRY RUN**: nothing leaves the
-Mac until you go live.
+A local-first application workspace built with **Python, FastAPI, SQLite, React and TypeScript**.
+Agent HQ discovers opportunities, checks eligibility and compensation, drafts applications from verified
+facts, and coordinates review and sending through an auditable workflow.
+
+Designed primarily for macOS, with optional local model runtimes and configurable cloud access.
+It starts in dry-run mode and keeps application data on the local machine.
+
+[Setup](#install-and-start-once) · [Capabilities](#what-works) · [Architecture](docs/ARCHITECTURE.md) ·
+[Development](#for-development) · [Contributing](CONTRIBUTING.md)
 
 ## What works
 
@@ -150,3 +156,18 @@ make mock-ats      # local fake ATS on :8799 for the browser adapter
 make bench         # benchmark local models
 make audit         # export the first 20 eligibility/pay verdicts to check by hand
 ```
+
+## Repository status
+
+Active personal software project. Feature support is listed above; placeholder screens are explicitly
+identified. Live integrations depend on local credentials, provider access and the configured profile.
+Automated tests and frontend compilation do not establish end-to-end reliability with real external services.
+
+The GitHub presentation refresh adds documentation and CI for Python syntax and frontend compilation
+without changing application code. Backend tests remain a separate check; CI is not a full test-suite badge.
+See [validation notes](docs/VALIDATION.md) for what was checked.
+
+## License and attribution
+
+[MIT license](LICENSE). Created by [Prerit Sangwan](https://github.com/Preritsangwan17)
+with implementation assistance from Claude Code and Codex.
