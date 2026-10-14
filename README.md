@@ -26,11 +26,12 @@ It starts in dry-run mode and keeps application data on the local machine.
 | Safety | PAUSE ALL, Freeze outbound, forced dry run, typed GO LIVE from the Mac only, audit log, redaction of secrets and your phone number from anything sent to a model. |
 | Upkeep | Nightly database backup (14 kept), auto-start after login (launchd), crash recovery that checks Sent before any resend. |
 
-Not built: the daily Strategist report and the Analytics charts (the pages exist but are placeholders).
+**Development status:** the daily Strategist report and Analytics charts have placeholder screens.
+The capabilities above describe the implemented workflow.
 
 ## Install and start (once)
 
-Easiest of all: download https://github.com/Preritsangwan17/agent-hq/archive/refs/heads/main.zip, open the
+Download the [source ZIP](https://github.com/Preritsangwan17/agent-hq/archive/refs/heads/main.zip), open the
 `agent-hq-main` folder in Finder and double-click **Start Agent HQ.command** (the first time: right-click → Open →
 Open, because macOS asks about downloaded files). **Stop Agent HQ.command** stops it.
 
@@ -41,9 +42,10 @@ opens Safari):
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/Preritsangwan17/agent-hq/main/install.sh)"
 ```
 
-Or by hand — needs Homebrew, `uv` and Node (`brew install uv node`):
+For a source checkout, install Homebrew, `uv` and Node (`brew install uv node`), then:
 
 ```sh
+git clone https://github.com/Preritsangwan17/agent-hq.git
 cd agent-hq
 ./start.sh                 # checks tools, installs deps, builds the web app, prepares the database, starts HQ
 ```
