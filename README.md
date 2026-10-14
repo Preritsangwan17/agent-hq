@@ -1,5 +1,7 @@
 ![Agent HQ](docs/assets/banner.svg)
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 # Agent HQ
 
 A local-first application workspace built with **Python, FastAPI, SQLite, React and TypeScript**.
@@ -162,10 +164,6 @@ make audit         # export the first 20 eligibility/pay verdicts to check by ha
 Active personal software project. Feature support is listed above; placeholder screens are explicitly
 identified. Live integrations depend on local credentials, provider access and the configured profile.
 Automated tests and frontend compilation do not establish end-to-end reliability with real external services.
-
-The GitHub presentation refresh adds documentation and CI for Python syntax and frontend compilation
-without changing application code. Backend tests remain a separate check; CI is not a full test-suite badge.
-See [validation notes](docs/VALIDATION.md) for what was checked.
 
 ## License and attribution
 
